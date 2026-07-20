@@ -1,0 +1,68 @@
+# 環境変数・シークレット（絶対にコミットしない）
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+service-account*.json
+secrets/
+.direnv/
+
+# ローカル専用設定（P0-a で追記）
+.claude/settings.local.json
+docker-compose.override.yml
+
+# 依存
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+
+# Next.js
+.next/
+out/
+build/
+dist/
+next-env.d.ts
+
+# Python worker
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# DB・バックアップ（サイズが大きく、機密を含む）
+backups/
+*.dump
+*.sql.gz
+*.db
+*.db-journal
+*.sqlite
+
+# ログ
+logs/
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# エディタ
+.vscode/
+.idea/
+*.swp
+
+# テスト・カバレッジ
+coverage/
+.nyc_output/
+
+# 一時ファイル
+tmp/
+temp/
+*.tmp

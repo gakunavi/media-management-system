@@ -1,0 +1,2561 @@
+// ═══════════════════════════════════════════════════════════════════════════
+//  MMS (メディア管理システム) — Prisma Schema
+//  抽出元: docs/DESIGN.md「メディア管理システム（MMS）設計書 v5」全2,757行
+//  対象:   PostgreSQL 16
+//  生成:   P0-a（設計書全文からの実装仕様抽出）
+//
+//  ★このファイルがデータモデルの唯一の正（Single Source of Truth）。
+//    設計書 §3 は「人が合意するための文書」であり、実装はこのファイルを読む。
+//    設計書との対応: 各 model 直前に由来セクションを `/// §x.y` で明記。
+//
+//  ★model 総数 82（設計書の `^model ` 出現数と一致）
+//    §3=49 / §3.6=8 / §3.7=4 / §3.8=7 / §3.9=4 / §3.10=3 / §11.4=1 / §16=6
+//
+//  ═══ 実装規約（設計書に記載が無いため P0-a で定めた。docs/PHASES.md §13 参照）═══
+//   C-1: 主キーは全て `id String @id @default(cuid())`（設計書は `id` とだけ記載）
+//   C-2: 外部キーは `<関連名>Id`。Prisma は双方向リレーション必須のため、
+//        設計書に片側しか書かれていない関連にも逆側フィールドを追加している
+//        （データ構造の追加ではなく Prisma 構文上の必須要件）
+//   C-3: `...At` サフィックス = DateTime / `date` = DateTime @db.Date
+//   C-4: 年月（month）は `String`（"YYYY-MM"）。ただし §3.8.1 SeasonalityIndex は
+//        設計書に `// 1-12` と明記されているため Int
+//   C-5: 金額は Decimal @db.Decimal(14, 2)（§16.6-7 により全て税抜で保持）
+//   C-6: enum 化するのは設計書に `// a | b | c` と値が列挙されているものだけ。
+//        列挙が無い／`…` で打ち切られている項目は String のまま（推測で補わない）
+//   C-7: 設計書に `?` が無くても、行の作成時点で論理的に未確定な項目は Nullable に
+//        している。該当項目は全て docs/PHASES.md §13 に列挙した
+// ═══════════════════════════════════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("MMS_DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ENUM 定義
+//  設計書に `// a | b | c` 形式で値が明示されているものだけを enum 化している。
+//  値が列挙されていない項目（Business.status / Keyword.intent / Idea.state 等）は
+//  String のままとし、docs/PHASES.md §13 未解決リストに記録した。
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §3 Target.tier — KPIツリーの階層
+enum TargetTier {
+  north_star
+  leading
+  guardrail
+}
+
+/// §3 ContentItem.articleType
+enum ArticleType {
+  pillar
+  cluster
+  news
+  lp
+  reel
+  post
+}
+
+/// §3 ContentItem.freshnessTier ／ §7.5.1 鮮度3階層ケイデンス
+/// breaking=随時(法改正イベント駆動) / commercial=60〜90日(既定75) / evergreen=6ヶ月 / reference=12ヶ月
+enum FreshnessTier {
+  breaking
+  commercial
+  evergreen
+  reference
+}
+
+/// §3 ContentItem.reviewState — due_soon は nextReviewDue の30日前
+enum ReviewState {
+  fresh
+  due_soon
+  overdue
+  in_rewrite
+}
+
+/// §3 ContentItem.aioTier
+enum AioTier {
+  hot
+  warm
+  cold
+  none
+}
+
+/// §3 ContentItem.budgetTier ／ Lead.budgetTier ／ Keyword.budgetTier
+/// high=1,000万〜 / mid=300〜1,000万 / low=〜300万 / unknown
+/// ★軸の訂正（§14.1）: 法人/個人事業主ではなく「投下可能な節税予算」で判別する
+enum BudgetTier {
+  high
+  mid
+  low
+  unknown
+}
+
+/// §3 ContentItem.funnelStage ／ Keyword.funnelStage
+enum FunnelStage {
+  awareness
+  comparison
+  product_deep
+  decision
+}
+
+/// §3 ArticleReview.reviewer
+enum ReviewerType {
+  ai
+  ishii
+}
+
+/// §3 ArticleReview.kind — リライトのトリガー種別
+enum ArticleReviewKind {
+  periodic
+  triggered_by_rank
+  triggered_by_law
+  triggered_by_gsc
+}
+
+/// §3 ArticleReview.outcome — no_change のとき dataUpdatedAt を更新してはならない（§7.5.1）
+enum ArticleReviewOutcome {
+  no_change
+  minor_fix
+  substantive_rewrite
+  archived
+}
+
+/// §3 Cta.position — 記事内CTAの位置（位置別に効果を測る）
+enum CtaPosition {
+  hero
+  mid
+  final
+  sidebar
+}
+
+/// §3 FunnelEvent.step — ファネル7段（§14.2）
+/// ★phone_click は §3.8.3 で追加指示があるため含む（§3 のリストには無い / §13 記録済）
+enum FunnelStep {
+  cta_view
+  cta_click
+  lp_view
+  lp_scroll
+  form_view
+  form_field
+  submit
+  phone_click
+}
+
+/// §3 Lead.type — 獲得3ゴール（§14.0）
+/// ★note_purchase は §11.1 で言及されるが §3 のリストには無い（§13 記録済・将来用に含めない）
+enum LeadType {
+  direct_inquiry
+  agency
+  line_friend
+}
+
+/// §3 Lead.status
+enum LeadStatus {
+  new
+  contacted
+  qualified
+  proposal
+  won
+  lost
+}
+
+/// §3 Lead.sourceType（§3.8.3）— phone_manual は provenance=declared として扱う
+enum LeadSourceType {
+  form
+  phone_manual
+  line
+  threads_dm
+}
+
+/// §3 AgencyLead.stage
+enum AgencyLeadStage {
+  received
+  screening_sent
+  answered
+  qualified
+  forwarded
+  contracted
+  rejected
+}
+
+/// §3 TopicCluster.pillarType — 3本柱（manuals/three-pillar-strategy.md）
+enum PillarType {
+  A_standard
+  B_news
+  C_risk
+}
+
+/// §3 TopicCluster.state — 構造欠陥の検知結果
+enum ClusterState {
+  healthy
+  pillar_missing
+  thin
+  cannibalized
+  orphan
+  overgrown
+}
+
+/// §3 ContentCluster.role — primary は1記事1つ（ツリー表示に使う）
+enum ClusterRole {
+  primary
+  secondary
+}
+
+/// §3 KeywordAssignment.role — main 重複＝カニバリを DB 制約で検出する
+enum AssignmentRole {
+  main
+  sub
+}
+
+/// §3 InternalLink.linkType
+enum InternalLinkType {
+  cluster_to_pillar
+  pillar_to_cluster
+  cluster_to_cluster
+  cross_pillar
+}
+
+/// §3 KeywordVolume.source
+enum VolumeSource {
+  rakko
+  dataforseo
+}
+
+/// §3 AdAccount.platform
+enum AdPlatform {
+  google_ads
+  meta
+  yahoo
+  line
+}
+
+/// §3 UnitEconomics.acquisitionChannel — 粗利が違うので必ず分ける（direct=48万/台, agency=30万/台）
+enum AcquisitionChannel {
+  direct
+  agency
+}
+
+/// §3 UnitEconomics.provenance — 数値の出所（§16 provenance 規約）
+enum Provenance {
+  measured
+  declared
+  estimated
+}
+
+/// §3 AdSimulation.mode — forward=予算→成果 / reverse=成果→予算
+enum SimulationMode {
+  forward
+  reverse
+}
+
+/// §3 AdSimulation.scenario — 3シナリオ
+enum SimulationScenario {
+  conservative
+  base
+  optimistic
+}
+
+/// §3 Idea.source — ★設計書 §3 は7値、§13.4 は「5供給源」と記載（§13 記録済・7値を採用）
+enum IdeaSource {
+  gsc_gap
+  rakko_paa
+  news
+  threads_hit
+  aio_miss
+  lead_competitor
+  manual
+}
+
+/// §3 Experiment.state
+enum ExperimentState {
+  running
+  won
+  lost
+  withdrawn
+}
+
+/// §3 Action.state
+enum ActionState {
+  proposed
+  prepared
+  awaiting_approval
+  approved
+  rejected
+  done
+  failed
+}
+
+/// §5.2 Action.type — 打ち手タイプ。効く指標・判定期間は docs/GLOSSARY.md 参照
+/// ★設計書は「打ち手8タイプ」と記すが表の行は9値（cta_move / cta_variant が同一行）（§13 記録済）
+enum ActionType {
+  title_meta_rewrite
+  cta_move
+  cta_variant
+  lp_section_edit
+  internal_link
+  new_article
+  kw_pivot
+  threads_format_shift
+  stop_low_fit
+}
+
+/// §3 Intervention.verdict — inconclusive は「効果なし」とは別物（§16.5）
+enum InterventionVerdict {
+  pending
+  positive
+  neutral
+  negative
+  inconclusive
+}
+
+/// §3.6.1 IndexStatus.coverageState — GSC URL Inspection API の値
+enum CoverageState {
+  indexed
+  crawled_not_indexed
+  discovered_not_indexed
+  excluded
+  error
+}
+
+/// §3.6.2 LeadTouchpoint.role — 主指標は last、アシスト貢献も併記する
+enum TouchpointRole {
+  first
+  assist
+  last
+}
+
+/// §3.6.4 PageExperience.device
+enum DeviceType {
+  mobile
+  desktop
+}
+
+/// §3.6.4 PageExperience.source — crux=実測 / psi=ラボ値
+enum PageExperienceSource {
+  crux
+  psi
+}
+
+/// §3.6.5 ProductionCost.kind
+enum ProductionCostKind {
+  new
+  rewrite
+  image
+  video
+}
+
+/// §3.6.6 VisitorSession.trafficSource
+enum TrafficSource {
+  organic
+  ai_search
+  social
+  direct
+  referral
+  paid
+}
+
+/// §3.6.6 VisitorSession.aiEngine — referrer から判別
+enum AiEngine {
+  chatgpt
+  perplexity
+  copilot
+  gemini
+}
+
+/// §3.6.7 ContentLifecycle.action — プルーニング判定
+enum LifecycleAction {
+  keep
+  improve
+  merge
+  noindex
+  redirect
+  delete
+}
+
+/// §3.7.1 SplitTest.state
+enum SplitTestState {
+  running
+  concluded
+  aborted
+}
+
+/// §3.7.1 SplitAssignment.arm
+enum SplitArm {
+  treatment
+  control
+}
+
+/// §3.7.2 Experimentation.targetType
+enum ExperimentationTarget {
+  lp
+  cta
+  form
+}
+
+/// §3.7.2 Experimentation.primaryMetric
+enum ExperimentationMetric {
+  submit_rate
+  cta_click_rate
+}
+
+/// §3.7.2 Experimentation.state — underpowered は起動を拒否した状態
+enum ExperimentationState {
+  draft
+  running
+  concluded
+  underpowered
+}
+
+/// §3.8.2 RegulatoryEvent.eventType — 12月大綱 → 3月成立 → 4月施行
+enum RegulatoryEventType {
+  outline
+  enactment
+  enforcement
+  expiry
+  public_comment
+}
+
+/// §3.8.2 RegulatoryEvent.status
+enum RegulatoryEventStatus {
+  scheduled
+  occurred
+  cancelled
+}
+
+/// §3.8.6 LandingPage.lpType
+enum LpType {
+  consultation
+  product
+  comparison_hub
+  agency
+}
+
+/// §3.8.6 LandingPage.status
+enum LandingPageStatus {
+  draft
+  live
+  paused
+  retired
+}
+
+/// §3.9.2 LinkCheck.tier — tier1 = nta.go.jp / mof.go.jp / e-gov 等の一次ソース
+enum LinkTier {
+  tier1
+  tier2
+  other
+}
+
+/// §3.9.5 BrandMention.sentiment — negative は即通知（対応判断は人）
+enum Sentiment {
+  positive
+  neutral
+  negative
+}
+
+/// §3.10.6 Incident.severity
+enum IncidentSeverity {
+  critical
+  high
+  medium
+  low
+}
+
+/// §3.10.6 Incident.category
+enum IncidentCategory {
+  performance
+  data_quality
+  availability
+  security
+  quality
+}
+
+/// §16.3 ContentVersion.capturedBy
+enum VersionCapturedBy {
+  pre_intervention
+  post_intervention
+  manual
+}
+
+/// §3.10.5 PerfGate.phase
+enum PerfGatePhase {
+  before
+  after
+}
+
+/// §3.10.5 PerfGate.target — 過去の事故はテーマ更新に紛れて入った
+enum PerfGateTarget {
+  wp_theme
+  tracker
+  lp
+  plugin
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ══ 1. 事業・チャネル・目標 ══
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §3 ══1. 事業（節税商材代理店 / 将来: コンテンツ販売 …）
+/// §10: 新規事業の追加は「Business を1行INSERT」で済む（スキーマ変更なし）
+model Business {
+  id     String @id @default(cuid())
+  slug   String @unique
+  name   String
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  status String
+
+  channels        Channel[]
+  targets         Target[]
+  experiments     Experiment[]
+  metricSnapshots MetricSnapshot[]
+  leads           Lead[]
+  keywords        Keyword[]
+  ideas           Idea[]
+  actions         Action[]
+  learnings       Learning[]
+  topicClusters   TopicCluster[]
+  keywordClusters KeywordCluster[]
+  adAccounts      AdAccount[]
+  unitEconomics   UnitEconomics[]
+  adSimulations   AdSimulation[]
+  landingPages    LandingPage[]
+
+  @@index([status])
+}
+
+/// §3 ══1. チャネル（media / threads / instagram / line / agency_lp / note …）
+/// ★accountRef により「プラットフォーム × アカウント単位」で分離（§11.1 でこの設計が効く）
+model Channel {
+  id         String @id @default(cuid())
+  businessId String
+  /// 設計書の列挙が `…` で打ち切られているため String（§13 記録済）
+  type       String
+  /// アカウント単位の識別子。§11.3 の投稿誤爆防止ガードの起点
+  accountRef String
+  name       String
+  /// アカウント資格情報を含む。worker は channelId 経由でしかトークンを引けない（§11.3）
+  config     Json
+
+  business             Business              @relation(fields: [businessId], references: [id])
+  contentItems         ContentItem[]
+  metricSnapshots      MetricSnapshot[]
+  measurementCoverages MeasurementCoverage[]
+  leads                Lead[]
+  snsAccountHealth     SnsAccountHealth[]
+  postSchedules        PostSchedule[]
+
+  @@unique([businessId, type, accountRef])
+  @@index([businessId])
+  @@index([type])
+}
+
+/// §3 ══1. 目標（KPIツリーの階層を持つ）
+/// parentMetric で inquiries ← lp_view ← cta_click ← clicks ← impressions を繋ぐ
+model Target {
+  id           String     @id @default(cuid())
+  businessId   String
+  /// 対象期間（例: "2026-07"）。C-4
+  period       String
+  metric       String
+  targetValue  Float
+  tier         TargetTier
+  /// KPIツリーの親メトリクス名
+  parentMetric String?
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@unique([businessId, period, metric])
+  @@index([businessId, period])
+  @@index([tier])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ══ 2. 計測（欠測とゼロを厳密に区別）══
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §3 ══2. 汎用メトリクス
+/// §10: 新指標の追加は metric に値が増えるだけ（マイグレーション不要）
+model MetricSnapshot {
+  id          String   @id @default(cuid())
+  businessId  String
+  channelId   String?
+  metric      String
+  value       Float
+  date        DateTime @db.Date
+  /// 値の列挙が設計書に無いため String（日次/週次/月次を想定・§13 記録済）
+  granularity String
+
+  business Business @relation(fields: [businessId], references: [id])
+  channel  Channel? @relation(fields: [channelId], references: [id])
+
+  /// ★設計書に明記。ただし channelId が NULL の行は Postgres の NULL 非同値により
+  ///   一意制約が効かない（§13 記録済）
+  @@unique([businessId, channelId, metric, date, granularity])
+  @@index([businessId, metric, date])
+  @@index([date])
+}
+
+/// §3 ══2. ★★ 計測期間の記録 — 直客2件の見逃し事故の再発防止装置
+///
+/// ★★★ 規約（絶対・docs/RULES.md にも記載）★★★
+///   行が存在しない = 「未計測」。UI/APIは "—(未計測)" と表示し、決してゼロと書かない
+///   value = 0      = 「実測ゼロ」
+///   MeasurementCoverage に期間が無い指標は、集計・グラフ・brief から physically 除外する
+///   → 「問い合わせ 0」と「問い合わせ 未計測」を二度と混同しない
+model MeasurementCoverage {
+  id        String    @id @default(cuid())
+  metric    String
+  channelId String?
+  startedAt DateTime
+  /// 計測継続中は NULL
+  endedAt   DateTime?
+  /// 計測手段。値の列挙が設計書に無いため String（§13 記録済）
+  method    String
+  note      String?
+
+  channel Channel? @relation(fields: [channelId], references: [id])
+
+  @@index([metric, startedAt])
+  @@index([channelId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ══ 3. コンテンツ（記事・投稿・リール・LP を統一）══
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §3 ══3. コンテンツ統一モデル（ART-088 / THR-076 / LP-001 …）
+/// 記事本文の正は WordPress。本モデルはメタ・計測・バージョンを持つ（§16.6-8）
+model ContentItem {
+  id         String  @id @default(cuid())
+  channelId  String
+  /// ART-088 / THR-076 / LP-001
+  externalId String
+  /// 値の列挙が §3 に無いため String（articleType とは別軸・§13 記録済）
+  type       String
+  title      String
+  /// 公開前は未確定のため Nullable（C-7）
+  url        String?
+  /// 値の列挙が設計書に無いため String（旧Notion「制作ステータス」・§13 記録済）
+  status     String
+
+  // ── 分類（旧Notion 記事パフォーマンス管理DB から移行・§7.1）──
+  articleType   ArticleType
+  isPillar      Boolean     @default(false)
+  category      String?
+  /// ★KeywordAssignment(role=main) と二重の正になりうる（§13 記録済）
+  mainKeywordId String?
+  charCount     Int?
+  eyecatchType  String?
+  eyecatchColor String?
+  targetLabel   String?
+  wpPostId      Int?
+  wpCategoryId  Int?
+  tagIds        Int[]
+
+  // ── ★鮮度管理（3階層ケイデンス・content-standards.md 準拠・§7.5）──
+  /// 公開日（未公開は NULL・C-7）
+  publishedAt    DateTime?
+  /// 情報基準日（YMYL必須・記事内に表示）
+  infoBaseDate   DateTime?
+  /// dateModified。★実質追記時のみ更新。cosmetic では触らない（§7.5.1）
+  dataUpdatedAt  DateTime?
+  /// 最終チェック日（記事に "last reviewed: YYYY-MM" として表示）
+  lastReviewedAt DateTime?
+  freshnessTier  FreshnessTier
+  /// ★lastReviewedAt + FreshnessRule.intervalDays（自動算出）
+  nextReviewDue  DateTime?
+  reviewState    ReviewState   @default(fresh)
+
+  // ── 品質ゲートの判定結果（旧Notion）──
+  seoCheckPassed    Boolean @default(false)
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  complianceVerdict String?
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  factCheckVerdict  String?
+  /// validate-article / seo-lint / ai-tone / geo-checks の結果
+  validatorRun      Json?
+
+  // ── AIO（旧Notion AIO計測DB・§7.2）──
+  aioTier          AioTier   @default(none)
+  aioTracked       Boolean   @default(false)
+  aioTierUpdatedAt DateTime?
+  aioNote          String?
+
+  // ── 買い手軸（2026-07-20 実データで訂正済み・§14.1）──
+  budgetTier    BudgetTier  @default(unknown)
+  funnelStage   FunnelStage
+  /// ML | IoTビーコン | 外貨両替機 | EV充電 | GPU …
+  productFit    String[]
+  /// 参考: corporate | sole_proprietor | tax_accountant | agency_candidate
+  audience      String[]
+  buyerFitScore Int?
+  /// ★効く結果指標（必須・APIで弾く。§5.5 結果フォーカスの構造的強制）
+  impacts       String[]
+  note          String?
+
+  channel Channel @relation(fields: [channelId], references: [id])
+
+  metrics             ContentMetric[]
+  ctas                Cta[]
+  reviews             ArticleReview[]
+  keywordAssignments  KeywordAssignment[]
+  clusters            ContentCluster[]
+  pillarOfClusters    TopicCluster[]         @relation("ClusterPillar")
+  outgoingLinks       InternalLink[]         @relation("LinkSource")
+  incomingLinks       InternalLink[]         @relation("LinkTarget")
+  landingSessions     VisitorSession[]       @relation("SessionLanding")
+  funnelEvents        FunnelEvent[]
+  firstTouchLeads     Lead[]                 @relation("LeadFirstTouch")
+  lastTouchLeads      Lead[]                 @relation("LeadLastTouch")
+  lineFriends         LineFriend[]
+  ideas               Idea[]
+  interventions       Intervention[]
+  indexStatuses       IndexStatus[]
+  leadTouchpoints     LeadTouchpoint[]
+  backlinks           Backlink[]
+  pageExperiences     PageExperience[]
+  productionCosts     ProductionCost[]
+  lifecycles          ContentLifecycle[]     @relation("LifecycleSubject")
+  mergeTargetOf       ContentLifecycle[]     @relation("LifecycleMergeTarget")
+  splitAssignments    SplitAssignment[]
+  crossPromotionsFrom CrossPromotion[]       @relation("PromotionArticle")
+  crossPromotionsTo   CrossPromotion[]       @relation("PromotionPost")
+  linkChecks          LinkCheck[]
+  provenances         GenerationProvenance[]
+  versions            ContentVersion[]
+
+  @@unique([channelId, externalId])
+  @@index([channelId])
+  @@index([articleType])
+  @@index([status])
+  @@index([budgetTier, funnelStage])
+  @@index([reviewState, nextReviewDue])
+  @@index([publishedAt])
+  @@index([mainKeywordId])
+}
+
+/// §3 ══3. ★リライト/レビューの履歴（いつ何を見て何をしたか）
+model ArticleReview {
+  id                   String               @id @default(cuid())
+  contentItemId        String
+  reviewedAt           DateTime
+  reviewer             ReviewerType
+  kind                 ArticleReviewKind
+  /// 古くなった数値・失効した制度・順位低下
+  findings             Json?
+  outcome              ArticleReviewOutcome
+  /// 実質追記だったか（cosmetic なら false → dataUpdatedAt を更新しない）
+  updatedDataUpdatedAt Boolean              @default(false)
+  /// 効果測定に接続
+  interventionId       String?
+
+  contentItem  ContentItem   @relation(fields: [contentItemId], references: [id])
+  intervention Intervention? @relation(fields: [interventionId], references: [id])
+
+  @@index([contentItemId, reviewedAt])
+  @@index([kind])
+  @@index([outcome])
+}
+
+/// §3 ══3. 鮮度ケイデンスの定義（変更可能にする）
+/// 既定値: breaking=0(随時) / commercial=75 / evergreen=180 / reference=365（§7.5.1）
+model FreshnessRule {
+  id            String        @id @default(cuid())
+  freshnessTier FreshnessTier @unique
+  intervalDays  Int
+  description   String?
+}
+
+/// §3 ══3. コンテンツ別の日次メトリクス
+/// clicks / impressions / position / views / aio_hit / reel_views / note_views …
+/// §3.9.6: リール指標は metric 名を増やすだけで対応できる（スキーマ変更なし）
+/// §3.2.2: ★日次を永久保持。GSC APIは16ヶ月しか遡れないため自前DBが唯一の長期履歴
+model ContentMetric {
+  id            String   @id @default(cuid())
+  contentItemId String
+  metric        String
+  value         Float
+  date          DateTime @db.Date
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id])
+
+  /// ★設計書に明記なし。日次 backfill の冪等性を担保するため追加（§13 記録済）
+  @@unique([contentItemId, metric, date])
+  @@index([contentItemId, metric, date])
+  @@index([date])
+  @@index([metric, date])
+}
+
+/// §3 ══3. 記事内CTA（位置別に効果を測る）
+model Cta {
+  id            String      @id @default(cuid())
+  contentItemId String
+  position      CtaPosition
+  variant       String?
+  targetUrl     String
+  active        Boolean     @default(true)
+
+  contentItem  ContentItem   @relation(fields: [contentItemId], references: [id])
+  funnelEvents FunnelEvent[]
+
+  @@index([contentItemId, position])
+  @@index([active])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ══ 4. ファネル7段（記事→問い合わせの間を全部計測する）══
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §3 ══4. 訪問セッション（1st-party Cookie・GA4に頼らず自前で持つ・§14.2）
+/// 保存期間 13ヶ月（§16.2）。DataRetentionPolicy により自動削除
+model VisitorSession {
+  id               String   @id @default(cuid())
+  visitorId        String
+  firstSeenAt      DateTime
+  landingContentId String?
+  referrer         String?
+  utm              Json?
+  /// ?from=media&article=ART-XXX
+  fromParam        String?
+  pageviews        Int      @default(0)
+  converted        Boolean  @default(false)
+
+  // ── §3.6.6 AI検索からの流入（referrer を正規化して判別）──
+  trafficSource TrafficSource?
+  aiEngine      AiEngine?
+
+  // ── §3.7.2 A/B の群割当（Cookieで固定・再訪時に同じ群）──
+  /// ★モデルと計測は P2.5 で先に作る（後入れ不可）。実装は P7.7
+  variantAssignments Json?
+
+  landingContent ContentItem? @relation("SessionLanding", fields: [landingContentId], references: [id])
+
+  funnelEvents FunnelEvent[]
+  leads        Lead[]
+
+  @@index([visitorId])
+  @@index([firstSeenAt])
+  @@index([landingContentId])
+  @@index([trafficSource])
+  @@index([converted])
+}
+
+/// §3 ══4. ファネルイベント（7段・§14.2）
+/// §16.1-④ 冪等キーで重複排除（二重計測を物理的に防ぐ）
+/// §3.10.3 計測タグ設計原則の適用対象。1ページ1回送信・sendBeacon・throttle 250ms
+model FunnelEvent {
+  id            String     @id @default(cuid())
+  sessionId     String
+  occurredAt    DateTime
+  step          FunnelStep
+  contentItemId String?
+  ctaId         String?
+  lpId          String?
+  meta          Json?
+
+  session     VisitorSession @relation(fields: [sessionId], references: [id])
+  contentItem ContentItem?   @relation(fields: [contentItemId], references: [id])
+  cta         Cta?           @relation(fields: [ctaId], references: [id])
+  landingPage LandingPage?   @relation(fields: [lpId], references: [id])
+
+  /// §16.1-④ 冪等キー: (sessionId, step, contentItemId, occurredAt秒)
+  /// ★contentItemId が NULL の行では Postgres の NULL 非同値により効かない（§13 記録済）
+  @@unique([sessionId, step, contentItemId, occurredAt])
+  @@index([sessionId, occurredAt])
+  @@index([step, occurredAt])
+  @@index([contentItemId, step])
+  @@index([lpId, step])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ══ 5. リード・成約（獲得3ゴールを型で分ける）══
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §3 ══5. リード（§14.3）
+/// ★MMS はリードまで。商談以降は m2（ML営業管理システム）が正（§3.8.4）
+/// §16.2: 個人情報カラムは列単位で暗号化。アクセスは AuditLog に記録
+/// §16.2: AIへの受け渡しでは氏名・連絡先をマスキングする（興味商材と閲覧履歴のみ渡す）
+model Lead {
+  id              String    @id @default(cuid())
+  businessId      String
+  type            LeadType
+  occurredAt      DateTime
+  /// ★初動速度。SLA 1時間を段1で監視（§5.4）
+  firstResponseAt DateTime?
+
+  // ── 誰か ──
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  companyType     String?
+  budgetTier      BudgetTier @default(unknown)
+  interestProduct String[]
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  urgency         String?
+
+  // ── どこから（first / last touch 両方を保持。主指標は last touch・§16.6-2）──
+  firstTouchContentId   String?
+  lastTouchContentId    String?
+  sourceKeywordId       String?
+  sourceChannelId       String?
+  sessionId             String?
+  /// ★「ビーコン/外貨両替機」のような比較対象 = 金脈KWの源泉（§3.1）
+  competitorsConsidered String[]
+
+  // ── その後 ──
+  status       LeadStatus     @default(new)
+  closedAmount Decimal?       @db.Decimal(14, 2)
+  closedAt     DateTime?
+  sourceType   LeadSourceType
+
+  // ── §3.8.4 m2 連携（★商談以降は m2 が正）──
+  m2DealId       String?
+  m2SyncedAt     DateTime?
+  m2Stage        String?
+  m2ClosedAmount Decimal?  @db.Decimal(14, 2)
+  m2ClosedAt     DateTime?
+
+  note String?
+
+  business          Business        @relation(fields: [businessId], references: [id])
+  firstTouchContent ContentItem?    @relation("LeadFirstTouch", fields: [firstTouchContentId], references: [id])
+  lastTouchContent  ContentItem?    @relation("LeadLastTouch", fields: [lastTouchContentId], references: [id])
+  sourceKeyword     Keyword?        @relation(fields: [sourceKeywordId], references: [id])
+  sourceChannel     Channel?        @relation(fields: [sourceChannelId], references: [id])
+  session           VisitorSession? @relation(fields: [sessionId], references: [id])
+
+  touchpoints    LeadTouchpoint[]
+  convertedFrom  LineFriend[]
+  consentRecords ConsentRecord[]
+
+  @@index([businessId, type, occurredAt])
+  @@index([status])
+  @@index([sourceType])
+  @@index([firstTouchContentId])
+  @@index([lastTouchContentId])
+  @@index([m2DealId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ══ 6. 代理店 ══
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §3 ══6. 代理店リード（Threads代理店募集トラック → DM → 自己選別・§14.4）
+model AgencyLead {
+  id               String          @id @default(cuid())
+  threadsUserId    String
+  receivedAt       DateTime
+  /// どの投稿からのDMか
+  sourcePostId     String?
+  stage            AgencyLeadStage
+  screeningAnswers Json?
+  forwardedAt      DateTime?
+  partnerId        String?
+
+  partner Partner? @relation(fields: [partnerId], references: [id])
+
+  @@index([stage])
+  @@index([receivedAt])
+  @@index([sourcePostId])
+}
+
+/// §3 ══6. 代理店（稼働しているかを追う）
+model Partner {
+  id              String    @id @default(cuid())
+  name            String
+  parentPartnerId String?
+  commissionRate  Float
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  status          String
+  /// 稼働しているか（§14.4 稼働代理店のプロファイル逆算に使う）
+  lastDealAt      DateTime?
+  dealCount       Int       @default(0)
+  totalAmount     Decimal   @default(0) @db.Decimal(14, 2)
+
+  parentPartner Partner?     @relation("PartnerHierarchy", fields: [parentPartnerId], references: [id])
+  childPartners Partner[]    @relation("PartnerHierarchy")
+  agencyLeads   AgencyLead[]
+
+  @@index([status])
+  @@index([parentPartnerId])
+  @@index([lastDealAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ══ 7. LINE ══
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §3 ══7. LINE友だち（§14.5・現状0人。登録経路はURLパラメータで記事別に分離）
+model LineFriend {
+  id              String   @id @default(cuid())
+  lineUserId      String   @unique
+  addedAt         DateTime
+  sourceContentId String?
+  sourceParam     String?
+  tags            String[]
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  status          String
+  convertedLeadId String?
+
+  sourceContent ContentItem? @relation(fields: [sourceContentId], references: [id])
+  convertedLead Lead?        @relation(fields: [convertedLeadId], references: [id])
+
+  @@index([addedAt])
+  @@index([sourceContentId])
+  @@index([status])
+}
+
+/// §3 ══7. LINE配信（LINE Messaging API で反応が取得可能）
+model LineMessage {
+  id         String   @id @default(cuid())
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  kind       String
+  sentAt     DateTime
+  targetTags String[]
+  delivered  Int      @default(0)
+  opened     Int      @default(0)
+  clicked    Int      @default(0)
+  blocked    Int      @default(0)
+
+  @@index([sentAt])
+  @@index([kind])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ══ 8. KW・ネタ ══
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §3 ══8. キーワードマスタ（月ごとに分断されていた戦略シートを統合・§13.1）
+model Keyword {
+  id               String       @id @default(cuid())
+  businessId       String
+  keyword          String
+  slug             String
+  volume           Int?
+  difficulty       Int?
+  cpc              Float?
+  /// 値の列挙が §3 に無いため String（§14.1 で informational/commercial に言及・§13 記録済）
+  intent           String?
+  budgetTier       BudgetTier   @default(unknown)
+  funnelStage      FunnelStage?
+  productFit       String[]
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  priority         String?
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  status           String?
+  /// §3.3.7 市場を「商材／テーマ」単位で束ねる
+  keywordClusterId String?
+
+  business       Business        @relation(fields: [businessId], references: [id])
+  keywordCluster KeywordCluster? @relation(fields: [keywordClusterId], references: [id])
+
+  assignments        KeywordAssignment[]
+  research           KeywordResearch[]
+  rankings           KeywordRanking[]
+  volumes            KeywordVolume[]
+  serpSnapshots      SerpSnapshot[]
+  opportunities      Opportunity[]
+  seasonalityIndexes SeasonalityIndex[]
+  targetOfClusters   TopicCluster[]      @relation("ClusterTargetKeyword")
+  ideas              Idea[]
+  interventions      Intervention[]
+  sourcedLeads       Lead[]
+
+  @@unique([businessId, keyword])
+  @@index([businessId])
+  @@index([budgetTier, funnelStage])
+  @@index([keywordClusterId])
+  @@index([priority])
+}
+
+/// §3 ══8. KWリサーチ（ラッコ・90日鮮度 → 30日前に自動再取得・§13.3）
+model KeywordResearch {
+  id        String   @id @default(cuid())
+  keywordId String
+  fetchedAt DateTime
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  source    String
+  /// 90日鮮度。expiresAt の30日前に kw_refetch を自動起票（§7.5.2）
+  expiresAt DateTime
+
+  suggests     Json?
+  related      Json?
+  cooccurrence Json?
+  competitorH2 Json?
+  /// §13.4-② 未回答のものを Idea として自動起票
+  qaQuestions  Json?
+
+  keyword Keyword @relation(fields: [keywordId], references: [id])
+
+  @@index([keywordId, fetchedAt])
+  @@index([expiresAt])
+}
+
+/// §3 ══8. KW ↔ 記事の割当
+/// ★@@unique([keywordId, role]) により main 重複＝カニバリを DB 制約で検出（§3.1）
+model KeywordAssignment {
+  id            String         @id @default(cuid())
+  keywordId     String
+  contentItemId String
+  role          AssignmentRole
+
+  keyword     Keyword     @relation(fields: [keywordId], references: [id])
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id])
+
+  /// ★設計書に明記。main が1KWにつき1記事しか持てないことでカニバリを検出する
+  @@unique([keywordId, role])
+  @@index([contentItemId])
+}
+
+/// §3 ══8. KW別の順位履歴（striking distance 11〜20位の自動抽出元・§13.3）
+/// §3.2.2: ★日次を永久保持
+model KeywordRanking {
+  id          String   @id @default(cuid())
+  keywordId   String
+  date        DateTime @db.Date
+  position    Float
+  clicks      Int      @default(0)
+  impressions Int      @default(0)
+  ctr         Float?
+
+  keyword Keyword @relation(fields: [keywordId], references: [id])
+
+  /// ★設計書に明記なし。日次 backfill の冪等性を担保するため追加（§13 記録済）
+  @@unique([keywordId, date])
+  @@index([keywordId, date])
+  @@index([date])
+  @@index([position])
+}
+
+// ══ 8.4 トピッククラスタ（ピラー/クラスター）══
+
+/// §3 ══8.4 トピッククラスタ（★ツリー構造。分析は多次元・§3.5.1）
+model TopicCluster {
+  id              String       @id @default(cuid())
+  businessId      String
+  name            String
+  slug            String
+  /// ★ツリー構造（大項目 → 中項目 → 小項目）
+  parentId        String?
+  /// このクラスタのピラー記事（無ければ state=pillar_missing）
+  pillarContentId String?
+  pillarType      PillarType
+  productFit      String[]
+  budgetTier      BudgetTier   @default(unknown)
+  funnelStage     FunnelStage?
+  /// クラスタが狙う中心KW
+  targetKeywordId String?
+  state           ClusterState @default(healthy)
+
+  business      Business       @relation(fields: [businessId], references: [id])
+  parent        TopicCluster?  @relation("ClusterTree", fields: [parentId], references: [id])
+  children      TopicCluster[] @relation("ClusterTree")
+  pillarContent ContentItem?   @relation("ClusterPillar", fields: [pillarContentId], references: [id])
+  targetKeyword Keyword?       @relation("ClusterTargetKeyword", fields: [targetKeywordId], references: [id])
+
+  members            ContentCluster[]
+  metrics            ClusterMetric[]
+  marketShares       MarketShare[]
+  seasonalityIndexes SeasonalityIndex[]
+
+  @@unique([businessId, slug])
+  @@index([businessId])
+  @@index([parentId])
+  @@index([state])
+}
+
+/// §3 ══8.4 記事 ↔ クラスタ（★多対多。1記事が複数クラスタに属せる）
+/// role=primary はツリー表示に使う（1記事1つ）
+model ContentCluster {
+  id            String      @id @default(cuid())
+  contentItemId String
+  clusterId     String
+  role          ClusterRole
+
+  contentItem ContentItem  @relation(fields: [contentItemId], references: [id])
+  cluster     TopicCluster @relation(fields: [clusterId], references: [id])
+
+  @@unique([contentItemId, clusterId])
+  @@index([clusterId, role])
+}
+
+/// §3 ══8.4 内部リンクグラフ（現 media.db links の正規版・599本）
+/// §3.5.2: トピッククラスタの本質は「数」ではなく「リンク構造」
+model InternalLink {
+  id             String           @id @default(cuid())
+  srcContentId   String
+  dstContentId   String
+  anchorText     String?
+  contextSection String?
+  detectedAt     DateTime
+  linkType       InternalLinkType
+
+  srcContent ContentItem @relation("LinkSource", fields: [srcContentId], references: [id])
+  dstContent ContentItem @relation("LinkTarget", fields: [dstContentId], references: [id])
+
+  @@unique([srcContentId, dstContentId, anchorText])
+  @@index([srcContentId])
+  @@index([dstContentId])
+  @@index([linkType])
+}
+
+/// §3 ══8.4 ★グループ単位の集計（記事単位ではノイズが多すぎる・§3.5.3）
+/// クリック142/週 ÷ 157本 = 週1件未満。グループに束ねると母数が10〜30倍になる
+model ClusterMetric {
+  id          String   @id @default(cuid())
+  clusterId   String
+  date        DateTime @db.Date
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  granularity String
+
+  articleCount  Int
+  pillarPresent Boolean
+
+  impressions Int    @default(0)
+  clicks      Int    @default(0)
+  avgPosition Float?
+  pv          Int    @default(0)
+
+  top3Count  Int @default(0)
+  top10Count Int @default(0)
+  top20Count Int @default(0)
+
+  /// ★グループ別のCV貢献（最重要）
+  leads   Int     @default(0)
+  deals   Int     @default(0)
+  revenue Decimal @default(0) @db.Decimal(14, 2)
+
+  /// 買い手適合クリックの割合
+  buyerFitClickShare Float?
+  /// §3.3 と接続
+  marketVolume       Int?
+  clickShare         Float?
+  /// 相互リンク充足率（0-1）。0.8未満は要修復（§3.5.4）
+  linkHealthScore    Float?
+  /// 同一クラスタ内のmain KW重複。1件でも要整理
+  cannibalCount      Int    @default(0)
+
+  cluster TopicCluster @relation(fields: [clusterId], references: [id])
+
+  /// ★設計書に明記なし。日次バッチの冪等性を担保するため追加（§13 記録済）
+  @@unique([clusterId, date, granularity])
+  @@index([clusterId, date])
+  @@index([date])
+}
+
+// ══ 8.5 市場規模・シェア・競合 ══
+
+/// §3 ══8.5 検索ボリュームは変動する → 履歴で持つ（§3.3.1）
+/// ⚠️ 推定値。絶対値を信じず、相対比較と推移で使う
+model KeywordVolume {
+  id        String       @id @default(cuid())
+  keywordId String
+  /// "YYYY-MM"（C-4）
+  month     String
+  volume    Int
+  source    VolumeSource
+
+  keyword Keyword @relation(fields: [keywordId], references: [id])
+
+  @@unique([keywordId, month, source])
+  @@index([month])
+}
+
+/// §3 ══8.5 市場を「商材／テーマ」単位で束ねる（ML | IoTビーコン | 外貨両替機 | GPU …）
+/// ★TopicCluster とは別概念（§13 記録済: MarketShare.clusterId がどちらを指すか未確定）
+model KeywordCluster {
+  id         String   @id @default(cuid())
+  businessId String
+  name       String
+  productFit String[]
+
+  business Business  @relation(fields: [businessId], references: [id])
+  keywords Keyword[]
+
+  @@unique([businessId, name])
+  @@index([businessId])
+}
+
+/// §3 ══8.5 対象KWの検索結果1〜20位を丸ごと保存（競合の動きを追う・§3.3.5）
+/// コスト実測: DataForSEO SERP $0.60/1,000 SERP。300KW×週次で約$0.72/月
+model SerpSnapshot {
+  id              String   @id @default(cuid())
+  keywordId       String
+  date            DateTime @db.Date
+  position        Int
+  domain          String
+  url             String
+  title           String?
+  isOurs          Boolean  @default(false)
+  /// §3.3.6 AIO有無でCTR曲線を分ける
+  hasAiOverview   Boolean  @default(false)
+  aioCitedDomains String[]
+
+  keyword Keyword @relation(fields: [keywordId], references: [id])
+
+  @@unique([keywordId, date, position])
+  @@index([date, domain])
+  @@index([domain])
+  @@index([isOurs])
+}
+
+/// §3 ══8.5 競合ドメインの強さ
+model Competitor {
+  id        String  @id @default(cuid())
+  domain    String  @unique
+  label     String?
+  isTracked Boolean @default(true)
+
+  metrics           CompetitorMetric[]
+  domainAuthorities DomainAuthority[]
+
+  @@index([isTracked])
+}
+
+/// §3 ══8.5 追跡KW群における相対的な強さ（月次）
+model CompetitorMetric {
+  id           String @id @default(cuid())
+  competitorId String
+  /// "YYYY-MM"（C-4）
+  month        String
+
+  top3Count   Int    @default(0)
+  top10Count  Int    @default(0)
+  avgPosition Float?
+
+  /// CTR曲線から推定
+  estimatedClicks Int?
+  shareOfClicks   Float?
+
+  /// DataForSEO Domain Analytics（任意）
+  rankedKeywords Int?
+  /// DataForSEO Backlinks（任意）
+  backlinks      Int?
+  refDomains     Int?
+
+  competitor Competitor @relation(fields: [competitorId], references: [id])
+
+  @@unique([competitorId, month])
+  @@index([month])
+}
+
+/// §3 ══8.5 ★自社GSC実測から作る順位別CTR（外部の一般値より精度が高い・§3.3.2）
+model CtrCurve {
+  id           String   @id @default(cuid())
+  position     Int
+  ctr          Float
+  sampleSize   Int
+  calculatedAt DateTime
+  /// all | comparison | product_deep …（設計書の列挙が `…` で打ち切られているため String）
+  segment      String
+
+  @@unique([position, segment, calculatedAt])
+  @@index([segment, position])
+}
+
+/// §3 ══8.5 クラスタ単位のシェア（月次・自動算出・§3.3.2）
+/// 表示シェア = 自社impressions ÷ クラスタのmarketVolume
+/// クリックシェア = 自社clicks ÷ Σ(volume × CTR曲線[自社順位])
+model MarketShare {
+  id        String @id @default(cuid())
+  clusterId String
+  /// "YYYY-MM"（C-4）
+  month     String
+
+  /// Σ KeywordVolume（＝ニーズ規模）
+  marketVolume   Int
+  ourImpressions Int @default(0)
+  ourClicks      Int @default(0)
+
+  /// SOV
+  impressionShare Float?
+  clickShare      Float?
+
+  /// 1ページ目食い込み率（§3.3.3）。現状: 4〜10位に78本滞留・1〜3位は0本
+  top3Rate  Float?
+  top10Rate Float?
+  top20Rate Float?
+
+  aioCitationRate Float?
+
+  /// ★clusterId が TopicCluster / KeywordCluster のどちらを指すか設計書で未確定（§13 記録済）
+  ///   ClusterMetric との整合を優先し TopicCluster に接続している
+  cluster TopicCluster @relation(fields: [clusterId], references: [id])
+
+  @@unique([clusterId, month])
+  @@index([month])
+}
+
+/// §3 ══8.5 ★機会損失の定量化（優先順位の根拠・§3.3.4）
+/// 機会クリック = volume × CTR曲線[目標順位] − 現在のclicks
+/// 推定リード   = 機会クリック × 実測CV率（Lead / clicks）
+/// ★volume だけでなく budgetTier で重み付けする（買い手でないKWに投資しない）
+model Opportunity {
+  id        String @id @default(cuid())
+  keywordId String
+  /// "YYYY-MM"（C-4）
+  month     String
+
+  volume          Int
+  currentPosition Float?
+  currentClicks   Int    @default(0)
+  targetPosition  Float
+  potentialClicks Int
+
+  /// potential - current
+  clickGap       Int
+  /// clickGap × 実測CV率
+  estimatedLeads Float?
+
+  /// 難易度と掛けて自動採点
+  effortScore   Float?
+  priorityScore Float?
+
+  /// ★同じKWを広告で買った場合の単価
+  paidCpc         Float?
+  /// ★同じクリック数を広告で買う金額 → SEO vs 広告の比較（§3.4.7 週次）
+  paidCostToMatch Float?
+
+  keyword Keyword @relation(fields: [keywordId], references: [id])
+
+  @@unique([keywordId, month])
+  @@index([month, priorityScore])
+}
+
+// ══ 8.6 有料広告 ══
+
+/// §3 ══8.6 広告アカウント
+model AdAccount {
+  id         String     @id @default(cuid())
+  businessId String
+  platform   AdPlatform
+  externalId String
+  name       String
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  status     String
+
+  business  Business     @relation(fields: [businessId], references: [id])
+  campaigns AdCampaign[]
+
+  @@unique([platform, externalId])
+  @@index([businessId])
+}
+
+/// §3 ══8.6 キャンペーン
+model AdCampaign {
+  id          String    @id @default(cuid())
+  adAccountId String
+  externalId  String
+  name        String
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  objective   String?
+  targetLpId  String?
+  dailyBudget Decimal?  @db.Decimal(14, 2)
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  status      String
+  startedAt   DateTime?
+  endedAt     DateTime?
+
+  adAccount AdAccount    @relation(fields: [adAccountId], references: [id])
+  targetLp  LandingPage? @relation(fields: [targetLpId], references: [id])
+
+  adGroups          AdGroup[]
+  metrics           AdMetricDaily[]
+  linkedSimulations AdSimulation[]
+
+  @@unique([adAccountId, externalId])
+  @@index([status])
+  @@index([targetLpId])
+}
+
+/// §3 ══8.6 広告グループ
+model AdGroup {
+  id         String   @id @default(cuid())
+  campaignId String
+  externalId String
+  name       String
+  keywords   String[]
+  audience   Json?
+
+  campaign  AdCampaign      @relation(fields: [campaignId], references: [id])
+  creatives AdCreative[]
+  metrics   AdMetricDaily[]
+
+  @@unique([campaignId, externalId])
+}
+
+/// §3 ══8.6 広告クリエイティブ
+/// ⚠️ YMYL領域（§3.4.6）: 「必ず節税できる」等の断定表現は tax-accuracy ルールで禁止
+model AdCreative {
+  id         String  @id @default(cuid())
+  adGroupId  String
+  externalId String
+  headline   String
+  body       String
+  imageUrl   String?
+  landingUrl String
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  status     String
+
+  adGroup AdGroup         @relation(fields: [adGroupId], references: [id])
+  metrics AdMetricDaily[]
+
+  @@unique([adGroupId, externalId])
+}
+
+/// §3 ══8.6 日次実績（媒体APIから自動取得・§3.4.7）
+/// gclid / utm で Lead と突合し、自社CVを媒体の自己申告に依存しない
+model AdMetricDaily {
+  id         String   @id @default(cuid())
+  campaignId String
+  adGroupId  String?
+  creativeId String?
+  date       DateTime @db.Date
+
+  impressions Int     @default(0)
+  clicks      Int     @default(0)
+  cost        Decimal @default(0) @db.Decimal(14, 2)
+  conversions Int     @default(0)
+
+  /// 自動算出
+  cpc Float?
+  ctr Float?
+  cpa Float?
+
+  campaign AdCampaign  @relation(fields: [campaignId], references: [id])
+  adGroup  AdGroup?    @relation(fields: [adGroupId], references: [id])
+  creative AdCreative? @relation(fields: [creativeId], references: [id])
+
+  /// ★設計書に明記。ただし adGroupId / creativeId が NULL の行では
+  ///   Postgres の NULL 非同値により一意制約が効かない（§13 記録済）
+  @@unique([campaignId, adGroupId, creativeId, date])
+  @@index([date])
+  @@index([campaignId, date])
+}
+
+/// §3 ══8.6 ★広告・投資可否の判断基準（経路別に持つ・§3.4.2）
+/// 実数（2026-07-20 石井確定）: 単価240万(税抜) / 当社取分20%=48万 / 代理店手数料7.5%=18万
+///   direct   の粗利 = 48万/台
+///   agency   の粗利 = 30万/台（12.5%）
+///   directPremium   = 18万/台 → 直客1件は代理店経由1.6件分の価値
+/// 上限CPA = grossProfitPerUnit × avgUnitsPerDeal × leadToDealRate
+/// ⚠️ leadToDealRate は未実測（実績は1問い合わせ→1成約だが母数1で使用不可）
+model UnitEconomics {
+  id         String @id @default(cuid())
+  businessId String
+  productFit String
+  /// "YYYY-MM"（C-4）
+  month      String
+
+  /// ★direct | agency（粗利が違うので必ず分ける）
+  acquisitionChannel AcquisitionChannel
+
+  /// 240万（★§16.6-7 により全て税抜で保持）
+  unitPrice            Decimal  @db.Decimal(14, 2)
+  /// 20%
+  ourSharePct          Float
+  /// 代理店経由なら 7.5%
+  partnerCommissionPct Float?
+  /// direct=48万 / agency=30万
+  grossProfitPerUnit   Decimal  @db.Decimal(14, 2)
+  /// 実績: 2台/件（母数1・要蓄積）
+  avgUnitsPerDeal      Float
+  /// 問い合わせ→成約率（未実測）
+  leadToDealRate       Float?
+  /// = grossProfitPerUnit × avgUnitsPerDeal × leadToDealRate
+  maxCpa               Decimal? @db.Decimal(14, 2)
+  /// ★直客−代理店 = 18万/台。獲得コストの上限判断に使う
+  directPremium        Decimal? @db.Decimal(14, 2)
+
+  actualCpa Decimal? @db.Decimal(14, 2)
+  roas      Float?
+
+  provenance Provenance
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@unique([businessId, productFit, month, acquisitionChannel])
+  @@index([month])
+}
+
+/// §3 ══8.6 ★シミュレーション（順算・逆算の両方・§3.4.4）
+/// ★逆算モードが実務では重要（「問い合わせを月5件取りたい」→ 必要予算）
+/// ⚠️ LP CVR は自社実測が無いため、初回は必ずベンチマーク＝推定として扱う
+model AdSimulation {
+  id         String             @id @default(cuid())
+  businessId String
+  name       String
+  mode       SimulationMode
+  createdAt  DateTime           @default(now())
+  scenario   SimulationScenario
+
+  /// 対象KW群 / 想定CPC / 想定CTR / LP CVR / 成約率 / 粗利
+  inputs           Json
+  /// クリック数 / 問い合わせ数 / 成約数 / 売上 / 利益 / CPA / ROAS / 回収期間
+  outputs          Json
+  /// 各前提が実測かベンチマークか（Provenance の値を保持する）
+  assumptionSource Json
+
+  /// 実配信後に予実差分を自動照合（§3.4.7 週次）
+  actualLinkedCampaignId String?
+
+  business             Business    @relation(fields: [businessId], references: [id])
+  actualLinkedCampaign AdCampaign? @relation(fields: [actualLinkedCampaignId], references: [id])
+
+  @@index([businessId, createdAt])
+}
+
+/// §3 ══8. 記事ネタ（★手で書くものではなく、システムが自動で起票する・§13.4）
+/// impacts が必須なので、結果に効かないネタは起票時点で下位に沈む（§5.5）
+model Idea {
+  id            String       @id @default(cuid())
+  businessId    String
+  title         String
+  body          String?
+  source        IdeaSource
+  sourceRef     Json?
+  /// ★効く結果指標（必須・APIで弾く）
+  impacts       String[]
+  budgetTier    BudgetTier   @default(unknown)
+  funnelStage   FunnelStage?
+  estValue      Float?
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  state         String
+  keywordId     String?
+  contentItemId String?
+
+  business    Business     @relation(fields: [businessId], references: [id])
+  keyword     Keyword?     @relation(fields: [keywordId], references: [id])
+  contentItem ContentItem? @relation(fields: [contentItemId], references: [id])
+
+  @@index([businessId, source])
+  @@index([state])
+  @@index([estValue])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ══ 9. PDCA（Plan-Do-Check-Act を型で持つ）══
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §3 ══9. Plan（施策単位・撤退条件つき）
+model Experiment {
+  id         String @id @default(cuid())
+  businessId String
+  name       String
+  hypothesis String
+
+  successMetric    String
+  successThreshold Float
+  startedAt        DateTime
+  /// 判定予約日。段6「施策の生死」でカウントダウン表示
+  evaluateAt       DateTime
+  /// ★撤退条件は必須（行動原則6）
+  exitCondition    String
+
+  state ExperimentState @default(running)
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  /// ★設計書は Experiment に interventions Intervention[] を記すが、Intervention は
+  ///   actionId 経由でしか Experiment に到達できない（§13 記録済）。
+  ///   Prisma 構文を満たすため Action 経由の関連のみを保持する
+  actions   Action[]
+  learnings Learning[]
+
+  @@index([businessId, state])
+  @@index([evaluateAt])
+}
+
+/// §3 ══9. Do（打ち手・段5「次の一手」に並ぶ）
+/// 段5は impacts の重み順にソートされる（§5.5）
+model Action {
+  id               String      @id @default(cuid())
+  businessId       String
+  experimentId     String?
+  type             ActionType
+  title            String
+  rationale        String
+  /// ★効く結果指標（必須・APIで弾く）
+  impacts          String[]
+  proposedBy       String
+  state            ActionState @default(proposed)
+  /// 先に実行して draft 化したもの（§5.1 週次）
+  preparedArtifact Json?
+  /// §16.6-3 承認待ちの滞留対策: 14日で自動 expired
+  expiresAt        DateTime?
+
+  business   Business    @relation(fields: [businessId], references: [id])
+  experiment Experiment? @relation(fields: [experimentId], references: [id])
+
+  events       ActionEvent[]
+  intervention Intervention?
+
+  @@index([businessId, state])
+  @@index([type])
+  @@index([expiresAt])
+}
+
+/// §3 ══9. 却下理由＝学習データ（§5.6 次回の立案プロンプトに注入される）
+model ActionEvent {
+  id       String   @id @default(cuid())
+  actionId String
+  event    String
+  reason   String?
+  actorId  String?
+  at       DateTime
+
+  action Action @relation(fields: [actionId], references: [id])
+
+  @@index([actionId, at])
+  @@index([event])
+}
+
+/// §3 ══9. Check（実行された変更＝効果測定の単位）
+/// netEffect = (適用後28日の実測) − (適用前28日の実測) − (対照群の同期間トレンド)
+/// ★対照群補正が無いと「季節変動で上がっただけ」を「施策が効いた」と誤判定する（§5.3）
+model Intervention {
+  id            String  @id @default(cuid())
+  actionId      String  @unique
+  contentItemId String?
+  keywordId     String?
+  type          String
+
+  appliedAt  DateTime
+  /// appliedAt + 判定期間（打ち手タイプごと・docs/GLOSSARY.md 参照）
+  evaluateAt DateTime
+
+  /// 適用前28日の実測
+  baseline     Json?
+  /// 適用後28日の実測
+  result       Json?
+  /// ★対照群（無変更の同カテゴリ記事）のトレンド
+  controlDelta Float?
+  /// result - baseline - controlDelta
+  netEffect    Float?
+  verdict      InterventionVerdict @default(pending)
+
+  /// §16.5 対照群が作れない場合の判定
+  /// ★設計書 §16.5 は「§3反映済み前提」と記すが §3 の model 定義には存在しない（§13 記録済）
+  controlGroupSize Int?
+  /// 対照群 5記事以上かつ合計impressions 500以上を満たさなければ inconclusive
+  confidence       String?
+  /// 同型の打ち手を複数記事にまとめて適用し、バッチ単位で判定する（最有効）
+  batchId          String?
+
+  /// §16.3 ロールバック先。戻す先のバージョンが無いと negative 判定に対応できない
+  beforeVersionId String?
+  afterVersionId  String?
+
+  action        Action          @relation(fields: [actionId], references: [id])
+  contentItem   ContentItem?    @relation(fields: [contentItemId], references: [id])
+  keyword       Keyword?        @relation(fields: [keywordId], references: [id])
+  beforeVersion ContentVersion? @relation("InterventionBefore", fields: [beforeVersionId], references: [id])
+  afterVersion  ContentVersion? @relation("InterventionAfter", fields: [afterVersionId], references: [id])
+
+  reviews   ArticleReview[]
+  learnings Learning[]
+
+  @@index([evaluateAt, verdict])
+  @@index([contentItemId])
+  @@index([batchId])
+  @@index([type])
+}
+
+/// §3 ══9. Act（学び。Intervention の判定から自動生成される）
+model Learning {
+  id             String   @id @default(cuid())
+  businessId     String?
+  experimentId   String?
+  interventionId String?
+  body           String
+  at             DateTime
+
+  business     Business?     @relation(fields: [businessId], references: [id])
+  experiment   Experiment?   @relation(fields: [experimentId], references: [id])
+  intervention Intervention? @relation(fields: [interventionId], references: [id])
+
+  @@index([businessId, at])
+  @@index([interventionId])
+}
+
+/// §3 ══9. 意思決定ログ（経営戦略室の Markdown 資産のDB版）
+model Decision {
+  id           String   @id @default(cuid())
+  title        String
+  decision     String
+  rationale    String
+  alternatives String?
+  decidedAt    DateTime
+
+  @@index([decidedAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ══ 10. ジョブ ══
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §3 ══10. ジョブ定義（cron/aio-batch.sh・Cowork Scheduled をここへ集約・§6）
+/// §12.1: 常駐サーバーなので sandbox 45秒上限・SQLite書込制限・状態消失が全て消える
+model Job {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  /// cron 式
+  schedule String
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  kind     String
+  config   Json?
+  enabled  Boolean @default(true)
+
+  runs JobRun[]
+
+  @@index([enabled])
+}
+
+/// §3 ══10. ジョブ実行履歴（段7「ジョブ健全性」の表示元）
+model JobRun {
+  id         String    @id @default(cuid())
+  jobId      String
+  startedAt  DateTime
+  finishedAt DateTime?
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  status     String
+  log        String?
+  /// §16.6-4 AIトークン数を記録し月次可視化・上限アラート
+  metrics    Json?
+
+  job Job @relation(fields: [jobId], references: [id])
+
+  @@index([jobId, startedAt])
+  @@index([status])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  §3.6 記事ライフサイクル全体の棚卸し — 残る7つの欠損
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §3.6.1 ★① インデックス状況 — 最も基本的で、最も致命的
+/// インデックスされていない記事はクリック0が確定する。順位もCTRも意味がない
+/// 157本のうち何本がインデックスされているかを、現時点で誰も知らない
+model IndexStatus {
+  id            String        @id @default(cuid())
+  contentItemId String
+  checkedAt     DateTime
+  coverageState CoverageState
+
+  canonicalUrl    String?
+  /// canonical の自己参照が崩れている記事＝カニバリの隠れた原因
+  isCanonicalSelf Boolean   @default(true)
+  robotsDirective String?
+  lastCrawledAt   DateTime?
+  sitemapIncluded Boolean   @default(false)
+
+  /// JSON-LD の妥当性
+  richResultValid  Boolean?
+  richResultErrors Json?
+  mobileUsable     Boolean?
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id])
+
+  @@index([contentItemId, checkedAt])
+  @@index([coverageState])
+}
+
+/// §3.6.2 ★② アシスト貢献（マルチタッチ） — 記事評価を最も歪める欠損
+/// firstTouch/lastTouch の2つだけでは、間の記事が評価ゼロになり
+/// "効いていない記事" として畳まれる危険がある
+model LeadTouchpoint {
+  id            String   @id @default(cuid())
+  leadId        String
+  contentItemId String
+  viewedAt      DateTime
+  sequenceNo    Int
+
+  dwellSeconds Int?
+  scrollDepth  Float?
+
+  role              TouchpointRole
+  /// 線形 or 時間減衰で配分
+  attributionWeight Float
+
+  lead        Lead        @relation(fields: [leadId], references: [id])
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id])
+
+  @@unique([leadId, sequenceNo])
+  @@index([contentItemId, role])
+}
+
+/// §3.6.3 ★③ 被リンク — 「1〜3位が0本」の最有力の原因
+/// 4〜10位に78本滞留・1〜3位0本はコンテンツ品質ではなくドメイン権威の問題の可能性が高い
+/// → 打ち手が「記事を増やす」から「被リンクを取る」に変わりうる
+model Backlink {
+  id              String  @id @default(cuid())
+  targetContentId String?
+  sourceDomain    String
+  sourceUrl       String
+  anchorText      String?
+
+  firstSeenAt DateTime
+  lastSeenAt  DateTime
+  lost        Boolean  @default(false)
+
+  domainRank Int?
+  isNofollow Boolean @default(false)
+
+  targetContent ContentItem? @relation(fields: [targetContentId], references: [id])
+
+  @@unique([sourceUrl, targetContentId])
+  @@index([targetContentId])
+  @@index([sourceDomain])
+  @@index([lost])
+}
+
+/// §3.6.3 ★③ ドメイン権威（自社＋競合）
+/// 競合との参照ドメイン数の差が「1ページ目の上位に行けない天井」を説明する
+model DomainAuthority {
+  id     String   @id @default(cuid())
+  domain String
+  date   DateTime @db.Date
+
+  refDomains Int
+  backlinks  Int
+  rankScore  Float?
+
+  /// 競合として追跡している場合に紐付く（自社ドメインは NULL）
+  competitorId String?
+
+  competitor Competitor? @relation(fields: [competitorId], references: [id])
+
+  @@unique([domain, date])
+  @@index([date])
+}
+
+/// §3.6.4 ★④ ページ体験（Core Web Vitals・表示速度）
+/// ランキング要因かつCVRに直結。★モバイル／デスクトップ別に持つ
+model PageExperience {
+  id            String     @id @default(cuid())
+  contentItemId String
+  date          DateTime   @db.Date
+  device        DeviceType
+
+  lcp              Float?
+  inp              Float?
+  cls              Float?
+  ttfb             Float?
+  performanceScore Float?
+
+  source PageExperienceSource
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id])
+
+  @@unique([contentItemId, date, device, source])
+  @@index([date])
+  @@index([contentItemId, device])
+}
+
+/// §3.6.5 ★⑤ 記事別の制作コスト — ROIの分母
+/// 記事別ROI = リード貢献額 ÷ 制作コスト。クラスタ別ROIに集約して投資判断に使う
+/// ★石井さんの作業時間は承認画面の滞在時間から自動推定（手入力を強要しない）
+model ProductionCost {
+  id            String             @id @default(cuid())
+  contentItemId String
+  kind          ProductionCostKind
+
+  /// 石井さんの実作業（承認・レビュー・確認）
+  humanMinutes    Int     @default(0)
+  /// JobRun.metrics から自動集計
+  aiTokens        Int     @default(0)
+  aiCostYen       Decimal @default(0) @db.Decimal(14, 2)
+  /// 画像生成・API・外注
+  externalCostYen Decimal @default(0) @db.Decimal(14, 2)
+
+  producedAt DateTime
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id])
+
+  @@index([contentItemId, kind])
+  @@index([producedAt])
+}
+
+/// §3.6.7 ★⑦ 記事の終息管理（プルーニング・404・統合）
+/// 薄い記事・買い手を連れてこない記事を放置するとサイト全体の評価を下げる
+/// ★記事は増やすだけでは結果が出ない。畳む判断をシステムに持たせる
+model ContentLifecycle {
+  id            String          @id @default(cuid())
+  contentItemId String
+  action        LifecycleAction
+  reason        String
+  decidedAt     DateTime
+  decidedBy     String
+
+  mergeTargetId String?
+  redirectTo    String?
+
+  contentItem ContentItem  @relation("LifecycleSubject", fields: [contentItemId], references: [id])
+  mergeTarget ContentItem? @relation("LifecycleMergeTarget", fields: [mergeTargetId], references: [id])
+
+  @@index([contentItemId, decidedAt])
+  @@index([action])
+}
+
+/// §3.6.7 ★⑦ URLリダイレクト（URL変更・記事削除時に必ず作る＝404を出さない）
+model UrlRedirect {
+  id         String   @id @default(cuid())
+  fromPath   String   @unique
+  toPath     String
+  statusCode Int      @default(301)
+  createdAt  DateTime @default(now())
+  hits       Int      @default(0)
+
+  @@index([toPath])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  §3.7 検証手法の設計 — 母数に応じた使い分け
+//  ★大前提: LP訪問 約38/月では A/Bテストを回しても何ヶ月経っても結論が出ない
+//    今（〜100/月）    → 定性（Clarity）＋大きく変えて before/after ＋ クラスタ単位判定
+//    中（100〜1,000）  → SEOスプリットテスト
+//    先（1,000+）      → LP/CTA の A/Bテスト
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §3.7.1 ① SEOスプリットテスト（記事群を分ける・★主判定手法）
+/// 同一URLで訪問者ごとにtitleを出し分けることは不可能だが、
+/// ページ群を2グループに分けて期間中の推移を比較する split test は成立する（157本あれば足りる）
+model SplitTest {
+  id         String @id @default(cuid())
+  name       String
+  hypothesis String
+  /// title | meta | cta_position | intro_structure …
+  /// 設計書の列挙が `…` で打ち切られているため String（§13 記録済）
+  changeType String
+
+  startedAt            DateTime
+  endsAt               DateTime
+  /// ★最小サンプル基準を満たすまで結論を出さない → inconclusive
+  minSampleImpressions Int
+
+  state SplitTestState @default(running)
+
+  assignments SplitAssignment[]
+
+  @@index([state, endsAt])
+}
+
+/// §3.7.1 ★層別ランダム化（クラスタ・順位帯・funnelStage を揃えてから振り分ける）
+/// 無作為に分けるとグループ間の初期条件がズレて結論が歪む
+model SplitAssignment {
+  id            String   @id @default(cuid())
+  splitTestId   String
+  contentItemId String
+  arm           SplitArm
+  /// ★層（clusterId × 順位帯 × funnelStage）
+  stratum       String
+  /// 開始前28日の実測
+  baseline      Json?
+
+  splitTest   SplitTest   @relation(fields: [splitTestId], references: [id])
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id])
+
+  @@unique([splitTestId, contentItemId])
+  @@index([splitTestId, arm])
+  @@index([stratum])
+}
+
+/// §3.7.2 ② LP / CTA の A/Bテスト（★モデルは今、実装は後＝P7.7）
+/// ★到達見込みが3ヶ月を超えるなら underpowered として起動を拒否する
+///   その場合は「大きく変えて before/after」を Intervention 経由で提案する
+model Experimentation {
+  id         String                @id @default(cuid())
+  targetType ExperimentationTarget
+  targetId   String
+  name       String
+  hypothesis String
+
+  /// {A:50, B:50}
+  trafficSplit    Json
+  primaryMetric   ExperimentationMetric
+  /// ★到達するまで判定しない
+  minSamplePerArm Int
+
+  startedAt       DateTime?
+  concludedAt     DateTime?
+  winnerVariantId String?
+
+  state ExperimentationState @default(draft)
+
+  variants Variant[] @relation("ExperimentationVariants")
+
+  @@index([targetType, targetId])
+  @@index([state])
+}
+
+/// §3.7.2 バリアント
+model Variant {
+  id                String  @id @default(cuid())
+  experimentationId String
+  key               String
+  config            Json
+  isControl         Boolean @default(false)
+
+  sessions    Int    @default(0)
+  conversions Int    @default(0)
+  convRate    Float?
+  confidence  Float?
+
+  experimentation Experimentation @relation("ExperimentationVariants", fields: [experimentationId], references: [id])
+
+  @@unique([experimentationId, key])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  §3.8 運用・業務・外部環境の軸での棚卸し
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §3.8.1 ★① 季節性・需要カレンダー — 判断を最も誤らせる要因
+/// 節税需要は決算期に集中する。対照群補正は全記事が同じ季節性を持つ場合は効かない
+/// → 段1・段4の前月比・前週比に季節調整値を併記する
+model SeasonalityIndex {
+  id          String  @id @default(cuid())
+  clusterId   String?
+  keywordId   String?
+  /// ★設計書に `// 1-12` と明記されているため Int（C-4 の例外）
+  month       Int
+  /// 年平均を1.0とした相対値
+  indexValue  Float
+  sampleYears Int
+  /// 検索ボリューム履歴から自動算出
+  source      String
+
+  cluster TopicCluster? @relation(fields: [clusterId], references: [id])
+  keyword Keyword?      @relation(fields: [keywordId], references: [id])
+
+  @@unique([clusterId, keywordId, month])
+  @@index([month])
+}
+
+/// §3.8.2 ★② 税制改正・制度カレンダー — 先回りできる情報
+/// 12月大綱 → 3月成立 → 4月施行と予定が決まっている
+/// 期日の60日前に段5へ「記事準備」Action を自動起票する
+model RegulatoryEvent {
+  id                 String                @id @default(cuid())
+  title              String
+  eventType          RegulatoryEventType
+  scheduledAt        DateTime
+  confirmedAt        DateTime?
+  /// ML | 経営強化税制 | 少額減価償却 …
+  affectedProducts   String[]
+  sourceUrl          String?
+  status             RegulatoryEventStatus @default(scheduled)
+  /// ★該当記事を事前に紐付け（§7.5.2 triggered_by_law の入力源）
+  affectedContentIds String[]
+
+  @@index([scheduledAt, status])
+  @@index([eventType])
+}
+
+/// §3.8.5 ★⑤ SNSアカウントが生きているか
+/// ★viewsPerFollower の急落＝配信制限/シャドウバンのサイン。段1で検知する
+model SnsAccountHealth {
+  id        String   @id @default(cuid())
+  channelId String
+  date      DateTime @db.Date
+
+  followers      Int
+  followersDelta Int @default(0)
+
+  postsDelivered Int @default(0)
+  postsFailed    Int @default(0)
+
+  avgViews         Float?
+  /// ★急落＝配信制限/シャドウバンのサイン
+  viewsPerFollower Float?
+
+  restrictionSuspected Boolean   @default(false)
+  /// Threads トークン期限（60日）。段7で残日数表示（9日前から黄）
+  tokenExpiresAt       DateTime?
+
+  channel Channel @relation(fields: [channelId], references: [id])
+
+  @@unique([channelId, date])
+  @@index([date])
+}
+
+/// §3.8.5 時間帯別の成績
+model PostSchedule {
+  id        String @id @default(cuid())
+  channelId String
+  hourOfDay Int
+  dayOfWeek Int
+
+  avgViews      Float?
+  avgEngagement Float?
+  sampleSize    Int    @default(0)
+
+  channel Channel @relation(fields: [channelId], references: [id])
+
+  @@unique([channelId, hourOfDay, dayOfWeek])
+}
+
+/// §3.8.5 ★記事 ↔ 投稿の相互送客（§13.4-④ Threadsヒット→記事化の効果検証に必要）
+model CrossPromotion {
+  id                String @id @default(cuid())
+  contentItemId     String
+  postContentItemId String
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  direction         String
+  clicks            Int    @default(0)
+
+  contentItem     ContentItem @relation("PromotionArticle", fields: [contentItemId], references: [id])
+  postContentItem ContentItem @relation("PromotionPost", fields: [postContentItemId], references: [id])
+
+  @@unique([contentItemId, postContentItemId, direction])
+}
+
+/// §3.8.6 ★⑥ LP のエンティティ
+/// 診断LP・商材別LP・代理店LP・比較ハブが増えると管理不能になる
+model LandingPage {
+  id         String     @id @default(cuid())
+  businessId String
+  slug       String
+  url        String
+  name       String
+  lpType     LpType
+  productFit String[]
+  budgetTier BudgetTier @default(unknown)
+  /// 無料相談 | 資料DL | 診断
+  /// ★値が日本語のため Prisma enum にできず String（§13 記録済）
+  offer      String
+
+  status           LandingPageStatus @default(draft)
+  publishedAt      DateTime?
+  currentVersionId String?
+
+  /// どの記事から送客されるか（記事群 → LP の設計を管理する）
+  sourceContentIds String[]
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  versions    LpVersion[]   @relation("LpVersions")
+  funnels     FunnelEvent[]
+  adCampaigns AdCampaign[]
+
+  @@unique([businessId, slug])
+  @@index([status])
+  @@index([lpType])
+}
+
+/// §3.8.6 LPのバージョン管理（§16.3 と同じ理由。ロールバックできないと改善が怖くてできない）
+model LpVersion {
+  id            String   @id @default(cuid())
+  landingPageId String
+  versionNo     Int
+  capturedAt    DateTime
+  html          String
+  config        Json?
+  changeNote    String?
+
+  landingPage LandingPage @relation("LpVersions", fields: [landingPageId], references: [id])
+
+  @@unique([landingPageId, versionNo])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  §3.9 実運用・品質・信頼性の軸
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §3.9.2 ★② 外部リンク切れ — YMYLでは信頼性に直結
+/// 157記事 × 出典3本以上 ＝ 500本超の外部リンクを誰も見ていない
+/// ★tier1（nta.go.jp 等）の出典が404になった記事を最優先で段5に起票
+model LinkCheck {
+  id            String  @id @default(cuid())
+  contentItemId String
+  url           String
+  isExternal    Boolean
+
+  checkedAt  DateTime
+  statusCode Int?
+  ok         Boolean
+
+  redirectedTo        String?
+  consecutiveFailures Int      @default(0)
+  tier                LinkTier
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id])
+
+  @@unique([contentItemId, url, checkedAt])
+  @@index([ok, tier])
+  @@index([contentItemId])
+}
+
+/// §3.9.3 ★③ サイトの死活監視 — 落ちたら流入ゼロ
+/// 5分間隔。★フォームが壊れていると問い合わせが消える（最も高い損失）
+/// 連続3回失敗で即通知（Appleリマインダー最優先）
+model UptimeCheck {
+  id         String   @id @default(cuid())
+  target     String
+  checkedAt  DateTime
+  statusCode Int?
+  responseMs Int?
+  ok         Boolean
+
+  @@index([target, checkedAt])
+  @@index([ok])
+}
+
+/// §3.9.4 ★④ スキル・プロンプトのバージョン記録 — 品質変化の原因究明
+/// 記事の成績をスキルバージョン別に比較できる（v3の記事とv4の記事で差があるか）
+model GenerationProvenance {
+  id            String   @id @default(cuid())
+  contentItemId String
+  generatedAt   DateTime
+
+  /// article-writer
+  skillName    String
+  /// v4
+  skillVersion String
+  /// opus-4.8 | sonnet-5 …（§9.4 のモデル振り分けの実効果を検証できる）
+  modelName    String
+
+  promptHash       String?
+  configSnapshot   Json?
+  validatorResults Json?
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id])
+
+  @@index([contentItemId, generatedAt])
+  @@index([skillName, skillVersion])
+}
+
+/// §3.9.5 ★⑤ レピュテーション監視
+/// ★negative を検出したら即通知（対応判断は石井さん。AIは自動返信しない）
+model BrandMention {
+  id      String   @id @default(cuid())
+  /// threads | x | google | note | 5ch …
+  /// 設計書の列挙が `…` で打ち切られているため String（§13 記録済）
+  source  String
+  url     String
+  snippet String?
+  foundAt DateTime
+
+  sentiment Sentiment
+  /// 節税総研 | アセットサポート | ML | 石井 …
+  entity    String
+
+  handled Boolean @default(false)
+  note    String?
+
+  @@index([sentiment, handled])
+  @@index([foundAt])
+  @@index([entity])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  §3.10 ★過去のサイト重量化事故（TTFBスパイク）の再発防止
+//  原因: WPテーマの自前PV計測が同期でDB書込みしていた
+//  ★本当に問題だったのは「何千回発火しても誰も気づかなかったこと」
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §3.10.4 ★計測タグ自身の発火量を監視（これが決定的）
+/// 閾値: eventsPerSession > 30 → 段7に黄（想定は7〜15）
+///       eventsPerSession > 50 → 段7に赤 ＋ 即通知
+///       前日比でイベント総数が3倍 → 赤 ＋ 計測タグの自動無効化を提案（ワンクリック停止）
+///       rejectedDuplicates 比率 > 20% → 実装バグの疑い。黄
+model TelemetryVolume {
+  id   String   @id @default(cuid())
+  date DateTime @db.Date
+  hour Int
+
+  sessions         Int   @default(0)
+  events           Int   @default(0)
+  eventsPerSession Float @default(0)
+
+  bytesReceived      Int @default(0)
+  rejectedDuplicates Int @default(0)
+
+  /// 閾値超過
+  anomaly Boolean @default(false)
+
+  @@unique([date, hour])
+  @@index([anomaly])
+}
+
+/// §3.10.5 デプロイ前の性能ゲート
+/// ★TTFB が20%以上悪化、または LCP が0.5秒以上悪化したらデプロイを失敗扱いにして段7に赤
+/// 過去の事故はテーマ更新に紛れて入った。更新のたびに測れば当日中に気づく
+model PerfGate {
+  id         String         @id @default(cuid())
+  releaseTag String
+  target     PerfGateTarget
+
+  measuredAt DateTime
+  phase      PerfGatePhase
+
+  lcp          Float?
+  inp          Float?
+  cls          Float?
+  ttfb         Float?
+  jsBytes      Int?
+  requestCount Int?
+
+  passed        Boolean @default(false)
+  blockedReason String?
+
+  @@unique([releaseTag, target, phase])
+  @@index([measuredAt])
+}
+
+/// §3.10.6 インシデント記録
+/// ★事故を記録しないと、対策は個別ファイルの1行に埋もれて失われる
+/// 初期データとして過去5件を登録する（P3.10）
+model Incident {
+  id         String    @id @default(cuid())
+  occurredAt DateTime
+  detectedAt DateTime
+  resolvedAt DateTime?
+
+  severity IncidentSeverity
+  category IncidentCategory
+
+  title             String
+  symptom           String
+  rootCause         String?
+  resolution        String?
+  /// 再発防止策（実装済みかのチェック付き）
+  preventionActions Json?
+
+  relatedPhase      String?
+  relatedContentIds String[]
+
+  @@index([occurredAt])
+  @@index([severity, category])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  §11.4 パターンの横展開（Business 横断の共有テーブル）
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §11.4 投稿パターン（Good/Bad型・早口型・ストーリー型 …）
+/// 節税総研で検証済み（N≥5）の勝ち型を、新アカウントの初期投稿設計にそのまま適用できる
+/// ★設計書は `metrics PatternMetric[]` を記すが PatternMetric モデルが定義されていない（§13 記録済）
+///   → 推測で新規モデルを追加しないため、関連フィールドは持たせていない
+model PostPattern {
+  id         String @id @default(cuid())
+  name       String @unique
+  structure  String
+  hypothesis String
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  §16 着手前に決めるべき設計課題（★全て未決）
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §16.1-① 合成モニタリングの結果（★これだけは必ず入れる）
+/// 日次で Playwright が自社サイトを巡回し、期待する FunnelEvent がDBに記録されたか検証
+/// 不一致で段7を赤にする。これが無いと「計測が生きているか」を誰も保証できない
+model MonitorRun {
+  id       String   @id @default(cuid())
+  runAt    DateTime
+  scenario String
+  expected Json
+  actual   Json
+  passed   Boolean
+  diff     Json?
+
+  @@index([runAt, passed])
+  @@index([scenario])
+}
+
+/// §16.1-②③⑤ 突合・外れ値・ボット率
+/// GSCクリック vs 自前セッション数、GA4 PV vs 自前PV の乖離率を日次監視（±15%超で警告）
+/// ★どちらが正しいかは判断せず「ズレている」ことを検知する
+model DataQualityCheck {
+  id        String   @id @default(cuid())
+  checkedAt DateTime
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  kind      String
+  metric    String
+
+  ourValue     Float?
+  refValue     Float?
+  deviationPct Float?
+  /// 値の列挙が設計書に無いため String（§13 記録済）
+  verdict      String
+  note         String?
+
+  @@index([checkedAt, kind])
+  @@index([verdict])
+}
+
+/// §16.2 同意の取得記録（いつ・どのバージョンの文言に）
+/// ★第三者提供の同意は不要（2026-07-20 石井確定・ML事業部として自社対応のため）
+///   本モデルは将来、代理店へリードを配分する運用に変えた場合のために残す
+model ConsentRecord {
+  id            String   @id @default(cuid())
+  leadId        String?
+  visitorId     String?
+  consentType   String
+  policyVersion String
+  agreedAt      DateTime
+  ipHash        String?
+
+  lead Lead? @relation(fields: [leadId], references: [id])
+
+  @@index([leadId])
+  @@index([visitorId])
+}
+
+/// §16.2 保存期間と自動削除
+/// VisitorSession=13ヶ月 / FunnelEvent=25ヶ月 / Lead の個人情報=取引終了後n年
+/// 期限到来で自動削除するジョブを持つ
+model DataRetentionPolicy {
+  id            String    @id @default(cuid())
+  entity        String    @unique
+  retentionDays Int
+  lastPurgedAt  DateTime?
+}
+
+/// §16.2 誰が/AIが いつ 何を変えたか・個人情報に誰がアクセスしたか
+model AuditLog {
+  id        String   @id @default(cuid())
+  /// human | ai などを想定するが値の列挙が設計書に無いため String（§13 記録済）
+  actorType String
+  actorId   String?
+  action    String
+  entity    String
+  entityId  String?
+  before    Json?
+  after     Json?
+  at        DateTime
+
+  @@index([entity, entityId, at])
+  @@index([actorType, at])
+  @@index([at])
+}
+
+/// §16.3 ★コンテンツのバージョン管理とロールバック
+/// WordPress のリビジョンには本文は残るが、config.yaml・タイトル・メタディスクリプション・
+/// タグ・Rank Math 設定・CTA構成は残らない → ワンクリックで復元できるようにする
+model ContentVersion {
+  id            String   @id @default(cuid())
+  contentItemId String
+  versionNo     Int
+  capturedAt    DateTime
+
+  title           String?
+  metaDescription String?
+  bodyHtml        String?
+  configYaml      Json?
+  tags            Int[]
+  rankMath        Json?
+  ctaLayout       Json?
+
+  capturedBy VersionCapturedBy
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id])
+
+  beforeInterventions Intervention[] @relation("InterventionBefore")
+  afterInterventions  Intervention[] @relation("InterventionAfter")
+
+  @@unique([contentItemId, versionNo])
+  @@index([contentItemId, capturedAt])
+}
