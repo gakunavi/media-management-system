@@ -10,7 +10,7 @@
 | API／MCPツール接頭辞 | `mms_*` |
 | 環境変数接頭辞 | `MMS_*` |
 | 起案 | 2026-07-20 / 石井政隆 |
-| 現在の状態 | **P2 完了**（CV配管・問い合わせ受口が稼働）／次は **P2.5**（ファネル7段） |
+| 現在の状態 | **P2.5 完了**（ファネル7段の計測が稼働）／次は **P2.6→P2.7→P3**（ダッシュボード） |
 
 ---
 
@@ -105,6 +105,7 @@ open http://localhost:3000
 | DB を GUI で見る | `npm run db:studio` |
 | 既存データの再移行 | `npm run migrate:legacy`（冪等） |
 | 計測受口のテスト送信 | `npm run ingest:test -- --dup` |
+| ファネル計測のテスト | `npm run events:test` |
 | 計測開始/終了の記録 | `npm run measurement -- list` |
 
 ### ログイン

@@ -11,7 +11,8 @@ const PUBLIC_PATHS = [
   "/api/auth", // Auth.js 自身
   "/api/dev-login", // このMac（localhost）専用の自動ログイン
   "/api/health", // 死活監視（§3.9.3 UptimeCheck が叩く）
-  "/api/ingest", // 計測受口は HMAC 署名で検証する（§8 / P2.5）
+  "/api/ingest", // 計測受口（form=HMAC / events=Origin+レート制限）
+  "/mms-tag.js", // ★計測タグ。外部サイトから読むので公開（§14.2 / P2.5）
 ];
 
 const SESSION_COOKIES = [

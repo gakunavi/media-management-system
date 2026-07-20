@@ -441,6 +441,9 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 
 | **D18** | Lead の個人情報の列（P2で判明・U41） | **`contactName` / `contactEmail` / `contactPhone` / `companyName` を追加し、AES-256-GCM で列単位に暗号化**して保存する | §16.2 が「Lead の個人情報カラムは列単位で暗号化」と明示しており、§5.4 の自動返信にも連絡先が要る。列が無いと P2 のフォーム受信が保存できない。暗号鍵 `MMS_PII_KEY` 未設定時は **fail-closed**（平文保存せず 503 を返す）。復号は `apps/web/lib/crypto.ts` の `decryptPii()` のみ、AI へは必ずマスキング（§11-1） | P2／P2.7（自動返信）／P3（一覧表示） |
 
+| **D19** | ブラウザ計測タグの認証（P2.5） | **HMAC を使わず、Origin allowlist ＋ セッション単位レート制限 ＋ 冪等キーで守る** | §8 の HMAC は「Webhook 受口」（WP/GAS のサーバー間）向け。ブラウザのタグに共有シークレットを持たせると**クライアントに露出して無意味**。first-party テレメトリは別の防御が正しい。`/api/ingest/form`（HMAC）と `/api/ingest/events`（Origin+レート）で受口を分けた | P2.5／P2.11 |
+| **D20** | 計測イベントの FK 堅牢性（P2.5で判明） | **存在しない `ctaId` / `lpId` / `contentExternalId` は null 化してから保存する** | 実機テストで、タグの `data-lp` に未登録IDを入れると FK 違反で**バッチ7件全部が落ちた**。計測タグの属性ミス1つで全ファネルデータを失うのは事故。厳密さより堅牢さを優先し、解決できない参照は null にして残りを保存する | P2.5／全 ingest 受口 |
+
 ### 9.1 決定に伴う実装上の注意
 
 | # | 注意 |
