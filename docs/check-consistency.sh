@@ -21,7 +21,7 @@ set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DESIGN="$ROOT/docs/DESIGN.md"
-SCHEMA="$ROOT/prisma/schema.prisma"
+SCHEMA="$ROOT/packages/db/prisma/schema.prisma"
 GLOSSARY="$ROOT/docs/GLOSSARY.md"
 
 FAILED=0
@@ -58,29 +58,40 @@ echo
 # ───────────────────────────────────────────────────────────────────────────
 echo "[1] model 数の一致（schema.prisma ⇔ 設計書）"
 
+# schema.prisma のうち「AUTH ... ここから/ここまで」に挟まれた区間は
+# Auth.js 用のインフラモデル（設計書スコープ外）なので model 数から除外する
+schema_design_models() {
+  awk '
+    /AUTH .*ここから/ { skip = 1 }
+    /AUTH .*ここまで/ { skip = 0; next }
+    !skip && /^model / { sub(/^model +/, ""); sub(/ .*$/, ""); print }
+  ' "$SCHEMA"
+}
+
 DESIGN_MODELS=$(grep -c '^model ' "$DESIGN" || true)
-SCHEMA_MODELS=$(grep -c '^model ' "$SCHEMA" || true)
+SCHEMA_MODELS=$(schema_design_models | grep -c . || true)
+SCHEMA_AUTH_MODELS=$(( $(grep -c '^model ' "$SCHEMA" || true) - SCHEMA_MODELS ))
 
 if [ "$DESIGN_MODELS" -eq "$SCHEMA_MODELS" ]; then
-  pass "model 数が一致: $SCHEMA_MODELS"
+  pass "model 数が一致: $SCHEMA_MODELS（別途 Auth.js 用 $SCHEMA_AUTH_MODELS モデル・設計書スコープ外）"
 else
   fail "model 数が不一致: 設計書=$DESIGN_MODELS / schema.prisma=$SCHEMA_MODELS"
   dim "    設計書にあって schema に無い model:"
   comm -23 \
     <(grep '^model ' "$DESIGN" | sed -E 's/^model +([A-Za-z0-9_]+).*/\1/' | sort -u) \
-    <(grep '^model ' "$SCHEMA" | sed -E 's/^model +([A-Za-z0-9_]+).*/\1/' | sort -u) \
+    <(schema_design_models | sort -u) \
     | sed 's/^/      - /'
   dim "    schema にあって設計書に無い model:"
   comm -13 \
     <(grep '^model ' "$DESIGN" | sed -E 's/^model +([A-Za-z0-9_]+).*/\1/' | sort -u) \
-    <(grep '^model ' "$SCHEMA" | sed -E 's/^model +([A-Za-z0-9_]+).*/\1/' | sort -u) \
+    <(schema_design_models | sort -u) \
     | sed 's/^/      - /'
 fi
 
 # model 名そのものの照合（数が同じでも中身が違う事故を防ぐ）
 DIFF_NAMES=$(diff \
   <(grep '^model ' "$DESIGN" | sed -E 's/^model +([A-Za-z0-9_]+).*/\1/' | sort -u) \
-  <(grep '^model ' "$SCHEMA" | sed -E 's/^model +([A-Za-z0-9_]+).*/\1/' | sort -u) || true)
+  <(schema_design_models | sort -u) || true)
 
 if [ -z "$DIFF_NAMES" ]; then
   pass "model 名が完全一致"

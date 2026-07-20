@@ -10,7 +10,7 @@
 | API／MCPツール接頭辞 | `mms_*` |
 | 環境変数接頭辞 | `MMS_*` |
 | 起案 | 2026-07-20 / 石井政隆 |
-| 現在の状態 | **P0-a 未着手**（設計完了・実装未開始） |
+| 現在の状態 | **P0 完了**（基盤稼働中）／次は **P1**（既存データ移行） |
 
 ---
 
@@ -50,41 +50,98 @@
 ```
 media-management-system/
 ├─ README.md                      このファイル
+├─ docker-compose.yml             db / migrate / web / worker
+├─ .env.example                   環境変数のひな形（.env は絶対にコミットしない）
 ├─ docs/
-│  ├─ DESIGN.md                   ★設計書（2,757行・全ての判断の根拠）
-│  ├─ prompts/
-│  │  └─ P0-a.md                  P0-a の Claude Code 依頼プロンプト
-│  ├─ PHASES.md                   （P0-a で生成）59 Phase の定義・依存・完了条件
-│  ├─ RULES.md                    （P0-a で生成）実装規約
-│  ├─ GLOSSARY.md                 （P0-a で生成）用語と取りうる値
-│  └─ check-consistency.sh        （P0-a で生成）整合の機械検査
-├─ prisma/
-│  └─ schema.prisma               （P0-a で生成）82モデル・唯一の正
-├─ apps/web/                      （P0 以降）Next.js
-├─ services/worker/               （P0 以降）Python worker
-└─ docker-compose.yml             （P0 以降）
+│  ├─ DESIGN.md                   ★設計書（2,713行・全ての判断の根拠）
+│  ├─ PHASES.md                   ★59 Phase の定義・依存・完了条件 ＋ 決定記録(§9)
+│  ├─ RULES.md                    ★実装規約（全Phaseが読む）
+│  ├─ GLOSSARY.md                 ★用語と取りうる値（enum は schema と機械照合）
+│  ├─ check-consistency.sh        整合の機械検査（npm run check）
+│  └─ prompts/P0-a.md             P0-a の依頼プロンプト
+├─ apps/web/                      Next.js 15（App Router + Auth.js v5）
+├─ packages/
+│  ├─ db/                         ★Prisma schema（82モデル）+ migrations + seed
+│  └─ shared/                     共有定数・型（段番号 / 未計測の表示）
+├─ services/worker/               Python 常駐（jobs をポーリング）
+│  └─ legacy/                     既存 .claude/scripts/ の置き場（P1で配置）
+├─ launchd/com.mms.stack.plist    Mac 起動時の自動立ち上げ
+└─ scripts/mms-up.sh              launchd から呼ばれる起動スクリプト
 ```
+
+---
+
+## 起動方法
+
+### 初回セットアップ
+
+```bash
+cp .env.example .env
+# .env を開いて最低限これらを埋める:
+#   MMS_POSTGRES_PASSWORD  … openssl rand -hex 16
+#   MMS_DATABASE_URL       … 上のパスワードを反映
+#   AUTH_SECRET            … openssl rand -base64 32
+#   MMS_OWNER_EMAIL        … 自分のメール（role=owner になる）
+
+npm install
+docker compose up -d          # db → migrate → web / worker の順に立ち上がる
+npm run db:seed               # FreshnessRule 4件 + owner ユーザー
+open http://localhost:3000
+```
+
+> ⚠️ ホストで別の PostgreSQL が 5432 を使っている場合は `.env` の
+> `MMS_POSTGRES_PORT` を 5433 などに変える（コンテナ内は常に 5432）。
+
+### 日常のコマンド
+
+| 目的 | コマンド |
+|---|---|
+| 起動 / 停止 | `npm run up` / `npm run down` |
+| ログ | `npm run logs` |
+| 死活確認 | `curl -s localhost:3000/api/health` |
+| 整合チェック | `npm run check` |
+| 型チェック | `npm run typecheck` |
+| スキーマ変更 | `npm run db:migrate`（★下の注意を必読） |
+| DB を GUI で見る | `npm run db:studio` |
+
+### ログイン
+
+Email マジックリンク方式。`MMS_SMTP_HOST` が**未設定でもログインできる**（リンクが
+web のログに出る）。
+
+```bash
+docker compose logs -f web    # ここにログインリンクが出る
+```
+
+本番運用では `.env` に SMTP を設定すること。
+
+### Mac 起動時の自動立ち上げ（launchd）
+
+```bash
+cp launchd/com.mms.stack.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.mms.stack.plist
+```
+
+> ★これは**Mac に常駐設定を入れる操作**なので、内容を確認してから実行すること。
+> 解除は `launchctl unload ~/Library/LaunchAgents/com.mms.stack.plist`。
+
+### ★スキーマ変更時の注意
+
+`packages/db/prisma/migrations/*_nulls_not_distinct_unique/` は**手書きの
+マイグレーション**で、NULL を含む一意制約を実際に効かせている
+（`NULLS NOT DISTINCT`）。Prisma はこれを表現できないため、
+`prisma migrate dev` がこれを打ち消す SQL を提案することがある。
+
+**必ず `--create-only` で生成された SQL を目視し、
+`DROP INDEX ... _key` が混ざっていたら消してから適用する。**
+→ 詳細は `docs/RULES.md` §20-6
 
 ---
 
 ## 次にやること
 
-### P0-a（1日・Opus）— 実装仕様の抽出
-
-`docs/prompts/P0-a.md` のプロンプトを Claude Code（**Opus**）に貼る。
-
-```bash
-cd ~/システム開発/Next/media-management-system
-claude
-```
-
-**成果物**: `prisma/schema.prisma` / `docs/PHASES.md` / `docs/RULES.md` / `docs/GLOSSARY.md` / `docs/check-consistency.sh`
-
-> ⚠️ **完了報告の「§13 未解決リスト」が空なら疑うこと。** 設計書は追記を重ねて作ったため矛盾が残っている可能性が高い。空＝全文を読んでいない疑い。
-
-### その後
-
-`docs/PHASES.md` に従って P0 → P1 → … と進める。**M-A（15日）で一度止めて実際に使う。**
+`docs/PHASES.md` に従って **P1**（既存データ移行）→ **P2**（CV配管）と進める。
+着手順は「#」ではなく**依存**に従う。**M-A（15.0日）で一度止めて実際に使う。**
 
 ---
 
@@ -105,10 +162,15 @@ claude
 
 ---
 
-## 未決事項（2件）
+## 未決事項
 
-- [ ] プライバシーポリシーの改定を専門家に確認するか（自社利用のみでも利用目的の明示は必要）
-- [ ] **m2 側に「リード元＝メディア」を記録する項目があるか**（無ければ m2 に1項目追加。**P6.10 までに確認**。無いと成約が記事に紐付かず記事別ROIが出ない）
+**なし**（2026-07-20 に全て決定済み。判断の根拠は `docs/PHASES.md` §9 決定記録）。
+
+| かつての論点 | 決定 |
+|---|---|
+| プライバシーポリシーの専門家確認 | **行わない**（ポリシー改定自体は P0.5 で実施） |
+| m2 側の「リード元＝メディア」項目 | **m2 は改修しない。** 紐付けの正は MMS 側の `Lead.m2DealId` |
+| 広告審査に通るか | **事前確認しない。** 小額テストで実地に判明させ、不承認なら P7.5/P7.6 を中止 |
 
 ---
 

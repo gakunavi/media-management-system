@@ -1,0 +1,36 @@
+{
+  "name": "mms",
+  "version": "0.1.0",
+  "private": true,
+  "description": "メディア管理システム（MMS）— メディア／SNS運用の獲得基盤",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "//overrides": "npm audit で検出された脆弱性の解消。nodemailer<=9.0.0 と postcss<8.5.10（next が内部で持つ版）を修正版に引き上げる",
+  "overrides": {
+    "nodemailer": "^9.0.3",
+    "postcss": "^8.5.20"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @mms/web",
+    "build": "npm run build --workspace @mms/web",
+    "start": "npm run start --workspace @mms/web",
+    "typecheck": "npm run typecheck --workspace @mms/web",
+    "db:generate": "npm run generate --workspace @mms/db",
+    "db:migrate": "npm run migrate --workspace @mms/db",
+    "db:deploy": "npm run deploy --workspace @mms/db",
+    "db:studio": "npm run studio --workspace @mms/db",
+    "check": "bash docs/check-consistency.sh",
+    "up": "docker compose up -d",
+    "down": "docker compose down",
+    "logs": "docker compose logs -f",
+    "db:seed": "npm run seed --workspace @mms/db"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3"
+  }
+}

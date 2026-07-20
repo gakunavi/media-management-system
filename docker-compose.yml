@@ -1,0 +1,98 @@
+# MMS 常駐スタック（設計書 §2.1 / §2.2）
+#   db     : PostgreSQL 16
+#   migrate: prisma migrate deploy（1回だけ走って終了）
+#   web    : Next.js 15
+#   worker : Python 常駐（jobs をポーリング）
+#
+# ★ポート公開は必ず 127.0.0.1 に固定する（設計書 §8 / docs/RULES.md §12-1）
+#   外部公開は Cloudflare Tunnel + Access のみ。0.0.0.0 で公開しない。
+
+name: mms
+
+services:
+  db:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${MMS_POSTGRES_USER:-mms}
+      POSTGRES_PASSWORD: ${MMS_POSTGRES_PASSWORD:?MMS_POSTGRES_PASSWORD を .env に設定してください}
+      POSTGRES_DB: ${MMS_POSTGRES_DB:-mms}
+      TZ: Asia/Tokyo
+      # docs/RULES.md §9: 全ての日時は JST に正規化する
+      PGTZ: Asia/Tokyo
+    ports:
+      - "127.0.0.1:${MMS_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MMS_POSTGRES_USER:-mms} -d ${MMS_POSTGRES_DB:-mms}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: migrator
+    environment:
+      MMS_DATABASE_URL: ${MMS_DATABASE_URL}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: runner
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      TZ: Asia/Tokyo
+      MMS_DATABASE_URL: ${MMS_DATABASE_URL}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET を .env に設定してください}
+      AUTH_URL: ${MMS_PUBLIC_URL:-http://localhost:3000}
+      AUTH_TRUST_HOST: "true"
+      MMS_SMTP_HOST: ${MMS_SMTP_HOST:-}
+      MMS_SMTP_PORT: ${MMS_SMTP_PORT:-587}
+      MMS_SMTP_USER: ${MMS_SMTP_USER:-}
+      MMS_SMTP_PASS: ${MMS_SMTP_PASS:-}
+      MMS_SMTP_FROM: ${MMS_SMTP_FROM:-mms@localhost}
+    ports:
+      - "127.0.0.1:${MMS_WEB_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  worker:
+    build:
+      context: .
+      dockerfile: services/worker/Dockerfile
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Tokyo
+      MMS_DATABASE_URL: ${MMS_DATABASE_URL}
+      MMS_WORKER_POLL_SECONDS: ${MMS_WORKER_POLL_SECONDS:-20}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  db-data:

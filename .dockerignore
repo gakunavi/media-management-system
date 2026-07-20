@@ -1,0 +1,18 @@
+# ビルドコンテキストはリポジトリルート。
+# ★ホストの node_modules（darwin バイナリ）を絶対に持ち込まない
+node_modules
+**/node_modules
+**/.next
+
+# シークレット
+.env
+.env.*
+!.env.example
+
+.git
+.github
+backups
+logs
+docs
+*.log
+.DS_Store

@@ -2914,3 +2914,75 @@ model ContentVersion {
   @@unique([contentItemId, versionNo])
   @@index([contentItemId, capturedAt])
 }
+
+// ══════════════ AUTH (Auth.js v5) — ★設計書スコープ外 ここから ══════════════
+//  設計書 §8「認証は Auth.js（Email magic link）。Role（owner / partner / readonly）を
+//  最初から持たせる」を実装するために必要な、Auth.js 標準の4モデル。
+//  ★これらは設計書 §3 のデータモデル（82個）には含まれない。
+//    docs/check-consistency.sh はこのマーカー間を model 数から除外する。
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// §8 権限ロール。将来パートナーに一部を見せるため最初から持たせる
+enum UserRole {
+  owner
+  partner
+  readonly
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  /// §8 Role（owner / partner / readonly）
+  role          UserRole  @default(readonly)
+
+  accounts Account[]
+  sessions Session[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+// ══════════════ AUTH (Auth.js v5) — ★設計書スコープ外 ここまで ══════════════

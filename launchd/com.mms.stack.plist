@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MMS 常駐スタックの自動起動（設計書 §2.1）
+
+  インストール:
+    cp launchd/com.mms.stack.plist ~/Library/LaunchAgents/
+    launchctl load  ~/Library/LaunchAgents/com.mms.stack.plist
+
+  アンインストール:
+    launchctl unload ~/Library/LaunchAgents/com.mms.stack.plist
+    rm ~/Library/LaunchAgents/com.mms.stack.plist
+
+  ★ProgramArguments のパスは実際のリポジトリ位置に合わせて書き換えること。
+  ★KeepAlive は false。compose 側の restart: unless-stopped が
+    コンテナの生存を担う（二重に再起動をかけない）。
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.mms.stack</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/ishiimasataka/システム開発/Next/media-management-system/scripts/mms-up.sh</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/ishiimasataka/システム開発/Next/media-management-system/logs/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/ishiimasataka/システム開発/Next/media-management-system/logs/launchd.err.log</string>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/ishiimasataka/システム開発/Next/media-management-system</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>TZ</key>
+    <string>Asia/Tokyo</string>
+  </dict>
+</dict>
+</plist>
