@@ -88,6 +88,12 @@ services:
       TZ: Asia/Tokyo
       MMS_DATABASE_URL: ${MMS_DATABASE_URL}
       MMS_WORKER_POLL_SECONDS: ${MMS_WORKER_POLL_SECONDS:-20}
+      MMS_WORKER_LEGACY_DIR: /app/legacy
+    volumes:
+      # ★設計書 §6「既存 Python 資産は書き直さない」。
+      #   コピーすると本体と乖離するため、元のディレクトリを **読み取り専用でマウント**する。
+      #   これにより メディア事業部側で更新されたスクリプトが即座に worker に反映される。
+      - ${MMS_LEGACY_SCRIPTS_DIR:-./services/worker/legacy}:/app/legacy:ro
     depends_on:
       db:
         condition: service_healthy

@@ -379,6 +379,8 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 | **U29** | §18 L2732-2736 | 見出しは「改訂理由（**v1 → v5**）」だが、**本文は v3 までしか説明していない**（v4 / v5 の改訂理由が無い） | 冒頭 L19 の改訂履歴には v4・v5 の記述があるが、§18 と内容が接続しない |
 | **U30** | §14.8 L2483-2494 | 監査表の「現設計」列が `Lead` / `FunnelEvent` / `AgencyLead` 等を **❌（欠損）** としているが、**§3（統合版 v4）には全て存在する** | §14 が追記された時点（v3）の記述が残っている。現時点では ✅ が正のはずだが、明示的な訂正が無い |
 
+| **U40** | §5.2 L1649-1660 vs §7.5.2 L1817-1826 | **Action の type が二系統ある** | §5.2 は打ち手タイプ（`title_meta_rewrite` / `cta_move` …）を定義し、§7.5.2 は鮮度トリガーで起票される Action として **別の名前**（`periodic_review` / `triggered_by_rank` / `triggered_by_law` / `triggered_by_competitor` / `kw_refetch` / `geo_reinforce`）を挙げる。両者の関係（同一 enum か、別の軸か）が不明。★**P1 の移行で実害が出た**: 旧 `intervention_type='rewrite'`（本文リライト）に対応する値が §5.2 に無く、`title_meta_rewrite` に写像せざるを得なかった（原文は `Intervention.type` と `Action.rationale` に保存して失っていない）。**P4 の立案ロジック実装前に決める必要がある** |
+
 ### 8.5 外部依存・運用上の未確定
 
 | ID | 該当行 | 内容 | なぜ判断できないか |
@@ -431,6 +433,10 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 | **D13** | m2 側の「リード元＝メディア」項目（U31） | **m2 を改修しない。** 紐付けの正を MMS 側に置き、`Lead.m2DealId` で突合する | 2026-07-20 石井確認により m2 に該当項目は**存在しない**。m2 は VPC内・外部非公開で改修コストが高い一方、**§3.8.4 の目的（記事別・クラスタ別ROI）は MMS 側に DealId があれば達成できる**。m2 のUIで流入元が見えないことは、この目的に影響しない<br>**実装**: ①第一候補＝リード連携時に m2 API が返す DealId を `m2DealId` に保存 ②不可なら `/leads` 画面で手動紐付け（月数件のため現実的） | P6.10 |
 | **D14** | 専門家確認・広告審査の事前確認（U32 / U34） | **どちらも行わない**（2026-07-20 石井確定）。P0.5 の完了条件から「専門家確認」を削除。広告審査は**§3.4.5 の小額テスト（Step 1）で実地に判明させる** | 石井さんの明示的な判断。★ただし**リスクは消えていない**: 広告が不承認なら P7.5（1.5日）・P7.6（0.5日）は空振りになるため、**小額テストの結果を見てから着手する**（受容したリスク） | P0.5 / P7.5 / P7.6 |
 
+| **D15** | `ContentItem` の `articleType` / `freshnessTier` / `funnelStage`（P1で判明） | **3つとも Nullable にした** | 既存157記事の移行時点でこの3つは**確定できない**（`freshnessTier` は §7.5.4 が「移行時に自動判定」＝P3.5、`funnelStage`/`budgetTier` は P4.9 の一括タグ付けで確定）。必須のままだと **P1 の移行が1行も入らない**。C-7（作成時点で論理的に未確定な項目は Nullable）と同じ判断 | P1／P3.5／P4.9 |
+| **D16** | 計測データはあるが記事レコードが無い URL（P1で判明） | **`ContentItem` として保持する**（`type=article_unlinked` / `type=site_page`） | media.db の `articles`(157) に無いのに実測がある URL が **84件**あった（改題・統合・削除された記事16件＋週次のみ4件＋サイトページ64件）。捨てると §3.2.2「過去3ヶ月を失わない」に反する。`type` で区別し `note` に由来を残した | P1／P4.3（クラスタ割当時に要仕分け） |
+| **D17** | 既存 Python 資産の配置（§2.2 は「legacy/ に配置」） | **コピーせず、元ディレクトリを読み取り専用マウントする** | コピーすると本体と乖離し、「更新したのに worker は古いまま」という事故が起きる。`:ro` マウントなら**乖離しない**うえ、worker から書き換えられないので §6「書き直さない」を**構造的に保証**できる | P1 以降の全ジョブ |
+
 ### 9.1 決定に伴う実装上の注意
 
 | # | 注意 |
@@ -439,3 +445,5 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 | **N2** | D2 により `/market`（P6.8）は **KeywordCluster 単位**で描画する。`/clusters`（P4.3）のツリーに出す市場規模・シェアは `ClusterMetric` から取る |
 | **N3** | D6 により、記事のメインKWを変更する処理は **必ず `KeywordAssignment` を更新し、その後に `ContentItem.mainKeywordId` を同期**する。逆順・片側だけの更新を禁じる |
 | **N4** | D7 により `package.json` は `prisma@^6` / `@prisma/client@^6` で固定する |
+| **N5** | D17 により、legacy スクリプトを動かすジョブを有効化する前に**資格情報を worker に渡す**こと。未設定のまま有効化すると失敗した `JobRun` が段7を赤で埋める（→ `services/worker/legacy/README.md`） |
+| **N6** | D16 の `type=article_unlinked` / `type=site_page` は **P4.3 のクラスタ自動割当の対象外**にすること。記事ではないものをクラスタに入れると `linkHealthScore` が歪む |

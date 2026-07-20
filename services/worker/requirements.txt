@@ -1,2 +1,8 @@
 psycopg[binary]==3.2.3
 croniter==6.0.0
+
+# ── 既存 .claude/scripts/ が import する外部ライブラリ（§6: 書き直さず呼ぶ）──
+#   62本のスクリプトから収集した import のうち、標準ライブラリ以外はこの3つだけ
+requests==2.32.3
+PyYAML==6.0.2
+python-dotenv==1.0.1

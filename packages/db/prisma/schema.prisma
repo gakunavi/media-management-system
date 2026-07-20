@@ -676,8 +676,8 @@ model ContentItem {
   status     String
 
   // ── 分類（旧Notion 記事パフォーマンス管理DB から移行・§7.1）──
-  articleType   ArticleType
-  isPillar      Boolean     @default(false)
+  articleType   ArticleType? /// ★P1 移行時点では未確定のため Nullable（C-7）。P3.5/P4.9 で確定させる
+  isPillar      Boolean      @default(false)
   category      String?
   /// ★KeywordAssignment(role=main) と二重の正になりうる（§13 記録済）
   mainKeywordId String?
@@ -698,10 +698,10 @@ model ContentItem {
   dataUpdatedAt  DateTime?
   /// 最終チェック日（記事に "last reviewed: YYYY-MM" として表示）
   lastReviewedAt DateTime?
-  freshnessTier  FreshnessTier
+  freshnessTier  FreshnessTier? /// ★P1 移行時点では未確定のため Nullable（C-7）。P3.5/P4.9 で確定させる
   /// ★lastReviewedAt + FreshnessRule.intervalDays（自動算出）
   nextReviewDue  DateTime?
-  reviewState    ReviewState   @default(fresh)
+  reviewState    ReviewState    @default(fresh)
 
   // ── 品質ゲートの判定結果（旧Notion）──
   seoCheckPassed    Boolean @default(false)
@@ -719,8 +719,8 @@ model ContentItem {
   aioNote          String?
 
   // ── 買い手軸（2026-07-20 実データで訂正済み・§14.1）──
-  budgetTier    BudgetTier  @default(unknown)
-  funnelStage   FunnelStage
+  budgetTier    BudgetTier   @default(unknown)
+  funnelStage   FunnelStage? /// ★P1 移行時点では未確定のため Nullable（C-7）。P3.5/P4.9 で確定させる
   /// ML | IoTビーコン | 外貨両替機 | EV充電 | GPU …
   productFit    String[]
   /// 参考: corporate | sole_proprietor | tax_accountant | agency_candidate

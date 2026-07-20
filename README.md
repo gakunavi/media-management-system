@@ -10,7 +10,7 @@
 | API／MCPツール接頭辞 | `mms_*` |
 | 環境変数接頭辞 | `MMS_*` |
 | 起案 | 2026-07-20 / 石井政隆 |
-| 現在の状態 | **P0 完了**（基盤稼働中）／次は **P1**（既存データ移行） |
+| 現在の状態 | **P1 完了**（基盤稼働・既存データ移行済み）／次は **P2**（CV配管） |
 
 ---
 
@@ -103,6 +103,7 @@ open http://localhost:3000
 | 型チェック | `npm run typecheck` |
 | スキーマ変更 | `npm run db:migrate`（★下の注意を必読） |
 | DB を GUI で見る | `npm run db:studio` |
+| 既存データの再移行 | `npm run migrate:legacy`（冪等） |
 
 ### ログイン
 
@@ -140,7 +141,7 @@ launchctl load ~/Library/LaunchAgents/com.mms.stack.plist
 
 ## 次にやること
 
-`docs/PHASES.md` に従って **P1**（既存データ移行）→ **P2**（CV配管）と進める。
+`docs/PHASES.md` に従って **P2**（CV配管）→ **P2.5**（ファネル7段）と進める。
 着手順は「#」ではなく**依存**に従う。**M-A（15.0日）で一度止めて実際に使う。**
 
 ---
