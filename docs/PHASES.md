@@ -95,7 +95,7 @@
 
 | # | Phase | 内容 | 依存 | 見積 | 担当モデル | 完了条件 | 使用モデル |
 |---|---|---|---|---:|---|---|---|
-| 30 | **P0.5** | 個人情報・同意対応（ポリシー改定案・同意チェックボックス・`ConsentRecord`）＋専門家確認 | — | 0.5 | ConsentRecord / DataRetentionPolicy | プライバシーポリシー改定案があり専門家確認が済んでいる。保存期間の自動削除ジョブが動く。★**第三者提供の同意チェックボックスは実装しない**（§16.2 石井確定） | — |
+| 30 | **P0.5** | 個人情報対応（ポリシー改定・`ConsentRecord` / `DataRetentionPolicy`）※**専門家確認は不要**（2026-07-20 石井確定・§9-D14） | — | 0.5 | ConsentRecord / DataRetentionPolicy | プライバシーポリシーに取得情報・利用目的・保存期間・開示請求窓口が明記されている。保存期間の自動削除ジョブが動く。★**第三者提供の同意チェックボックスは実装しない**（§16.2 石井確定）／★**専門家確認は行わない** | — |
 | 31 | **P0.7** | バックアップ3箇所・`RECOVERY.md`・段7表示 | P0 | 0.5 | —（運用のみ） | ローカル30世代＋Time Machine＋Google Drive（週次）が動く。`RECOVERY.md` がある。段7に最終バックアップ日時と**最終リストア検証日**が出る | **Haiku** |
 | 32 | **P1.7** | タイムゾーン正規化ルール ＋ `AuditLog` | P1 | 0.5 | AuditLog（全model の日時項目に規約適用） | 全ての日時が JST で保存される。GSC の PT→JST 変換ルールが実装され明文化されている | Sonnet |
 | 33 | **P2.4** | **計測検証基盤**（合成モニタリング・突合・ボット除外・外れ値検知） | P2.5 | 1 | MonitorRun / DataQualityCheck / FunnelEvent | **日次で Playwright が巡回し期待する `FunnelEvent` の記録を検証**。不一致で段7が赤になる。GSC/GA4 との乖離±15%超で警告 | **Opus** |
@@ -131,7 +131,7 @@
 | 48 | **P3.8** | `RegulatoryEvent`（税制改正カレンダー）＋60日前の自動起票 | P1 | 0.5 | RegulatoryEvent / Action / ContentItem | 期日の60日前に「記事準備」Action が自動起票される。適用期限が近い制度の記事が一括で `overdue` になる | — |
 | 49 | **P4.13** | `SeasonalityIndex`（季節調整）＋段1・段4への併記 | P4.10 | 0.5 | SeasonalityIndex | 段1・段4の前月比・前週比に**季節調整値が併記される**（「-7.8%だが季節調整後は+2.1%」） | **Opus** |
 | 50 | **P5.9** | `SnsAccountHealth` / `PostSchedule` / `CrossPromotion` | P5 | 1 | SnsAccountHealth / PostSchedule / CrossPromotion | **`viewsPerFollower` の急落が段1で検知される**。トークン残日数が段7に出る。記事↔投稿の相互送客が計測される | Sonnet |
-| 51 | **P6.10** | **m2連携**（`Lead` ⇄ m2 Deal・成約結果の還流） | P2.6 | 1 | Lead | `Lead` が m2 へ連携され、成約額・成約日が MMS に還流して記事別・クラスタ別ROIが出る。★**商談プロセスは MMS に作らない**（二重管理を避ける） | Sonnet |
+| 51 | **P6.10** | **m2連携**（`Lead` ⇄ m2 Deal・成約結果の還流）※**m2 は無改修**（§9-D13） | P2.6 | 1 | Lead | `Lead.m2DealId` で突合し、成約額・成約日が MMS に還流して記事別・クラスタ別ROIが出る。★**商談プロセスは MMS に作らない**／★**m2 側にスキーマ追加をしない**（紐付けの正は MMS 側） | Sonnet |
 
 ### 【S11 実運用・品質・信頼性 — §3.9】
 
@@ -179,7 +179,7 @@
 > **★M-A に P2.4（計測検証）を必ず含める。** 計測が正しいと保証されない状態で以降を積み上げると、全部が砂上の楼閣になる。
 > **★推奨: M-A で一度止めて実際に使う。** 計測が始まればデータが溜まり始め、以降の設計判断が実測ベースになる。
 >
-> ⚠️ M-A の所要日数は設計書内で **4通り**に記載が割れている（§13-U04）。
+> ★M-A の所要日数は **15.0日 に統一済み**（§9-D10。設計書 §1.1・§9.3 も修正済み）。
 
 ---
 
@@ -200,7 +200,9 @@
 > 獲得3ゴール（直客・代理店・LINE）が伸びない原因は「何が効いているか見えないこと」であり、
 > 計測とPDCAの自動化により、**同じ稼働で獲得件数が増える**。
 
-### 成功指標（M-A 到達＝11.1日 後の30日間で判定）
+### 成功指標（M-A 到達＝**15.0日** 後の30日間で判定）
+
+> ★日数は **§9.3 の 15.0日 が正**（§9-D10 の決定。設計書側も修正済み）
 
 | # | 指標 | 目標 | 測り方 |
 |---|---|---|---|
@@ -343,12 +345,12 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 
 | ID | 該当行 | 内容 | なぜ判断できないか |
 |---|---|---|---|
-| **U11** | §3 全体 | **値の列挙（`// a \| b \| c`）が無い項目が26箇所ある** ため String のままにした | 該当: `Business.status` / `Channel.type`(※`…`で打切) / `MetricSnapshot.granularity` / `MeasurementCoverage.method` / `ContentItem.type` / `.status` / `.category` / `.eyecatchType` / `.eyecatchColor` / `.targetLabel` / `.complianceVerdict` / `.factCheckVerdict` / `Lead.companyType` / `.urgency` / `Partner.status` / `LineFriend.status` / `LineMessage.kind` / `Keyword.intent` / `.priority` / `.status` / `Idea.state` / `Intervention.type` / `AdCampaign.objective` / `.status` / `AdCreative.status` / `Job.kind` / `JobRun.status` / `CrossPromotion.direction` / `DataQualityCheck.kind` / `.verdict` / `AuditLog.actorType`。**推測で enum を作ると後からマイグレーションが必要になる** |
+| **U11** ✅§9-D12 | §3 全体 | **値の列挙が無い項目が26箇所ある** ため String のまま維持。**P1／P1.5 の移行完了後に実データを集計して enum 化する**（§9-D12） | 該当: `Business.status` / `Channel.type`(※`…`で打切) / `MetricSnapshot.granularity` / `MeasurementCoverage.method` / `ContentItem.type` / `.status` / `.category` / `.eyecatchType` / `.eyecatchColor` / `.targetLabel` / `.complianceVerdict` / `.factCheckVerdict` / `Lead.companyType` / `.urgency` / `Partner.status` / `LineFriend.status` / `LineMessage.kind` / `Keyword.intent` / `.priority` / `.status` / `Idea.state` / `Intervention.type` / `AdCampaign.objective` / `.status` / `AdCreative.status` / `Job.kind` / `JobRun.status` / `CrossPromotion.direction` / `DataQualityCheck.kind` / `.verdict` / `AuditLog.actorType`。**推測で enum を作ると後からマイグレーションが必要になる** |
 | **U12** | §3 L207・L346・L379 ほか | **`month` の型が不明**（"YYYY-MM" 文字列か DateTime か） | `KeywordVolume` / `CompetitorMetric` / `MarketShare` / `Opportunity` / `UnitEconomics` は `month` としか書かれていない。一方 §3.8.1 `SeasonalityIndex.month` だけは `// 1-12` と明記され Int。暫定で前者を String("YYYY-MM")、後者を Int とした |
 | **U13** | §3 L184-215 ほか | **Nullable の判断が付かない項目がある** | 「設計書で `?` が付いているものは Nullable」という指示だが、`ContentItem.url` / `.publishedAt` / `.infoBaseDate` / `.dataUpdatedAt` / `.lastReviewedAt` / `.nextReviewDue` は `?` が無い。しかし**下書き段階では論理的に値が存在しない**ため、必須にすると行を作れない。**Nullable にした（C-7）**。同様に `.category` / `.eyecatchType` / `.eyecatchColor` / `.targetLabel` / `.complianceVerdict` / `.factCheckVerdict` / `.validatorRun` / `.note` / `Lead.companyType` / `.urgency` / `Cta.variant` など |
 | **U14** | §3 L1293-1300 `LandingPage.offer` | 値が **`無料相談 \| 資料DL \| 診断` と日本語** | Prisma の enum 値は識別子（英数字・アンダースコア）しか使えないため enum 化できない。String のままにした。英語識別子への読み替えが必要 |
 | **U15** | §3 L374-377 `CtrCurve.segment` / §3.7.1 L1097 `SplitTest.changeType` / §3.9.5 L1405 `BrandMention.source` / §3 L158 `Channel.type` | **列挙が `…` で打ち切られている** | 「他に何があるか」が読み取れないため enum 化できず String のままにした |
-| **U16** | 全model | **作成・更新時刻（createdAt / updatedAt）を持つモデルがほぼ無い** | 設計書に記載が無いため追加していない。しかし §16.2 の `AuditLog` や障害調査では通常必要になる。**全モデルに一律で入れるか否かの方針決定が要る** |
+| **U16** ✅§9-D11 | 全model | 作成・更新時刻を持つモデルがほぼ無かった | **解決: 全82モデルに `createdAt @default(now())` / `updatedAt @updatedAt` を一律付与した**（§9-D11） |
 
 ### 8.3 数値・Phase の食い違い
 
@@ -356,7 +358,7 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 |---|---|---|---|
 | **U02** | §9.4 L1964-2012 | **§9.4 のモデル振り分けに載っていない Phase が9つある** | P0-a（※§9.1 の行内に「Opus」と記載あり）／P2.7 / P3.5 / P3.8 / P4.10 / P6 / P7.6 / P7.7 / P9 / P0.5。本ファイルでは `—` と記載した |
 | **U03** | §9.4.1 L1970 vs §9.4.4 L2009 | **P0 が Opus と Fable 5 の両方に記載されている** | どちらで実施するか判断できない。加えて §9.4.1 は P0 を「Prisma 初期スキーマ確定」と説明するが、**スキーマ確定は P0-a の成果物**であり Phase の割当がずれている |
-| **U04** | §1.1 L52 / §9.3 L1949 / §9.3 L1957 / §16.7 L2714 | **M-A の所要日数が4通り**: 「11.1日」「15.0日」「7日」「8日に修正」 | どれが最新か判断できない。§1.1 の成功指標は「M-A 到達＝11.1日 後の30日間で判定」と 11.1日 を前提にしているため、判定タイミングにも影響する |
+| **U04** ✅§9-D10 | §1.1 / §9.3 | **M-A の所要日数が4通り**だった: 「11.1日」「15.0日」「7日」「8日に修正」 | **解決: §9.3 の 15.0日 を正に統一**（設計書 §1.1・§9.3 も修正済み。成功指標の判定は「M-A 到達＝15.0日 後の30日間」） |
 | **U17** | §3.3.8 / §3.4.9 / §3.6.9 / §3.7.4 / §3.8.7 / §3.9.7 / §3.10.7 / §16.7 | **全体見積の累計が節ごとに食い違う**: 34.5日（§16.7）→ 41.5日（§3.6.9）→ 43.5日（§3.7.4）→ 47.3日（§3.8.7）→ 49.9日（§3.9.7）→ 51.5日（§3.10.7）→ **52.5日（§9.1・正）** | 各節が追記時点の累計を書いており、統合後の §9.1 と一致しない。**§9.1 の 52.5日 を正として扱ったが、§16.7 の「全体 約34.5日」は明らかに古い** |
 | **U18** | §9.4.5 L2036 | 「`docs/PHASES.md` … **58 Phase** の定義」とあるが、**§9.1 の表は 59 行**ある | 1つ多い／少ないのどちらが正か判断できない。本ファイルは §9.1 の 59 行をそのまま採用した |
 | **U19** | §17 L2722 | 「P0〜P4（**コア7.5日**）で一度止め」とあるが、§9.1 で P0-a〜P4 を合計すると **13.5日** | 「コア」の範囲定義が不明。§9.3 の M-A（15.0日）とも一致しない |
@@ -381,10 +383,10 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 
 | ID | 該当行 | 内容 | なぜ判断できないか |
 |---|---|---|---|
-| **U31** | §3.8.4 L1261 / §19.0 L2749 | **m2 側に「リード元＝メディア」を記録する項目があるか未確認** | 無ければ m2 に1項目追加が必要。P6.10 までに石井さんの確認が要る（設計書自身が「石井さん確認事項」と明記） |
-| **U32** | §19.0 L2748 | **プライバシーポリシーの改定を専門家に確認するか未決** | 設計書が「私は弁護士ではない」と明記しており、判断は石井さん |
+| **U31** ✅§9-D13 | §3.8.4 / §19.0 | m2 側に「リード元＝メディア」を記録する項目が**存在しない**（2026-07-20 石井確認） | **解決: m2 を改修しない。** 紐付けの正を MMS 側（`Lead.m2DealId`）に置く（§9-D13） |
+| **U32** ✅§9-D14 | §19.0 | プライバシーポリシー改定の専門家確認 | **解決: 行わない**（2026-07-20 石井確定）。ポリシー本文の改定自体は P0.5 で実施する |
 | **U33** | §19.1 L2753-2756 | **構成の最終承認・スコープ・経営戦略室 Markdown 資産の扱いが未チェック** | `[ ]` のまま。特に「Markdown資産をDBへ移すか」は `Decision` / `Learning` モデルの使い方に直結する |
-| **U34** | §3.4.6 L766-771 | **Google/Yahoo 広告のポリシー審査に通るか未確認** | 節税商材が「金融サービス」と判定されると審査が厳しい。**不承認が続くと広告チャネル自体が使えない**（P7.5 / P7.6 が空振りになる） |
+| **U34** ✅§9-D14 | §3.4.6 | Google/Yahoo 広告のポリシー審査に通るか | **解決: 事前確認は行わない**（2026-07-20 石井確定）。§3.4.5 の**小額テスト（Step 1）で実地に判明する**ため、そこまで判断を遅らせる。★不承認なら P7.5 / P7.6 は着手前に中止する（受容したリスク） |
 | **U35** | §2.1 L85 | **Prisma のバージョン指定が無い** | P0-a で検証したところ **Prisma 7 は `datasource` ブロックの `url` を廃止**しており（`prisma.config.ts` へ移動）、schema の書き方が変わる。本 schema は **Prisma 6 系の構文で記述し `prisma validate` に pass することを確認**した。P0 で採用バージョンを確定する必要がある |
 | **U36** | §16.1-① L2604 | 合成モニタリングは Playwright を使うとあるが、**§2.1 のスタック表に Playwright が無い** | worker（Python）側か web（Node）側かが不明 |
 
@@ -422,6 +424,12 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 | **D7** | Prisma のバージョン（U35） | **Prisma 6 系に固定する** | Prisma 7 は `datasource` ブロックの `url` を廃止し `prisma.config.ts` へ移した。P0 は Docker Compose + Next.js 15 + Auth.js + launchd を同時に立ち上げる工程であり、**そこに ORM の構成変更を重ねるのはリスクが高い**。本 schema は Prisma 6 で `prisma validate` に pass 済み。7 系への移行は基盤が安定してから単独で行う | P0 |
 | **D8** | 設計書の段6/段7 取り違え（U22） | **設計書 §17 の2行を段6→段7に修正した** | §4.1（段6=施策の生死／段7=ジョブ健全性）が正であることは文書冒頭 L24 が宣言している。§17 側が誤り | — |
 | **D9** | §9 以外のロードマップ表6箇所（U21/U17） | **§9 へのポインタに置換した**（§3.3.8／§3.4.9 が既に採用している書式に統一）。**Phase は1つも失われていない**（全59件が §9.1 に存在することを確認済み） | 「ロードマップは §9 のみ」という文書冒頭 L23 の宣言に合わせた。各節の「全体 約N日」は追記時点の古い累計で、**§9.1 の 52.5日 と矛盾していた**ため削除 | — |
+
+| **D10** | M-A の所要日数（U04） | **15.0日 に統一。** 設計書 §1.1 の「11.1日」と §9.3 注記の「7日」を 15.0日 に修正 | §9.3 のマイルストーン表は §9.1 の Phase 見積から積み上げた値であり、**唯一 §9.1 と整合する**。他の3つは追記時点の古い値。成功指標の判定は「M-A 到達＝**15.0日** 後の30日間」になる | §1.1 の判定タイミング |
+| **D11** | createdAt / updatedAt（U16） | **全82モデルに `createdAt DateTime @default(now())` / `updatedAt DateTime @updatedAt` を一律付与** | ① §16.2 の `AuditLog` だけでは「いつ作られた行か」を追えない ② 移行（P1／P1.5）で入った行と運用中に増えた行を区別できないと突合ができない ③ **後入れは全82テーブルの ALTER になり最も高くつく**。行あたり16バイト増は §3.2.2 の規模（年36万行）では無視できる | 全Phase（P0 の初回マイグレーションで入る） |
+| **D12** | 値の列挙が無い26項目（U11） | **String のまま維持し、P1／P1.5 の移行完了後に実データを集計して enum 化する** | 旧Notion の select 値（`ContentItem.status` / `.category` / `.eyecatchType` 等）は**移行すれば実値が全て判明する**。いま推測で enum を作ると、移行時に想定外の値が出て必ず作り直しになる。**「実データが答えを持っている」ものを先に決めない** | P1／P1.5 完了時に再検討 |
+| **D13** | m2 側の「リード元＝メディア」項目（U31） | **m2 を改修しない。** 紐付けの正を MMS 側に置き、`Lead.m2DealId` で突合する | 2026-07-20 石井確認により m2 に該当項目は**存在しない**。m2 は VPC内・外部非公開で改修コストが高い一方、**§3.8.4 の目的（記事別・クラスタ別ROI）は MMS 側に DealId があれば達成できる**。m2 のUIで流入元が見えないことは、この目的に影響しない<br>**実装**: ①第一候補＝リード連携時に m2 API が返す DealId を `m2DealId` に保存 ②不可なら `/leads` 画面で手動紐付け（月数件のため現実的） | P6.10 |
+| **D14** | 専門家確認・広告審査の事前確認（U32 / U34） | **どちらも行わない**（2026-07-20 石井確定）。P0.5 の完了条件から「専門家確認」を削除。広告審査は**§3.4.5 の小額テスト（Step 1）で実地に判明させる** | 石井さんの明示的な判断。★ただし**リスクは消えていない**: 広告が不承認なら P7.5（1.5日）・P7.6（0.5日）は空振りになるため、**小額テストの結果を見てから着手する**（受容したリスク） | P0.5 / P7.5 / P7.6 |
 
 ### 9.1 決定に伴う実装上の注意
 

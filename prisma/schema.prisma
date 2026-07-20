@@ -23,7 +23,9 @@
 //   C-6: enum 化するのは設計書に `// a | b | c` と値が列挙されているものだけ。
 //        列挙が無い／`…` で打ち切られている項目は String のまま（推測で補わない）
 //   C-7: 設計書に `?` が無くても、行の作成時点で論理的に未確定な項目は Nullable に
-//        している。該当項目は全て docs/PHASES.md §13 に列挙した
+//        している。該当項目は全て docs/PHASES.md §8 に列挙した
+//   C-8: 全82モデルに `createdAt DateTime @default(now())` / `updatedAt DateTime @updatedAt`
+//        を一律付与している（docs/PHASES.md §9-D11 の決定）。新規モデルにも必ず付ける
 // ═══════════════════════════════════════════════════════════════════════════
 
 generator client {
@@ -534,6 +536,10 @@ model Business {
   adSimulations   AdSimulation[]
   landingPages    LandingPage[]
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([status])
 }
 
@@ -558,6 +564,10 @@ model Channel {
   snsAccountHealth     SnsAccountHealth[]
   postSchedules        PostSchedule[]
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([businessId, type, accountRef])
   @@index([businessId])
   @@index([type])
@@ -577,6 +587,10 @@ model Target {
   parentMetric String?
 
   business Business @relation(fields: [businessId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([businessId, period, metric])
   @@index([businessId, period])
@@ -604,6 +618,11 @@ model MetricSnapshot {
 
   /// ★設計書に明記。ただし channelId が NULL の行は Postgres の NULL 非同値により
   ///   一意制約が効かない（§13 記録済）
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([businessId, channelId, metric, date, granularity])
   @@index([businessId, metric, date])
   @@index([date])
@@ -628,6 +647,10 @@ model MeasurementCoverage {
   note      String?
 
   channel Channel? @relation(fields: [channelId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([metric, startedAt])
   @@index([channelId])
@@ -738,6 +761,10 @@ model ContentItem {
   provenances         GenerationProvenance[]
   versions            ContentVersion[]
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([channelId, externalId])
   @@index([channelId])
   @@index([articleType])
@@ -766,6 +793,10 @@ model ArticleReview {
   contentItem  ContentItem   @relation(fields: [contentItemId], references: [id])
   intervention Intervention? @relation(fields: [interventionId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([contentItemId, reviewedAt])
   @@index([kind])
   @@index([outcome])
@@ -778,6 +809,10 @@ model FreshnessRule {
   freshnessTier FreshnessTier @unique
   intervalDays  Int
   description   String?
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 /// §3 ══3. コンテンツ別の日次メトリクス
@@ -794,6 +829,11 @@ model ContentMetric {
   contentItem ContentItem @relation(fields: [contentItemId], references: [id])
 
   /// ★設計書に明記なし。日次 backfill の冪等性を担保するため追加（§13 記録済）
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([contentItemId, metric, date])
   @@index([contentItemId, metric, date])
   @@index([date])
@@ -811,6 +851,10 @@ model Cta {
 
   contentItem  ContentItem   @relation(fields: [contentItemId], references: [id])
   funnelEvents FunnelEvent[]
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([contentItemId, position])
   @@index([active])
@@ -847,6 +891,10 @@ model VisitorSession {
   funnelEvents FunnelEvent[]
   leads        Lead[]
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([visitorId])
   @@index([firstSeenAt])
   @@index([landingContentId])
@@ -874,6 +922,11 @@ model FunnelEvent {
 
   /// §16.1-④ 冪等キー: (sessionId, step, contentItemId, occurredAt秒)
   /// ★contentItemId が NULL の行では Postgres の NULL 非同値により効かない（§13 記録済）
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([sessionId, step, contentItemId, occurredAt])
   @@index([sessionId, occurredAt])
   @@index([step, occurredAt])
@@ -940,6 +993,10 @@ model Lead {
   convertedFrom  LineFriend[]
   consentRecords ConsentRecord[]
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([businessId, type, occurredAt])
   @@index([status])
   @@index([sourceType])
@@ -966,6 +1023,10 @@ model AgencyLead {
 
   partner Partner? @relation(fields: [partnerId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([stage])
   @@index([receivedAt])
   @@index([sourcePostId])
@@ -987,6 +1048,10 @@ model Partner {
   parentPartner Partner?     @relation("PartnerHierarchy", fields: [parentPartnerId], references: [id])
   childPartners Partner[]    @relation("PartnerHierarchy")
   agencyLeads   AgencyLead[]
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status])
   @@index([parentPartnerId])
@@ -1012,6 +1077,10 @@ model LineFriend {
   sourceContent ContentItem? @relation(fields: [sourceContentId], references: [id])
   convertedLead Lead?        @relation(fields: [convertedLeadId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([addedAt])
   @@index([sourceContentId])
   @@index([status])
@@ -1028,6 +1097,10 @@ model LineMessage {
   opened     Int      @default(0)
   clicked    Int      @default(0)
   blocked    Int      @default(0)
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([sentAt])
   @@index([kind])
@@ -1073,6 +1146,10 @@ model Keyword {
   interventions      Intervention[]
   sourcedLeads       Lead[]
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([businessId, keyword])
   @@index([businessId])
   @@index([budgetTier, funnelStage])
@@ -1099,6 +1176,10 @@ model KeywordResearch {
 
   keyword Keyword @relation(fields: [keywordId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([keywordId, fetchedAt])
   @@index([expiresAt])
 }
@@ -1115,6 +1196,11 @@ model KeywordAssignment {
   contentItem ContentItem @relation(fields: [contentItemId], references: [id])
 
   /// ★設計書に明記。main が1KWにつき1記事しか持てないことでカニバリを検出する
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([keywordId, role])
   @@index([contentItemId])
 }
@@ -1133,6 +1219,11 @@ model KeywordRanking {
   keyword Keyword @relation(fields: [keywordId], references: [id])
 
   /// ★設計書に明記なし。日次 backfill の冪等性を担保するため追加（§13 記録済）
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([keywordId, date])
   @@index([keywordId, date])
   @@index([date])
@@ -1170,6 +1261,10 @@ model TopicCluster {
   ///   MarketShare / SeasonalityIndex は KeywordCluster 側（§13-D2 の決定）
   metrics ClusterMetric[]
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([businessId, slug])
   @@index([businessId])
   @@index([parentId])
@@ -1186,6 +1281,10 @@ model ContentCluster {
 
   contentItem ContentItem  @relation(fields: [contentItemId], references: [id])
   cluster     TopicCluster @relation(fields: [clusterId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([contentItemId, clusterId])
   @@index([clusterId, role])
@@ -1204,6 +1303,10 @@ model InternalLink {
 
   srcContent ContentItem @relation("LinkSource", fields: [srcContentId], references: [id])
   dstContent ContentItem @relation("LinkTarget", fields: [dstContentId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([srcContentId, dstContentId, anchorText])
   @@index([srcContentId])
@@ -1250,6 +1353,11 @@ model ClusterMetric {
   cluster TopicCluster @relation(fields: [clusterId], references: [id])
 
   /// ★設計書に明記なし。日次バッチの冪等性を担保するため追加（§13 記録済）
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([clusterId, date, granularity])
   @@index([clusterId, date])
   @@index([date])
@@ -1268,6 +1376,10 @@ model KeywordVolume {
   source    VolumeSource
 
   keyword Keyword @relation(fields: [keywordId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([keywordId, month, source])
   @@index([month])
@@ -1288,6 +1400,10 @@ model KeywordCluster {
   ///   marketVolume = Σ KeywordVolume（所属 Keyword 経由）で算出できるのはこちらだけ
   marketShares       MarketShare[]
   seasonalityIndexes SeasonalityIndex[]
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([businessId, name])
   @@index([businessId])
@@ -1310,6 +1426,10 @@ model SerpSnapshot {
 
   keyword Keyword @relation(fields: [keywordId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([keywordId, date, position])
   @@index([date, domain])
   @@index([domain])
@@ -1325,6 +1445,10 @@ model Competitor {
 
   metrics           CompetitorMetric[]
   domainAuthorities DomainAuthority[]
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([isTracked])
 }
@@ -1352,6 +1476,10 @@ model CompetitorMetric {
 
   competitor Competitor @relation(fields: [competitorId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([competitorId, month])
   @@index([month])
 }
@@ -1365,6 +1493,10 @@ model CtrCurve {
   calculatedAt DateTime
   /// all | comparison | product_deep …（設計書の列挙が `…` で打ち切られているため String）
   segment      String
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([position, segment, calculatedAt])
   @@index([segment, position])
@@ -1399,6 +1531,10 @@ model MarketShare {
   ///   根拠: marketVolume = Σ KeywordVolume は Keyword を束ねる KeywordCluster でしか算出できず、
   ///   TopicCluster 側の市場・シェアは ClusterMetric が既に持っている（二重定義を避ける）
   cluster KeywordCluster @relation(fields: [clusterId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([clusterId, month])
   @@index([month])
@@ -1436,6 +1572,10 @@ model Opportunity {
 
   keyword Keyword @relation(fields: [keywordId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([keywordId, month])
   @@index([month, priorityScore])
 }
@@ -1454,6 +1594,10 @@ model AdAccount {
 
   business  Business     @relation(fields: [businessId], references: [id])
   campaigns AdCampaign[]
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([platform, externalId])
   @@index([businessId])
@@ -1481,6 +1625,10 @@ model AdCampaign {
   metrics           AdMetricDaily[]
   linkedSimulations AdSimulation[]
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([adAccountId, externalId])
   @@index([status])
   @@index([targetLpId])
@@ -1498,6 +1646,10 @@ model AdGroup {
   campaign  AdCampaign      @relation(fields: [campaignId], references: [id])
   creatives AdCreative[]
   metrics   AdMetricDaily[]
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([campaignId, externalId])
 }
@@ -1517,6 +1669,10 @@ model AdCreative {
 
   adGroup AdGroup         @relation(fields: [adGroupId], references: [id])
   metrics AdMetricDaily[]
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([adGroupId, externalId])
 }
@@ -1546,6 +1702,11 @@ model AdMetricDaily {
 
   /// ★設計書に明記。ただし adGroupId / creativeId が NULL の行では
   ///   Postgres の NULL 非同値により一意制約が効かない（§13 記録済）
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([campaignId, adGroupId, creativeId, date])
   @@index([date])
   @@index([campaignId, date])
@@ -1592,6 +1753,10 @@ model UnitEconomics {
 
   business Business @relation(fields: [businessId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([businessId, productFit, month, acquisitionChannel])
   @@index([month])
 }
@@ -1620,6 +1785,9 @@ model AdSimulation {
   business             Business    @relation(fields: [businessId], references: [id])
   actualLinkedCampaign AdCampaign? @relation(fields: [actualLinkedCampaignId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  updatedAt DateTime @updatedAt
+
   @@index([businessId, createdAt])
 }
 
@@ -1645,6 +1813,10 @@ model Idea {
   business    Business     @relation(fields: [businessId], references: [id])
   keyword     Keyword?     @relation(fields: [keywordId], references: [id])
   contentItem ContentItem? @relation(fields: [contentItemId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([businessId, source])
   @@index([state])
@@ -1680,6 +1852,10 @@ model Experiment {
   actions   Action[]
   learnings Learning[]
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([businessId, state])
   @@index([evaluateAt])
 }
@@ -1708,6 +1884,10 @@ model Action {
   events       ActionEvent[]
   intervention Intervention?
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([businessId, state])
   @@index([type])
   @@index([expiresAt])
@@ -1723,6 +1903,10 @@ model ActionEvent {
   at       DateTime
 
   action Action @relation(fields: [actionId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([actionId, at])
   @@index([event])
@@ -1774,6 +1958,10 @@ model Intervention {
   reviews   ArticleReview[]
   learnings Learning[]
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([evaluateAt, verdict])
   @@index([contentItemId])
   @@index([batchId])
@@ -1793,6 +1981,10 @@ model Learning {
   experiment   Experiment?   @relation(fields: [experimentId], references: [id])
   intervention Intervention? @relation(fields: [interventionId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([businessId, at])
   @@index([interventionId])
 }
@@ -1805,6 +1997,10 @@ model Decision {
   rationale    String
   alternatives String?
   decidedAt    DateTime
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([decidedAt])
 }
@@ -1827,6 +2023,10 @@ model Job {
 
   runs JobRun[]
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([enabled])
 }
 
@@ -1843,6 +2043,10 @@ model JobRun {
   metrics    Json?
 
   job Job @relation(fields: [jobId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([jobId, startedAt])
   @@index([status])
@@ -1875,6 +2079,10 @@ model IndexStatus {
 
   contentItem ContentItem @relation(fields: [contentItemId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([contentItemId, checkedAt])
   @@index([coverageState])
 }
@@ -1899,6 +2107,10 @@ model LeadTouchpoint {
   lead        Lead        @relation(fields: [leadId], references: [id])
   contentItem ContentItem @relation(fields: [contentItemId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([leadId, sequenceNo])
   @@index([contentItemId, role])
 }
@@ -1922,6 +2134,10 @@ model Backlink {
 
   targetContent ContentItem? @relation(fields: [targetContentId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([sourceUrl, targetContentId])
   @@index([targetContentId])
   @@index([sourceDomain])
@@ -1944,6 +2160,10 @@ model DomainAuthority {
 
   competitor Competitor? @relation(fields: [competitorId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([domain, date])
   @@index([date])
 }
@@ -1965,6 +2185,10 @@ model PageExperience {
   source PageExperienceSource
 
   contentItem ContentItem @relation(fields: [contentItemId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([contentItemId, date, device, source])
   @@index([date])
@@ -1991,6 +2215,10 @@ model ProductionCost {
 
   contentItem ContentItem @relation(fields: [contentItemId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([contentItemId, kind])
   @@index([producedAt])
 }
@@ -2012,6 +2240,10 @@ model ContentLifecycle {
   contentItem ContentItem  @relation("LifecycleSubject", fields: [contentItemId], references: [id])
   mergeTarget ContentItem? @relation("LifecycleMergeTarget", fields: [mergeTargetId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([contentItemId, decidedAt])
   @@index([action])
 }
@@ -2024,6 +2256,9 @@ model UrlRedirect {
   statusCode Int      @default(301)
   createdAt  DateTime @default(now())
   hits       Int      @default(0)
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  updatedAt DateTime @updatedAt
 
   @@index([toPath])
 }
@@ -2056,6 +2291,10 @@ model SplitTest {
 
   assignments SplitAssignment[]
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([state, endsAt])
 }
 
@@ -2073,6 +2312,10 @@ model SplitAssignment {
 
   splitTest   SplitTest   @relation(fields: [splitTestId], references: [id])
   contentItem ContentItem @relation(fields: [contentItemId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([splitTestId, contentItemId])
   @@index([splitTestId, arm])
@@ -2103,6 +2346,10 @@ model Experimentation {
 
   variants Variant[] @relation("ExperimentationVariants")
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([targetType, targetId])
   @@index([state])
 }
@@ -2121,6 +2368,10 @@ model Variant {
   confidence  Float?
 
   experimentation Experimentation @relation("ExperimentationVariants", fields: [experimentationId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([experimentationId, key])
 }
@@ -2149,6 +2400,10 @@ model SeasonalityIndex {
   cluster KeywordCluster? @relation(fields: [clusterId], references: [id])
   keyword Keyword?        @relation(fields: [keywordId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([clusterId, keywordId, month])
   @@index([month])
 }
@@ -2168,6 +2423,10 @@ model RegulatoryEvent {
   status             RegulatoryEventStatus @default(scheduled)
   /// ★該当記事を事前に紐付け（§7.5.2 triggered_by_law の入力源）
   affectedContentIds String[]
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([scheduledAt, status])
   @@index([eventType])
@@ -2196,6 +2455,10 @@ model SnsAccountHealth {
 
   channel Channel @relation(fields: [channelId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([channelId, date])
   @@index([date])
 }
@@ -2213,6 +2476,10 @@ model PostSchedule {
 
   channel Channel @relation(fields: [channelId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([channelId, hourOfDay, dayOfWeek])
 }
 
@@ -2227,6 +2494,10 @@ model CrossPromotion {
 
   contentItem     ContentItem @relation("PromotionArticle", fields: [contentItemId], references: [id])
   postContentItem ContentItem @relation("PromotionPost", fields: [postContentItemId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([contentItemId, postContentItemId, direction])
 }
@@ -2259,6 +2530,10 @@ model LandingPage {
   funnels     FunnelEvent[]
   adCampaigns AdCampaign[]
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([businessId, slug])
   @@index([status])
   @@index([lpType])
@@ -2275,6 +2550,10 @@ model LpVersion {
   changeNote    String?
 
   landingPage LandingPage @relation("LpVersions", fields: [landingPageId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([landingPageId, versionNo])
 }
@@ -2302,6 +2581,10 @@ model LinkCheck {
 
   contentItem ContentItem @relation(fields: [contentItemId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([contentItemId, url, checkedAt])
   @@index([ok, tier])
   @@index([contentItemId])
@@ -2317,6 +2600,10 @@ model UptimeCheck {
   statusCode Int?
   responseMs Int?
   ok         Boolean
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([target, checkedAt])
   @@index([ok])
@@ -2342,6 +2629,10 @@ model GenerationProvenance {
 
   contentItem ContentItem @relation(fields: [contentItemId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([contentItemId, generatedAt])
   @@index([skillName, skillVersion])
 }
@@ -2363,6 +2654,10 @@ model BrandMention {
 
   handled Boolean @default(false)
   note    String?
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([sentiment, handled])
   @@index([foundAt])
@@ -2395,6 +2690,10 @@ model TelemetryVolume {
   /// 閾値超過
   anomaly Boolean @default(false)
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([date, hour])
   @@index([anomaly])
 }
@@ -2419,6 +2718,10 @@ model PerfGate {
 
   passed        Boolean @default(false)
   blockedReason String?
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([releaseTag, target, phase])
   @@index([measuredAt])
@@ -2446,6 +2749,10 @@ model Incident {
   relatedPhase      String?
   relatedContentIds String[]
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([occurredAt])
   @@index([severity, category])
 }
@@ -2463,6 +2770,10 @@ model PostPattern {
   name       String @unique
   structure  String
   hypothesis String
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2480,6 +2791,10 @@ model MonitorRun {
   actual   Json
   passed   Boolean
   diff     Json?
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([runAt, passed])
   @@index([scenario])
@@ -2502,6 +2817,10 @@ model DataQualityCheck {
   verdict      String
   note         String?
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([checkedAt, kind])
   @@index([verdict])
 }
@@ -2520,6 +2839,10 @@ model ConsentRecord {
 
   lead Lead? @relation(fields: [leadId], references: [id])
 
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([leadId])
   @@index([visitorId])
 }
@@ -2532,6 +2855,10 @@ model DataRetentionPolicy {
   entity        String    @unique
   retentionDays Int
   lastPurgedAt  DateTime?
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 /// §16.2 誰が/AIが いつ 何を変えたか・個人情報に誰がアクセスしたか
@@ -2546,6 +2873,10 @@ model AuditLog {
   before    Json?
   after     Json?
   at        DateTime
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([entity, entityId, at])
   @@index([actorType, at])
@@ -2575,6 +2906,10 @@ model ContentVersion {
 
   beforeInterventions Intervention[] @relation("InterventionBefore")
   afterInterventions  Intervention[] @relation("InterventionAfter")
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([contentItemId, versionNo])
   @@index([contentItemId, capturedAt])

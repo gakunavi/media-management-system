@@ -500,4 +500,8 @@ nextReviewDue = lastReviewedAt + FreshnessRule.intervalDays
 | **20-3** | **「市場（クラスタ）」の正は `KeywordCluster`**（商材／テーマ単位）。`MarketShare` / `SeasonalityIndex` はここに紐づく。**`TopicCluster` 側の市場規模・シェアは `ClusterMetric.marketVolume` / `.clickShare` を使う**（二重定義を作らない） | D2 |
 | **20-4** | **競合ギャップの抽出は `SerpSnapshot.isOurs=false`** を使う。`CompetitorSnapshot` というモデルは存在しない | D1 |
 | **20-5** | **`Intervention` の親は `Action` のみ**（`actionId @unique`）。`Experiment` へは Action 経由で辿る。`experimentId` を足さない | D4 |
+| **20-7** | **全82モデルが `createdAt` / `updatedAt` を持つ。** 新規モデルを追加する際も必ず付ける。`updatedAt` は `@updatedAt` に任せ、**アプリ側で手動設定しない** | D11 |
+| **20-8** | **値の列挙が無い26項目は String のまま。** P1／P1.5 の移行完了後に**実データを集計してから** enum 化する。**移行前に推測で enum を作らない** | D12 |
+| **20-9** | **m2 は改修しない。** `Lead` ⇄ m2 Deal の紐付けの正は **MMS 側の `Lead.m2DealId`**。連携時に m2 API が返す DealId を保存する（不可なら `/leads` で手動紐付け） | D13 |
+| **20-10** | **広告（P7.5 / P7.6）は §3.4.5 の小額テスト（Step 1）の結果を見てから着手する。** 審査の事前確認は行わない方針のため、**不承認が判明した時点で着手を中止する** | D14 |
 | **20-6** | ★**P0 で raw SQL マイグレーションによる部分ユニークインデックスを追加すること。** `MetricSnapshot` の `channelId IS NULL` の行、`AdMetricDaily` の `adGroupId` / `creativeId` が NULL の行は、Postgres の NULL 非同値により通常の `@@unique` が効かない。**これを怠ると §13-④ の冪等キーが機能せず、二重計測を防げない** | N1 |
