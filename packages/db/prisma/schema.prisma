@@ -951,6 +951,18 @@ model Lead {
   firstResponseAt DateTime?
 
   // ── 誰か ──
+  /// ── 個人情報（★§16.2「Lead の個人情報カラムは列単位で暗号化」）──
+  /// ★設計書 §3 の Lead 定義にはこの4列が無いが、§16.2 が暗号化対象として
+  ///   「Lead の個人情報カラム」を明示し、§5.4 が自動返信メールを要求している。
+  ///   列が無いと P2（フォーム → Lead）が成立しないため P2 で補った。→ §9-D18 / §8 U41
+  /// ★保存形式は AES-256-GCM の封筒（`v1:iv:tag:ct`）。**平文では絶対に保存しない**。
+  ///   復号は apps/web/lib/crypto.ts の decryptPii() のみ。
+  ///   AI に渡すときは必ずマスキングする（§16.2 / docs/RULES.md §11-1）
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
+  companyName  String?
+
   /// 値の列挙が設計書に無いため String（§13 記録済）
   companyType     String?
   budgetTier      BudgetTier @default(unknown)

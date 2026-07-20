@@ -29,7 +29,9 @@
     "down": "docker compose down",
     "logs": "docker compose logs -f",
     "db:seed": "npm run seed --workspace @mms/db",
-    "migrate:legacy": "MMS_DATABASE_URL=$(grep '^MMS_DATABASE_URL=' .env | cut -d= -f2- | sed 's|@db:|@localhost:|') .venv/bin/python scripts/migrate-legacy.py"
+    "migrate:legacy": "MMS_DATABASE_URL=$(grep '^MMS_DATABASE_URL=' .env | cut -d= -f2- | sed 's|@db:|@localhost:|') .venv/bin/python scripts/migrate-legacy.py",
+    "measurement": "npm run measurement --workspace @mms/db --",
+    "ingest:test": "bash scripts/ingest-test.sh"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3"

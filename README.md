@@ -10,7 +10,7 @@
 | API／MCPツール接頭辞 | `mms_*` |
 | 環境変数接頭辞 | `MMS_*` |
 | 起案 | 2026-07-20 / 石井政隆 |
-| 現在の状態 | **P1 完了**（基盤稼働・既存データ移行済み）／次は **P2**（CV配管） |
+| 現在の状態 | **P2 完了**（CV配管・問い合わせ受口が稼働）／次は **P2.5**（ファネル7段） |
 
 ---
 
@@ -104,6 +104,8 @@ open http://localhost:3000
 | スキーマ変更 | `npm run db:migrate`（★下の注意を必読） |
 | DB を GUI で見る | `npm run db:studio` |
 | 既存データの再移行 | `npm run migrate:legacy`（冪等） |
+| 計測受口のテスト送信 | `npm run ingest:test -- --dup` |
+| 計測開始/終了の記録 | `npm run measurement -- list` |
 
 ### ログイン
 
@@ -141,7 +143,9 @@ launchctl load ~/Library/LaunchAgents/com.mms.stack.plist
 
 ## 次にやること
 
-`docs/PHASES.md` に従って **P2**（CV配管）→ **P2.5**（ファネル7段）と進める。
+`docs/PHASES.md` に従って **P2.5**（ファネル7段）→ **P2.6**（Lead属性・直客2件の遡及入力）と進める。
+
+WordPress フォームの接続手順は `docs/INTEGRATIONS.md`。
 着手順は「#」ではなく**依存**に従う。**M-A（15.0日）で一度止めて実際に使う。**
 
 ---

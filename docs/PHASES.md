@@ -381,6 +381,8 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 
 | **U40** | §5.2 L1649-1660 vs §7.5.2 L1817-1826 | **Action の type が二系統ある** | §5.2 は打ち手タイプ（`title_meta_rewrite` / `cta_move` …）を定義し、§7.5.2 は鮮度トリガーで起票される Action として **別の名前**（`periodic_review` / `triggered_by_rank` / `triggered_by_law` / `triggered_by_competitor` / `kw_refetch` / `geo_reinforce`）を挙げる。両者の関係（同一 enum か、別の軸か）が不明。★**P1 の移行で実害が出た**: 旧 `intervention_type='rewrite'`（本文リライト）に対応する値が §5.2 に無く、`title_meta_rewrite` に写像せざるを得なかった（原文は `Intervention.type` と `Action.rationale` に保存して失っていない）。**P4 の立案ロジック実装前に決める必要がある** |
 
+| **U41** | §3 model Lead vs §16.2 / §5.4 | **Lead に個人情報の列が1つも無い** | §16.2 は「**Lead の個人情報カラムは列単位で暗号化**」と規定し、§5.4 は「自動返信メール送信」を要求しているのに、§3 の `model Lead` には氏名・メール・電話・会社名を入れる列が無い（`companyType` はあるが連絡先ではない）。★**P2 で実害**: フォーム受信を保存できない。→ §9-D18 で `contactName/Email/Phone/companyName` を追加（AES-256-GCM 暗号化）して解消したが、**設計書 §3 に反映が要る** |
+
 ### 8.5 外部依存・運用上の未確定
 
 | ID | 該当行 | 内容 | なぜ判断できないか |
@@ -436,6 +438,8 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 | **D15** | `ContentItem` の `articleType` / `freshnessTier` / `funnelStage`（P1で判明） | **3つとも Nullable にした** | 既存157記事の移行時点でこの3つは**確定できない**（`freshnessTier` は §7.5.4 が「移行時に自動判定」＝P3.5、`funnelStage`/`budgetTier` は P4.9 の一括タグ付けで確定）。必須のままだと **P1 の移行が1行も入らない**。C-7（作成時点で論理的に未確定な項目は Nullable）と同じ判断 | P1／P3.5／P4.9 |
 | **D16** | 計測データはあるが記事レコードが無い URL（P1で判明） | **`ContentItem` として保持する**（`type=article_unlinked` / `type=site_page`） | media.db の `articles`(157) に無いのに実測がある URL が **84件**あった（改題・統合・削除された記事16件＋週次のみ4件＋サイトページ64件）。捨てると §3.2.2「過去3ヶ月を失わない」に反する。`type` で区別し `note` に由来を残した | P1／P4.3（クラスタ割当時に要仕分け） |
 | **D17** | 既存 Python 資産の配置（§2.2 は「legacy/ に配置」） | **コピーせず、元ディレクトリを読み取り専用マウントする** | コピーすると本体と乖離し、「更新したのに worker は古いまま」という事故が起きる。`:ro` マウントなら**乖離しない**うえ、worker から書き換えられないので §6「書き直さない」を**構造的に保証**できる | P1 以降の全ジョブ |
+
+| **D18** | Lead の個人情報の列（P2で判明・U41） | **`contactName` / `contactEmail` / `contactPhone` / `companyName` を追加し、AES-256-GCM で列単位に暗号化**して保存する | §16.2 が「Lead の個人情報カラムは列単位で暗号化」と明示しており、§5.4 の自動返信にも連絡先が要る。列が無いと P2 のフォーム受信が保存できない。暗号鍵 `MMS_PII_KEY` 未設定時は **fail-closed**（平文保存せず 503 を返す）。復号は `apps/web/lib/crypto.ts` の `decryptPii()` のみ、AI へは必ずマスキング（§11-1） | P2／P2.7（自動返信）／P3（一覧表示） |
 
 ### 9.1 決定に伴う実装上の注意
 

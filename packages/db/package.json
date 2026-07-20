@@ -11,7 +11,8 @@
     "studio": "prisma studio",
     "format": "prisma format",
     "validate": "prisma validate",
-    "seed": "node seed.mjs"
+    "seed": "node seed.mjs",
+    "measurement": "node measurement.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.16.2"
