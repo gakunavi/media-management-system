@@ -12,7 +12,8 @@
     "format": "prisma format",
     "validate": "prisma validate",
     "seed": "node seed.mjs",
-    "measurement": "node measurement.mjs"
+    "measurement": "node measurement.mjs",
+    "seed:leads": "node seed-leads.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.16.2"

@@ -1,19 +1,193 @@
-import { ComingSoon } from "@/components/coming-soon";
+import {
+  getLeads,
+  getLeadStats,
+  firstResponseMinutes,
+  LEAD_TYPE_LABEL,
+  LEAD_STATUS_LABEL,
+  BUDGET_TIER_LABEL,
+} from "@/lib/leads";
+import { LeadForm } from "./lead-form";
 
+// リード一覧（設計書 §4.2 /leads・§14.3）
 export const dynamic = "force-dynamic";
 
-export default function Page() {
+const yen = (n: number) => `¥${n.toLocaleString("ja-JP")}`;
+const jaDate = (d: Date) =>
+  d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric" });
+
+function statusBadge(status: string): string {
+  switch (status) {
+    case "won":
+      return "bg-[var(--ok)]/12 text-[#1a7a2e]";
+    case "lost":
+      return "bg-[var(--bad)]/12 text-[var(--bad)]";
+    case "new":
+      return "bg-[var(--warn)]/15 text-[#9a6a00]";
+    default:
+      return "bg-[var(--accent-weak)] text-[var(--accent)]";
+  }
+}
+
+export default async function LeadsPage() {
+  const [leads, stats] = await Promise.all([getLeads(), getLeadStats()]);
+
   return (
-    <ComingSoon
-      icon="leads"
-      title="リード"
-      phase="P2.6 / P2.7"
-      description="問い合わせ・成約の一覧と初動対応"
-      willDo={[
-        "問い合わせを属性・興味・比較対象・流入経路つきで一覧",
-        "直客2件を遡及入力し「どの記事が買い手を連れてきたか」を特定",
-        "初動自動対応（通知→自動返信→返信ドラフト）と初動速度SLAの監視",
-      ]}
-    />
+    <div className="mx-auto max-w-6xl">
+      <div className="mb-5 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">リード</h1>
+          <p className="mt-0.5 text-[13px] text-[var(--muted)]">
+            問い合わせ・成約の一覧。★最優先は直客（§14.0）
+          </p>
+        </div>
+        <LeadForm />
+      </div>
+
+      {/* サマリー */}
+      <div className="mb-4 grid gap-3 sm:grid-cols-4">
+        <Stat label="直客" value={stats.byType.direct_inquiry ?? 0} accent />
+        <Stat label="代理店" value={stats.byType.agency ?? 0} />
+        <Stat label="LINE" value={stats.byType.line_friend ?? 0} />
+        <Stat
+          label="経路特定率"
+          value={
+            stats.pathIdentifiedRate === null
+              ? "—"
+              : `${Math.round(stats.pathIdentifiedRate * 100)}%`
+          }
+          hint="§1.1 成功指標①（目標100%）"
+        />
+      </div>
+
+      {/* 成約サマリー */}
+      {stats.won > 0 && (
+        <div className="mb-4 rounded-lg border border-[var(--ok)]/30 bg-[var(--ok)]/[0.06] px-4 py-2.5 text-[13px]">
+          <span className="font-medium text-[#1a7a2e]">成約 {stats.won}件</span>
+          <span className="text-[var(--muted)]"> ・ {yen(stats.wonAmount)}（税抜）</span>
+        </div>
+      )}
+
+      {/* テーブル */}
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+        {leads.length === 0 ? (
+          <div className="p-10 text-center text-[13px] text-[var(--faint)]">
+            まだリードがありません。右上「＋ リードを手動登録」または WPフォーム接続で入ります。
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-[var(--border)] bg-[var(--panel-2)] text-left text-[12px] text-[var(--muted)]">
+                  <Th>発生日</Th>
+                  <Th>種別</Th>
+                  <Th>状態</Th>
+                  <Th>予算</Th>
+                  <Th>興味商材</Th>
+                  <Th>比較商材</Th>
+                  <Th>流入記事</Th>
+                  <Th>初動</Th>
+                  <Th>成約額</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {leads.map((l) => {
+                  const fr = firstResponseMinutes(l);
+                  return (
+                    <tr
+                      key={l.id}
+                      className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--panel-2)]"
+                    >
+                      <Td>{jaDate(l.occurredAt)}</Td>
+                      <Td>
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                            l.type === "direct_inquiry"
+                              ? "bg-[var(--accent-weak)] text-[var(--accent)]"
+                              : "bg-[var(--panel-2)] text-[var(--muted)]"
+                          }`}
+                        >
+                          {LEAD_TYPE_LABEL[l.type] ?? l.type}
+                        </span>
+                      </Td>
+                      <Td>
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${statusBadge(l.status)}`}
+                        >
+                          {LEAD_STATUS_LABEL[l.status] ?? l.status}
+                        </span>
+                      </Td>
+                      <Td className="text-[var(--muted)]">
+                        {BUDGET_TIER_LABEL[l.budgetTier]?.split("（")[0] ?? l.budgetTier}
+                      </Td>
+                      <Td>{l.interestProduct.join("・") || "—"}</Td>
+                      <Td className="text-[var(--muted)]">
+                        {l.competitorsConsidered.join("・") || "—"}
+                      </Td>
+                      <Td>
+                        {l.firstTouchExternalId ? (
+                          <span className="font-mono text-[12px]">
+                            {l.firstTouchExternalId}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--warn)]">経路不明</span>
+                        )}
+                      </Td>
+                      <Td className="text-[var(--muted)]">
+                        {fr === null ? "—" : fr < 60 ? `${fr}分` : `${Math.round(fr / 60)}時間`}
+                      </Td>
+                      <Td className="tnum">
+                        {l.closedAmount ? yen(Number(l.closedAmount)) : "—"}
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <p className="mt-3 text-[12px] text-[var(--faint)]">
+        個人情報（会社名・連絡先・メモ）は AES-256-GCM で暗号化して保存し、画面ではマスキング表示（§16.2）。
+        商談以降は m2（ML営業管理システム）が正（§3.8.4）。
+      </p>
+    </div>
   );
+}
+
+function Stat({
+  label,
+  value,
+  accent,
+  hint,
+}: {
+  label: string;
+  value: string | number;
+  accent?: boolean;
+  hint?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3.5">
+      <div className="text-[12px] text-[var(--muted)]">{label}</div>
+      <div
+        className={`tnum mt-1 text-2xl font-bold leading-none ${accent ? "text-[var(--accent)]" : ""}`}
+      >
+        {value}
+      </div>
+      {hint && <div className="mt-1 text-[10px] text-[var(--faint)]">{hint}</div>}
+    </div>
+  );
+}
+
+function Th({ children }: { children: React.ReactNode }) {
+  return <th className="whitespace-nowrap px-3 py-2 font-medium">{children}</th>;
+}
+function Td({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return <td className={`whitespace-nowrap px-3 py-2.5 ${className}`}>{children}</td>;
 }
