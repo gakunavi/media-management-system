@@ -109,13 +109,15 @@ open http://localhost:3000
 
 ### ログイン
 
-Email マジックリンク方式。`MMS_SMTP_HOST` が**未設定でもログインできる**（リンクが
-web のログに出る）。
+**このMac（localhost）では自動ログイン。** `MMS_DEV_AUTOLOGIN_EMAIL` を設定してあるので、
+`http://localhost:3000` を開くとメール入力なしで owner としてログインされる。
 
-```bash
-docker compose logs -f web    # ここにログインリンクが出る
-```
+- ★**外部からは作動しない**: Cloudflare Tunnel 経由（Host が公開ドメイン）では
+  この自動ログインは無効で、通常の認証になる（`apps/web/app/api/dev-login/route.ts`）。
+- 自動ログインを止めるには `.env` の `MMS_DEV_AUTOLOGIN_EMAIL` を空にする。
 
+自動ログインを使わない場合は **Email マジックリンク方式**。`MMS_SMTP_HOST` が
+未設定でもログインでき、リンクは web のログに出る（`docker compose logs -f web`）。
 本番運用では `.env` に SMTP を設定すること。
 
 ### Mac 起動時の自動立ち上げ（launchd）

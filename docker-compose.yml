@@ -69,6 +69,8 @@ services:
       MMS_PUBLIC_URL: ${MMS_PUBLIC_URL:-http://localhost:3000}
       MMS_NOTIFY_WEBHOOK_URL: ${MMS_NOTIFY_WEBHOOK_URL:-}
       MMS_NOTIFY_EMAIL: ${MMS_NOTIFY_EMAIL:-}
+      # このMac（localhost）専用の自動ログイン。外部公開経由では作動しない
+      MMS_DEV_AUTOLOGIN_EMAIL: ${MMS_DEV_AUTOLOGIN_EMAIL:-}
     ports:
       - "127.0.0.1:${MMS_WEB_PORT:-3000}:3000"
     depends_on:
