@@ -1,4 +1,3 @@
-import { auth, signOut } from "@/auth";
 import { NOT_MEASURED } from "@mms/shared";
 import {
   currentPeriod,
@@ -9,12 +8,14 @@ import {
   type GoalRow,
 } from "@/lib/dashboard";
 
-// ★石井さんが毎日見る唯一の画面（設計書 §4.1 段1〜段3・段7）。
-//   段4「今週の変化」・段5「次の一手」・段6「施策の生死」は operator（P4）で追加する。
+// ★石井さんが毎日見る画面（設計書 §4.1 段1〜段3・段7）。
+//   段4/段5/段6 は operator（P4）で追加する。
 export const dynamic = "force-dynamic";
 
 const jaDate = (d: Date | null) =>
-  d ? d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric" }) : "—";
+  d
+    ? d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric" })
+    : "—";
 const jaDateTime = (d: Date | null) =>
   d
     ? d.toLocaleString("ja-JP", {
@@ -27,7 +28,6 @@ const jaDateTime = (d: Date | null) =>
     : "未実行";
 
 export default async function Dashboard() {
-  const session = await auth();
   const period = currentPeriod();
   const [goals, funnel, buyer, health] = await Promise.all([
     getGoals(period),
@@ -37,34 +37,25 @@ export default async function Dashboard() {
   ]);
 
   return (
-    <main className="mx-auto max-w-5xl px-5 py-8 sm:px-8">
-      {/* ヘッダー */}
-      <header className="mb-8 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-5">
+    <div className="mx-auto max-w-6xl">
+      <div className="mb-5 flex items-baseline justify-between">
         <div>
-          <h1 className="text-lg font-bold tracking-tight">MMS ダッシュボード</h1>
+          <h1 className="text-xl font-bold tracking-tight">ダッシュボード</h1>
           <p className="mt-0.5 text-[13px] text-[var(--muted)]">
-            {period.replace("-", "年")}月 ・ メディア／SNS運用の獲得
+            獲得3ゴールの結果と、そこに至るファネルを1画面で
           </p>
         </div>
-        <div className="flex items-center gap-3 text-[13px] text-[var(--muted)]">
-          <span className="hidden sm:inline">{session?.user?.email}</span>
-          <form
-            action={async () => {
-              "use server";
-              await signOut({ redirectTo: "/signin" });
-            }}
-          >
-            <button className="rounded-md border border-[var(--border)] px-2.5 py-1 transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04]">
-              ログアウト
-            </button>
-          </form>
-        </div>
-      </header>
+        {health.gsc.alert === "red" && (
+          <span className="rounded-full bg-[var(--bad)]/10 px-3 py-1 text-[12px] font-medium text-[var(--bad)]">
+            ● 計測に問題あり（段7）
+          </span>
+        )}
+      </div>
 
       <div className="grid gap-4">
         <GoalsPanel goals={goals} />
         <FunnelPanel funnel={funnel} />
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           <BuyerPanel buyer={buyer} />
           <HealthPanel health={health} />
         </div>
@@ -72,13 +63,13 @@ export default async function Dashboard() {
 
       <p className="mt-6 text-center text-[12px] text-[var(--faint)]">
         段4「今週の変化」・段5「次の一手」・段6「施策の生死」は P4（operator）で追加。
-        すべての値は <span className="text-amber-600 dark:text-amber-500">{NOT_MEASURED}</span> と実測ゼロを区別しています（§3 規約）。
+        すべての値は <Unmeasured small /> と実測ゼロを区別しています（§3 規約）。
       </p>
-    </main>
+    </div>
   );
 }
 
-/* ─────────────────────────── 共通パーツ ─────────────────────────── */
+/* ─────────────────────────── 共通 ─────────────────────────── */
 
 function Panel({
   n,
@@ -92,9 +83,9 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5 shadow-sm">
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
       <div className="mb-4 flex items-baseline gap-2.5">
-        <span className="inline-flex h-5 items-center rounded-md bg-[var(--ink)] px-1.5 text-[11px] font-semibold text-[var(--panel)]">
+        <span className="inline-flex h-5 items-center rounded-md bg-[var(--ink)] px-1.5 text-[11px] font-semibold text-white">
           段{n}
         </span>
         <h2 className="text-[15px] font-semibold">{title}</h2>
@@ -107,7 +98,7 @@ function Panel({
 
 function Unmeasured({ small }: { small?: boolean }) {
   return (
-    <span className={`text-amber-600 dark:text-amber-500 ${small ? "text-xs" : ""}`}>
+    <span className={`font-medium text-[var(--warn)] ${small ? "text-xs" : ""}`}>
       {NOT_MEASURED}
     </span>
   );
@@ -118,7 +109,7 @@ function Unmeasured({ small }: { small?: boolean }) {
 function GoalsPanel({ goals }: { goals: GoalRow[] }) {
   return (
     <Panel n={1} title="結果（獲得3ゴール）" hint="最優先＝直客">
-      <div className="grid gap-2.5">
+      <div className="grid gap-3 sm:grid-cols-3">
         {goals.map((g) => {
           const pct =
             g.actual !== null && g.target
@@ -126,42 +117,42 @@ function GoalsPanel({ goals }: { goals: GoalRow[] }) {
               : null;
           const dot =
             g.actual === null
-              ? "bg-amber-400"
+              ? "bg-[var(--warn)]"
               : pct !== null && pct >= 100
-                ? "bg-green-500"
+                ? "bg-[var(--ok)]"
                 : pct !== null && pct >= 50
-                  ? "bg-amber-400"
-                  : "bg-red-400";
+                  ? "bg-[var(--warn)]"
+                  : "bg-[var(--bad)]";
           return (
             <div
               key={g.key}
-              className="flex items-center gap-3 rounded-lg border border-[var(--border)] px-3.5 py-3"
+              className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-4"
             >
-              <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />
-              <span className="w-40 shrink-0 text-[13px]">{g.label}</span>
-              <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
+              <div className="flex items-center gap-2 text-[13px] text-[var(--muted)]">
+                <span className={`h-2 w-2 rounded-full ${dot}`} />
+                {g.label}
+              </div>
+              <div className="mt-2 flex items-baseline gap-1.5">
                 {g.actual === null ? (
                   <Unmeasured />
                 ) : (
-                  <span className="tnum text-2xl font-bold leading-none">{g.actual}</span>
+                  <span className="tnum text-3xl font-bold leading-none">{g.actual}</span>
                 )}
-                {g.target !== null && (
-                  <span className="tnum text-[13px] text-[var(--faint)]">/ {g.target}件</span>
+                <span className="tnum text-[13px] text-[var(--faint)]">
+                  {g.target !== null ? `/ ${g.target}件` : ""}
+                </span>
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--border)]">
+                {pct !== null && (
+                  <div
+                    className="h-full rounded-full bg-[var(--accent)]"
+                    style={{ width: `${pct}%` }}
+                  />
                 )}
               </div>
-              <div className="hidden w-40 sm:block">
-                <div className="h-1.5 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.08]">
-                  {pct !== null && (
-                    <div
-                      className="h-full rounded-full bg-[var(--ink)]"
-                      style={{ width: `${pct}%` }}
-                    />
-                  )}
-                </div>
-              </div>
-              <span className="tnum w-16 shrink-0 text-right text-[12px] text-[var(--faint)]">
+              <div className="mt-1.5 text-right text-[11px] text-[var(--faint)]">
                 {g.target === null ? "目標未設定" : pct !== null ? `${pct}%` : ""}
-              </span>
+              </div>
             </div>
           );
         })}
@@ -175,15 +166,9 @@ function GoalsPanel({ goals }: { goals: GoalRow[] }) {
 
 /* ─────────────────────────── 段2 ─────────────────────────── */
 
-function FunnelPanel({
-  funnel,
-}: {
-  funnel: Awaited<ReturnType<typeof getFunnel>>;
-}) {
-  const measuredValues = funnel.rows
-    .map((r) => r.value)
-    .filter((v): v is number => v !== null);
-  const max = measuredValues.length ? Math.max(...measuredValues) : 0;
+function FunnelPanel({ funnel }: { funnel: Awaited<ReturnType<typeof getFunnel>> }) {
+  const measured = funnel.rows.map((r) => r.value).filter((v): v is number => v !== null);
+  const max = measured.length ? Math.max(...measured) : 0;
 
   return (
     <Panel
@@ -194,45 +179,38 @@ function FunnelPanel({
       <div className="flex items-stretch gap-1.5 overflow-x-auto pb-1">
         {funnel.rows.map((r, i) => {
           const isDrop = i === funnel.biggestDropIndex;
-          const ret = funnel.retention[i];
-          const barH =
-            r.value !== null && max > 0
-              ? Math.max(6, Math.round((r.value / max) * 56))
-              : 6;
+          const w = r.value !== null && max > 0 ? Math.max(8, (r.value / max) * 100) : 8;
           return (
             <div key={r.key} className="flex items-stretch gap-1.5">
               <div
-                className={`flex min-w-[86px] flex-col justify-between rounded-lg border px-2.5 py-2 ${
+                className={`flex min-w-[92px] flex-col rounded-lg border px-3 py-2.5 ${
                   isDrop
-                    ? "border-red-300 bg-red-50 dark:border-red-900/60 dark:bg-red-950/40"
-                    : "border-[var(--border)]"
+                    ? "border-[var(--bad)]/40 bg-[var(--bad)]/[0.05]"
+                    : "border-[var(--border)] bg-[var(--panel-2)]"
                 }`}
               >
                 <div className="text-[11px] text-[var(--muted)]">{r.label}</div>
-                <div className="mt-1 flex items-end justify-between gap-1">
-                  <div>
-                    {r.value === null ? (
-                      <Unmeasured small />
-                    ) : (
-                      <span className="tnum text-lg font-bold leading-none">
-                        {r.value.toLocaleString("ja-JP")}
-                      </span>
-                    )}
-                  </div>
+                <div className="mt-1">
+                  {r.value === null ? (
+                    <Unmeasured small />
+                  ) : (
+                    <span className="tnum text-lg font-bold leading-none">
+                      {r.value.toLocaleString("ja-JP")}
+                    </span>
+                  )}
                 </div>
-                {/* 相対量のミニバー */}
-                <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.08]">
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--border)]">
                   <div
-                    className={`h-full rounded-full ${isDrop ? "bg-red-400" : "bg-[var(--ink)]"}`}
-                    style={{ width: `${(barH / 56) * 100}%` }}
+                    className={`h-full rounded-full ${isDrop ? "bg-[var(--bad)]" : "bg-[var(--accent)]"}`}
+                    style={{ width: `${w}%` }}
                   />
                 </div>
               </div>
               {i < funnel.rows.length - 1 && (
-                <div className="flex flex-col items-center justify-center px-0.5">
-                  <span className="text-[var(--faint)]">→</span>
-                  {ret !== null && funnel.retention[i + 1] !== null && (
-                    <span className="tnum text-[10px] text-[var(--faint)]">
+                <div className="flex flex-col items-center justify-center px-0.5 text-[var(--faint)]">
+                  <span>→</span>
+                  {funnel.retention[i + 1] !== null && (
+                    <span className="tnum text-[10px]">
                       {Math.round((funnel.retention[i + 1] as number) * 100)}%
                     </span>
                   )}
@@ -244,7 +222,7 @@ function FunnelPanel({
       </div>
       {funnel.biggestDropIndex !== null && (
         <p className="mt-3 text-[12px]">
-          <span className="font-medium text-red-600 dark:text-red-400">最大ドロップ</span>
+          <span className="font-medium text-[var(--bad)]">最大ドロップ</span>
           <span className="text-[var(--muted)]">
             {" "}
             {funnel.rows[funnel.biggestDropIndex - 1]?.label} →{" "}
@@ -261,11 +239,7 @@ function FunnelPanel({
 
 /* ─────────────────────────── 段3 ─────────────────────────── */
 
-function BuyerPanel({
-  buyer,
-}: {
-  buyer: Awaited<ReturnType<typeof getBuyerQuality>>;
-}) {
+function BuyerPanel({ buyer }: { buyer: Awaited<ReturnType<typeof getBuyerQuality>> }) {
   const tagged = buyer.taggedContentRatio;
   return (
     <Panel n={3} title="買い手の質">
@@ -280,9 +254,7 @@ function BuyerPanel({
       ) : (
         <div>
           <Unmeasured />
-          <p className="mt-2 text-[12px] leading-relaxed text-[var(--faint)]">
-            {buyer.note}
-          </p>
+          <p className="mt-2 text-[12px] leading-relaxed text-[var(--faint)]">{buyer.note}</p>
         </div>
       )}
     </Panel>
@@ -291,21 +263,17 @@ function BuyerPanel({
 
 /* ─────────────────────────── 段7 ─────────────────────────── */
 
-function HealthPanel({
-  health,
-}: {
-  health: Awaited<ReturnType<typeof getJobHealth>>;
-}) {
-  const alertStyle =
+function HealthPanel({ health }: { health: Awaited<ReturnType<typeof getJobHealth>> }) {
+  const style =
     health.gsc.alert === "red"
-      ? "border-red-300 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+      ? "border-[var(--bad)]/40 bg-[var(--bad)]/[0.06] text-[var(--bad)]"
       : health.gsc.alert === "warn"
-        ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
-        : "border-green-300 bg-green-50 text-green-700 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-300";
+        ? "border-[var(--warn)]/40 bg-[var(--warn)]/[0.08] text-[#9a6a00]"
+        : "border-[var(--ok)]/40 bg-[var(--ok)]/[0.08] text-[#1a7a2e]";
 
   return (
     <Panel n={7} title="ジョブ健全性・欠測">
-      <div className={`rounded-lg border px-3 py-2.5 text-[13px] leading-snug ${alertStyle}`}>
+      <div className={`rounded-lg border px-3 py-2.5 text-[13px] leading-snug ${style}`}>
         {health.gsc.latestDate === null ? (
           "GSC 実測データがありません"
         ) : health.gsc.alert === "red" ? (

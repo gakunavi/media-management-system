@@ -1,25 +1,41 @@
 @import "tailwindcss";
 
+/*
+ * MMS 管理コンソールのテーマ。
+ * ★明るい基調を既定にする（管理システムは明るい画面が標準）。
+ *   OS のダークモードに無条件で追従しない。
+ */
 :root {
-  color-scheme: light dark;
-  /* 落ち着いたグレースケール基調（毎日見る画面なので目が疲れない配色） */
-  --bg: #f7f7f8;
-  --panel: #ffffff;
-  --border: #e6e6e9;
-  --ink: #17171a;
-  --muted: #6b6b74;
-  --faint: #9a9aa3;
-}
+  color-scheme: light;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b0b0d;
-    --panel: #141417;
-    --border: #26262b;
-    --ink: #ededf0;
-    --muted: #9a9aa3;
-    --faint: #6b6b74;
-  }
+  /* コンテンツ領域 */
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --panel-2: #fafbfc;
+  --border: #e3e6ea;
+  --border-strong: #d3d8de;
+  --ink: #1a1d23;
+  --muted: #5b6473;
+  --faint: #8a93a2;
+
+  /* アクセント（獲得＝ブランド寄りの青緑）*/
+  --accent: #0b7285;
+  --accent-ink: #ffffff;
+  --accent-weak: #e6f4f6;
+
+  /* 状態色 */
+  --ok: #2f9e44;
+  --warn: #e8a01c;
+  --bad: #e03131;
+
+  /* サイドバー（濃色。管理ツールらしい落ち着き）*/
+  --sb-bg: #16202b;
+  --sb-bg-2: #1c2a38;
+  --sb-ink: #e7edf3;
+  --sb-muted: #93a3b4;
+  --sb-active-bg: rgba(255, 255, 255, 0.10);
+  --sb-active-ink: #ffffff;
+  --sb-border: rgba(255, 255, 255, 0.08);
 }
 
 html,
@@ -39,4 +55,13 @@ body {
 
 .tnum {
   font-variant-numeric: tabular-nums;
+}
+
+/* スクロールバーを控えめに（サイドバー内） */
+.sb-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.sb-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
 }

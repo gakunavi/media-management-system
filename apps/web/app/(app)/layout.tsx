@@ -1,0 +1,48 @@
+// 認証済み画面の共通シェル（サイドバー + トップバー）
+// signin 系は route group の外なのでこのシェルは付かない。
+import { auth, signOut } from "@/auth";
+import { Sidebar } from "@/components/sidebar";
+
+export default async function AppLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const session = await auth();
+
+  return (
+    <div className="min-h-screen">
+      <Sidebar />
+
+      {/* コンテンツ領域（サイドバー幅ぶん左に余白） */}
+      <div className="pl-60">
+        {/* トップバー */}
+        <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-[var(--border)] bg-[var(--panel)]/80 px-6 backdrop-blur">
+          <div className="text-[13px] text-[var(--muted)]">
+            節税総研メディア ・ 2026年07月
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="hidden text-[13px] text-[var(--muted)] sm:inline">
+              {session?.user?.email}
+            </span>
+            <span className="rounded-full bg-[var(--accent-weak)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent)]">
+              {session?.user?.role ?? "—"}
+            </span>
+            <form
+              action={async () => {
+                "use server";
+                await signOut({ redirectTo: "/signin" });
+              }}
+            >
+              <button className="rounded-md border border-[var(--border-strong)] px-2.5 py-1 text-[13px] text-[var(--muted)] transition-colors hover:bg-[var(--panel-2)]">
+                ログアウト
+              </button>
+            </form>
+          </div>
+        </header>
+
+        <div className="px-6 py-6">{children}</div>
+      </div>
+    </div>
+  );
+}
