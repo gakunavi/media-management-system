@@ -2,6 +2,24 @@
 
 :root {
   color-scheme: light dark;
+  /* 落ち着いたグレースケール基調（毎日見る画面なので目が疲れない配色） */
+  --bg: #f7f7f8;
+  --panel: #ffffff;
+  --border: #e6e6e9;
+  --ink: #17171a;
+  --muted: #6b6b74;
+  --faint: #9a9aa3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0b0d;
+    --panel: #141417;
+    --border: #26262b;
+    --ink: #ededf0;
+    --muted: #9a9aa3;
+    --faint: #6b6b74;
+  }
 }
 
 html,
@@ -10,8 +28,15 @@ body {
 }
 
 body {
+  background: var(--bg);
+  color: var(--ink);
   font-family:
     -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP",
     "Segoe UI", sans-serif;
   font-feature-settings: "palt";
+  -webkit-font-smoothing: antialiased;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
 }

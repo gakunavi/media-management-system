@@ -91,7 +91,16 @@ async function funnelStepCount(step: string): Promise<number> {
   return prisma.funnelEvent.count({ where: { step: step as never } });
 }
 
-export async function getFunnel(): Promise<{ rows: FunnelRow[]; asOf: Date | null }> {
+export type FunnelView = {
+  rows: FunnelRow[];
+  asOf: Date | null;
+  /** 隣接段間の残存率（前段=100%基準）。null は未計測を含む区間 */
+  retention: (number | null)[];
+  /** 最大ドロップ地点の row index（§4.1「最大ドロップを明示」）。null=判定不可 */
+  biggestDropIndex: number | null;
+};
+
+export async function getFunnel(): Promise<FunnelView> {
   const measured = await measuredMetrics();
   const funnelMeasured = measured.has("funnel");
 
@@ -120,7 +129,26 @@ export async function getFunnel(): Promise<{ rows: FunnelRow[]; asOf: Date | nul
     { key: "form_view", label: "フォーム到達", value: formView, source: "funnel" },
     { key: "submit", label: "送信", value: submit, source: "funnel" },
   ];
-  return { rows, asOf: impr?.asOf ?? clicks?.asOf ?? null };
+
+  // 隣接段間の残存率と最大ドロップ地点
+  const retention: (number | null)[] = [null];
+  let biggestDropIndex: number | null = null;
+  let worstRetention = Infinity;
+  for (let i = 1; i < rows.length; i++) {
+    const prev = rows[i - 1].value;
+    const cur = rows[i].value;
+    if (prev !== null && cur !== null && prev > 0) {
+      const r = cur / prev;
+      retention.push(r);
+      if (r < worstRetention) {
+        worstRetention = r;
+        biggestDropIndex = i;
+      }
+    } else {
+      retention.push(null);
+    }
+  }
+  return { rows, asOf: impr?.asOf ?? clicks?.asOf ?? null, retention, biggestDropIndex };
 }
 
 // ── 段3: 買い手の質 ────────────────────────────────────────────
