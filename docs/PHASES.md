@@ -324,19 +324,20 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 
 ## 8. §13 未解決リスト — 設計書内で見つけた矛盾・曖昧・不足
 
-> ★P0-a の絶対要件2に従い、**一切を自己判断で解決していない**。
-> 各項目に「設計書の該当行」と「なぜ判断できないか」を添える。**石井さんの判断が必要**。
+> 各項目に「設計書の該当箇所」と「なぜ判断できないか」を添える。
+> ★このうち **8.1 の6件は §9 の決定で解決済み**（2026-07-20 石井「あなたの判断で推進して」による委任）。
+> **8.2〜8.5 は未解決のまま。** 石井さんの判断が必要。
 
-### 8.1 実装をブロックしうるもの（★優先）
+### 8.1 実装をブロックしうるもの（★優先）→ **全て §9 で決定済み**
 
-| ID | 該当行 | 内容 | なぜ判断できないか |
+| ID | 該当箇所 | 内容 | 状態 |
 |---|---|---|---|
-| **U05** | §5.2 L1644 / §14.6 L2463 / §14.8 L2490 | `CompetitorSnapshot` というモデルが3箇所で参照されるが、**§3 にその定義が存在しない** | 実体が `SerpSnapshot`（KW×日付×順位）なのか `CompetitorMetric`（競合×月）なのか、あるいは第3のモデルなのかが読み取れない。立案ロジック（§5.2 入力④）の実装に直結する |
-| **U06** | §16.5 L2688 | 「`Intervention` に `controlGroupSize` / `confidence` / `batchId` を追加（**§3反映済み前提**で実装）」とあるが、**§3 の `model Intervention`（L462-470）にこの3フィールドは無い** | 「反映済み前提」という記述と実際の §3 が食い違っている。schema には追加したが、`confidence` の値域（low/medium/high か数値か）が不明 |
-| **U07** | §11.4 L2150-2153 | `model PostPattern` が `metrics PatternMetric[]` を持つが、**`PatternMetric` モデルが設計書のどこにも定義されていない** | 「businessId 別の成績を保持」としか書かれておらず、保持する指標（views / engagement / DM数 …）が不明。推測でモデルを新設しない方針のため、関連フィールドを持たせていない |
-| **U08** | §3 L379-386 `MarketShare` / §3.8.1 L1189 `SeasonalityIndex` | `clusterId` が **`TopicCluster`（§3 L311）と `KeywordCluster`（§3 L351）のどちらを指すか不明** | 両者は別概念（前者=記事のトピック階層／後者=商材テーマでのKW束ね）。§3.3.2 の式は KeywordCluster 寄り、§3.5.4 の指標表は TopicCluster 寄りで、記述が割れている。暫定で `TopicCluster` に接続した |
-| **U09** | §3 L446-451 `Experiment` | `Experiment` が `interventions Intervention[]` を持つが、**`Intervention`（L462）に `experimentId` が無い** | `Intervention` は `actionId` 経由でしか `Experiment` に到達できない。直接リレーションを張るのか Action 経由にするのかが不明。暫定で Action 経由のみとした |
-| **U10** | §3 L189 `ContentItem.mainKeywordId` / §3 L304-307 `KeywordAssignment(role=main)` | **メインKWの正が2箇所ある** | §7.1 の移行表では「メインKW → `KeywordAssignment(role=main)`」とされる一方、`ContentItem.mainKeywordId` も存在する。どちらを正とするか（あるいは片方を非正規化キャッシュとするか）が不明 |
+| **U05** | §5.2 / §14.8 | `CompetitorSnapshot` が参照されるが **§3 に定義が無い** | ✅ **§9-D1 で決定**（実体は `SerpSnapshot`。設計書も修正済み） |
+| **U06** | §16.5 | 「`Intervention` に `controlGroupSize`/`confidence`/`batchId` を追加（**§3反映済み前提**）」だが §3 に無い | ✅ **§9-D3 で決定**（3フィールド採用・`confidence` は3段階 enum） |
+| **U07** | §11.4 | `PostPattern.metrics PatternMetric[]` の **`PatternMetric` が未定義** | ✅ **§9-D5 で決定**（P10-a スコープ外のため関連を持たせない） |
+| **U08** | §3 `MarketShare` / §3.8.1 `SeasonalityIndex` | `clusterId` が `TopicCluster` / `KeywordCluster` のどちらか不明 | ✅ **§9-D2 で決定**（**KeywordCluster**） |
+| **U09** | §3 `Experiment` | `Experiment.interventions` が張れない（`Intervention` に `experimentId` が無い） | ✅ **§9-D4 で決定**（Action 経由のみ） |
+| **U10** | §3 `ContentItem.mainKeywordId` / `KeywordAssignment(role=main)` | **メインKWの正が2箇所** | ✅ **§9-D6 で決定**（正は `KeywordAssignment`・`mainKeywordId` は読み取り用キャッシュ） |
 
 ### 8.2 型・値域が確定できないもの
 
@@ -401,3 +402,32 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 > **★このリストが埋まらないまま P0 に進むと、U05〜U10 は実装中に必ず手戻りになる。**
 > 特に **U05（`CompetitorSnapshot` 不在）と U08（`clusterId` の指す先）** は、
 > P4.3 / P6.7 / P6.8 の実装を止める。**P0 着手前の判断を推奨する。**
+
+---
+
+## 9. 決定記録（Decision Log）
+
+> 2026-07-20 石井「あなたの判断で推進して」による委任のもと、§8.1 の6件と Prisma バージョンを決定した。
+> **決定はすべて可逆。** 変更前の状態は git commit `5305e74`（P0-a 初回コミット）に残っている。
+> **異論があればこの表の行を差し戻すだけでよい。**
+
+| ID | 論点 | **決定** | 根拠 | 影響範囲 |
+|---|---|---|---|---|
+| **D1** | `CompetitorSnapshot` の実体（U05） | **`SerpSnapshot` とする。** 設計書 §5.2 入力④を「`SerpSnapshot.isOurs=false` で自社圏外のKW」に、§14.8 を「`SerpSnapshot` / `Competitor` / `CompetitorMetric`」に修正 | §3.3.5 の表が「**自社が圏外のKW（空白地帯）→ `SerpSnapshot` の `isOurs=false` のKW抽出**」と明示している。新モデルを作る必要はない | P4（立案ロジック）／P6.7／P6.8 |
+| **D2** | `MarketShare.clusterId` / `SeasonalityIndex.clusterId` の指す先（U08） | **`KeywordCluster`（商材／テーマ単位の市場）** | ① `marketVolume = Σ KeywordVolume` は Keyword を束ねる `KeywordCluster` でしか算出できない ② `TopicCluster` 側の市場・シェアは **`ClusterMetric.marketVolume` / `.clickShare` が既に持っている**（§3 に明記）ため、`MarketShare` を TopicCluster に付けると二重定義になる ③ §3.8.1 が `SeasonalityIndex` を「月別の需要指数（**KWクラスタ単位**）」と明記 | P4.10／P6.8／P4.13 |
+| **D3** | `Intervention` の §16.5 追加3項目と `confidence` の値域（U06） | **`controlGroupSize` / `confidence` / `batchId` を採用。`confidence` は `ConfidenceLevel { low \| medium \| high }`** | §16.5 が「§3反映済み前提で実装」と明記しており採用は確定事項。値域は同節の3つの判定経路（基準充足／バッチ判定／全体トレンド補正）に1対1で対応させた | P4.8 |
+| **D4** | `Experiment` ⇄ `Intervention` の関連（U09） | **Action 経由のみ**（`Experiment → Action → Intervention`）。直接リレーションは張らない | `Intervention` は `Action` に 1:1 で従属する設計（`actionId @unique`）。`experimentId` を足すと親が2つになり整合性を保てない | P4／P8 |
+| **D5** | `PatternMetric`（U07） | **モデルを作らない。** `PostPattern` は関連を持たない | `PostPattern` の活用は **§9.2 スコープ外（P10-a）**。保持指標が設計書に無く、推測で作ると P10-a 着手時に作り直しになる | P10-a（将来） |
+| **D6** | メインKWの正（U10） | **正は `KeywordAssignment(role=main)`。`ContentItem.mainKeywordId` は読み取り用の非正規化キャッシュ**とし、**書き込みは `KeywordAssignment` 経由のみ**とする | §7.1 の Notion 移行表が「メインKW → `KeywordAssignment(role=main)`」と定めている。カニバリ検出の DB 制約（`@@unique([keywordId, role])`）も `KeywordAssignment` 側にしか置けない | P4.5／P4.7 |
+| **D7** | Prisma のバージョン（U35） | **Prisma 6 系に固定する** | Prisma 7 は `datasource` ブロックの `url` を廃止し `prisma.config.ts` へ移した。P0 は Docker Compose + Next.js 15 + Auth.js + launchd を同時に立ち上げる工程であり、**そこに ORM の構成変更を重ねるのはリスクが高い**。本 schema は Prisma 6 で `prisma validate` に pass 済み。7 系への移行は基盤が安定してから単独で行う | P0 |
+| **D8** | 設計書の段6/段7 取り違え（U22） | **設計書 §17 の2行を段6→段7に修正した** | §4.1（段6=施策の生死／段7=ジョブ健全性）が正であることは文書冒頭 L24 が宣言している。§17 側が誤り | — |
+| **D9** | §9 以外のロードマップ表6箇所（U21/U17） | **§9 へのポインタに置換した**（§3.3.8／§3.4.9 が既に採用している書式に統一）。**Phase は1つも失われていない**（全59件が §9.1 に存在することを確認済み） | 「ロードマップは §9 のみ」という文書冒頭 L23 の宣言に合わせた。各節の「全体 約N日」は追記時点の古い累計で、**§9.1 の 52.5日 と矛盾していた**ため削除 | — |
+
+### 9.1 決定に伴う実装上の注意
+
+| # | 注意 |
+|---|---|
+| **N1** | **U27（NULL列を含む一意制約）は未解決のまま残っている。** `MetricSnapshot([businessId, channelId, metric, date, granularity])` と `AdMetricDaily([campaignId, adGroupId, creativeId, date])` は、NULL 列がある行で一意制約が効かない。**P0 で raw SQL マイグレーションによる部分ユニークインデックス（`CREATE UNIQUE INDEX ... WHERE channel_id IS NULL`）を追加すること。** これを怠ると §16.1-④ の冪等キーが機能しない |
+| **N2** | D2 により `/market`（P6.8）は **KeywordCluster 単位**で描画する。`/clusters`（P4.3）のツリーに出す市場規模・シェアは `ClusterMetric` から取る |
+| **N3** | D6 により、記事のメインKWを変更する処理は **必ず `KeywordAssignment` を更新し、その後に `ContentItem.mainKeywordId` を同期**する。逆順・片側だけの更新を禁じる |
+| **N4** | D7 により `package.json` は `prisma@^6` / `@prisma/client@^6` で固定する |

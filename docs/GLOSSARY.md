@@ -381,7 +381,18 @@
 | `negative` | 悪化 | `Learning` 生成 → **ロールバック提案** ＋ 同型の打ち手を一時停止 |
 | `inconclusive` | **サンプル不足**（対照群5記事未満 or 合計impressions 500未満） | 判定期間を延長（14→28→56日）。★**`neutral` と区別してUI表示する** |
 
-### 5.4 `ExperimentState` — 施策の生死（段6）
+### 5.4 `ConfidenceLevel` — 判定の信頼度（§16.5）
+
+> ★設計書は `confidence=low` にのみ言及。**3段階を P0-a で決定**（[docs/PHASES.md](docs/PHASES.md) §9-D3）
+
+<!-- enum: ConfidenceLevel -->
+| 値 | 条件 |
+|---|---|
+| `high` | **対照群5記事以上 かつ 合計impressions 500以上**（§16.5 の最小サンプル基準を満たす） |
+| `medium` | **バッチ判定**（`Intervention.batchId`）で複数記事をまとめてサンプル数を稼いだ場合 |
+| `low` | 対照群が作れず**サイト全体トレンドで補正**した場合 |
+
+### 5.5 `ExperimentState` — 施策の生死（段6）
 
 <!-- enum: ExperimentState -->
 | 値 | 意味 |
@@ -712,7 +723,6 @@
 | `MetricSnapshot.granularity` / `ClusterMetric.granularity` | 列挙なし（日次 / 週次 / 月次を想定） |
 | `MeasurementCoverage.method` | 列挙なし |
 | `Intervention.type` | 列挙なし（`ActionType` と同一かどうかも不明） |
-| `Intervention.confidence` | §16.5 が `low` に言及するのみ。値域不明 |
 | `Job.kind` | 列挙なし |
 | `CrossPromotion.direction` | 列挙なし |
 | `DataQualityCheck.kind` / `.verdict` | 列挙なし |

@@ -303,6 +303,17 @@ enum ActionType {
   stop_low_fit
 }
 
+/// §16.5 Intervention.confidence — 判定の信頼度
+/// ★設計書は `confidence=low` にのみ言及。3段階を §13-D3 で決定
+/// high   = 対照群5記事以上 かつ 合計impressions 500以上（基準を満たす）
+/// medium = バッチ判定（Intervention.batchId）でサンプルを稼いだ場合
+/// low    = 対照群が作れずサイト全体トレンドで補正した場合
+enum ConfidenceLevel {
+  low
+  medium
+  high
+}
+
 /// §3 Intervention.verdict — inconclusive は「効果なし」とは別物（§16.5）
 enum InterventionVerdict {
   pending
@@ -1154,10 +1165,10 @@ model TopicCluster {
   pillarContent ContentItem?   @relation("ClusterPillar", fields: [pillarContentId], references: [id])
   targetKeyword Keyword?       @relation("ClusterTargetKeyword", fields: [targetKeywordId], references: [id])
 
-  members            ContentCluster[]
-  metrics            ClusterMetric[]
-  marketShares       MarketShare[]
-  seasonalityIndexes SeasonalityIndex[]
+  members ContentCluster[]
+  /// ★TopicCluster 側の市場規模・シェアは ClusterMetric.marketVolume / .clickShare が持つ。
+  ///   MarketShare / SeasonalityIndex は KeywordCluster 側（§13-D2 の決定）
+  metrics ClusterMetric[]
 
   @@unique([businessId, slug])
   @@index([businessId])
@@ -1273,6 +1284,11 @@ model KeywordCluster {
   business Business  @relation(fields: [businessId], references: [id])
   keywords Keyword[]
 
+  /// ★§13-D2 の決定: 「市場（クラスタ）」の正は KeywordCluster（商材／テーマ単位）。
+  ///   marketVolume = Σ KeywordVolume（所属 Keyword 経由）で算出できるのはこちらだけ
+  marketShares       MarketShare[]
+  seasonalityIndexes SeasonalityIndex[]
+
   @@unique([businessId, name])
   @@index([businessId])
 }
@@ -1379,9 +1395,10 @@ model MarketShare {
 
   aioCitationRate Float?
 
-  /// ★clusterId が TopicCluster / KeywordCluster のどちらを指すか設計書で未確定（§13 記録済）
-  ///   ClusterMetric との整合を優先し TopicCluster に接続している
-  cluster TopicCluster @relation(fields: [clusterId], references: [id])
+  /// ★§13-D2 の決定: clusterId は **KeywordCluster**（商材／テーマ単位の市場）を指す。
+  ///   根拠: marketVolume = Σ KeywordVolume は Keyword を束ねる KeywordCluster でしか算出できず、
+  ///   TopicCluster 側の市場・シェアは ClusterMetric が既に持っている（二重定義を避ける）
+  cluster KeywordCluster @relation(fields: [clusterId], references: [id])
 
   @@unique([clusterId, month])
   @@index([month])
@@ -1736,10 +1753,11 @@ model Intervention {
   verdict      InterventionVerdict @default(pending)
 
   /// §16.5 対照群が作れない場合の判定
-  /// ★設計書 §16.5 は「§3反映済み前提」と記すが §3 の model 定義には存在しない（§13 記録済）
+  /// ★設計書 §16.5 は「§3反映済み前提」と記すが §3 の model 定義には無かった。§13-D3 で採用を決定
   controlGroupSize Int?
   /// 対照群 5記事以上かつ合計impressions 500以上を満たさなければ inconclusive
-  confidence       String?
+  /// ★§13-D3 の決定: 設計書は `low` にのみ言及。3段階（low/medium/high）を採用
+  confidence       ConfidenceLevel?
   /// 同型の打ち手を複数記事にまとめて適用し、バッチ単位で判定する（最有効）
   batchId          String?
 
@@ -2126,8 +2144,10 @@ model SeasonalityIndex {
   /// 検索ボリューム履歴から自動算出
   source      String
 
-  cluster TopicCluster? @relation(fields: [clusterId], references: [id])
-  keyword Keyword?      @relation(fields: [keywordId], references: [id])
+  /// ★§13-D2 の決定: 設計書 §3.8.1 が「月別の需要指数（**KWクラスタ単位**）」と明記しているため
+  ///   KeywordCluster に接続する
+  cluster KeywordCluster? @relation(fields: [clusterId], references: [id])
+  keyword Keyword?        @relation(fields: [keywordId], references: [id])
 
   @@unique([clusterId, keywordId, month])
   @@index([month])

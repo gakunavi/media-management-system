@@ -488,3 +488,16 @@ nextReviewDue = lastReviewedAt + FreshnessRule.intervalDays
 | **19-2** | **Phase を追加・変更したら `docs/PHASES.md` のみを直す。** 設計書 §9 以外にロードマップ表を作らない |
 | **19-3** | **設計書（`docs/DESIGN.md`）を変更したら `docs/check-consistency.sh` を実行する** |
 | **19-4** | 設計書と抽出物（本ファイル群）が食い違ったら、**抽出物を勝手に直さず `docs/PHASES.md` §8 に記録して報告する** |
+
+---
+
+## 20. P0-a の決定に伴う実装規約（→ [docs/PHASES.md](docs/PHASES.md) §9 決定記録）
+
+| # | 規約 | 由来 |
+|---|---|---|
+| **20-1** | **Prisma は 6 系に固定する**（`prisma@^6` / `@prisma/client@^6`）。7 系は `datasource.url` を廃止し `prisma.config.ts` へ移すため、P0 の基盤立ち上げと同時に踏まない | D7 |
+| **20-2** | **メインKWの正は `KeywordAssignment(role=main)`。** `ContentItem.mainKeywordId` は読み取り用の非正規化キャッシュ。**書き込みは必ず `KeywordAssignment` を更新してから `mainKeywordId` を同期する。** 逆順・片側だけの更新を禁じる | D6 |
+| **20-3** | **「市場（クラスタ）」の正は `KeywordCluster`**（商材／テーマ単位）。`MarketShare` / `SeasonalityIndex` はここに紐づく。**`TopicCluster` 側の市場規模・シェアは `ClusterMetric.marketVolume` / `.clickShare` を使う**（二重定義を作らない） | D2 |
+| **20-4** | **競合ギャップの抽出は `SerpSnapshot.isOurs=false`** を使う。`CompetitorSnapshot` というモデルは存在しない | D1 |
+| **20-5** | **`Intervention` の親は `Action` のみ**（`actionId @unique`）。`Experiment` へは Action 経由で辿る。`experimentId` を足さない | D4 |
+| **20-6** | ★**P0 で raw SQL マイグレーションによる部分ユニークインデックスを追加すること。** `MetricSnapshot` の `channelId IS NULL` の行、`AdMetricDaily` の `adGroupId` / `creativeId` が NULL の行は、Postgres の NULL 非同値により通常の `@@unique` が効かない。**これを怠ると §13-④ の冪等キーが機能せず、二重計測を防げない** | N1 |
