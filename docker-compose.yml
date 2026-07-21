@@ -70,6 +70,7 @@ services:
       MMS_PUBLIC_URL: ${MMS_PUBLIC_URL:-http://localhost:3000}
       MMS_NOTIFY_WEBHOOK_URL: ${MMS_NOTIFY_WEBHOOK_URL:-}
       MMS_NOTIFY_EMAIL: ${MMS_NOTIFY_EMAIL:-}
+      MMS_JOB_SECRET: ${MMS_JOB_SECRET:-}
       # このMac（localhost）専用の自動ログイン。外部公開経由では作動しない
       MMS_DEV_AUTOLOGIN_EMAIL: ${MMS_DEV_AUTOLOGIN_EMAIL:-}
     ports:
@@ -100,6 +101,8 @@ services:
       MMS_DATABASE_URL: ${MMS_DATABASE_URL}
       MMS_WORKER_POLL_SECONDS: ${MMS_WORKER_POLL_SECONDS:-20}
       MMS_WORKER_LEGACY_DIR: /app/legacy
+      MMS_JOB_SECRET: ${MMS_JOB_SECRET:-}
+      MMS_WEB_INTERNAL_URL: ${MMS_WEB_INTERNAL_URL:-http://web:3000}
     volumes:
       # ★設計書 §6「既存 Python 資産は書き直さない」。
       #   コピーすると本体と乖離するため、元のディレクトリを **読み取り専用でマウント**する。

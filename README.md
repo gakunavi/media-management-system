@@ -10,7 +10,7 @@
 | API／MCPツール接頭辞 | `mms_*` |
 | 環境変数接頭辞 | `MMS_*` |
 | 起案 | 2026-07-20 / 石井政隆 |
-| 現在の状態 | **operator立案＋PDCA 完了**。実画面: ダッシュボード/リード/記事/キーワード/クラスタ/施策 |
+| 現在の状態 | **PDCA自動運転 完了**（立案=週次 / 判定=日次 を worker が自動実行）。実画面6つ |
 
 ---
 
@@ -106,6 +106,7 @@ open http://localhost:3000
 | 既存データの再移行 | `npm run migrate:legacy`（冪等） |
 | 計測受口のテスト送信 | `npm run ingest:test -- --dup` |
 | ファネル計測のテスト | `npm run events:test` |
+| 定期ジョブの登録 | `npm run seed:jobs` |
 | 計測開始/終了の記録 | `npm run measurement -- list` |
 
 ### ログイン

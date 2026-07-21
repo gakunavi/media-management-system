@@ -31,6 +31,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+import urllib.error
+import urllib.request
+
 import psycopg
 from croniter import croniter
 
@@ -135,7 +138,41 @@ def run_script(config: dict) -> dict:
     }
 
 
-HANDLERS = {"noop": run_noop, "script": run_script}
+def run_http(config: dict) -> dict:
+    """MMS web の内部ジョブ受口を叩く（§5.1 の日次/週次ループ）。
+
+    ★立案・判定のロジックは TypeScript 側にある。Python に再実装すると
+      必ず乖離するため、worker は「呼ぶだけ」にする（§6 と同じ思想）。
+    """
+    path = config.get("path")
+    if not path:
+        raise ValueError("config.path が指定されていません")
+
+    base = os.environ.get("MMS_WEB_INTERNAL_URL", "http://web:3000").rstrip("/")
+    secret = os.environ.get("MMS_JOB_SECRET")
+    if not secret:
+        raise RuntimeError("MMS_JOB_SECRET が未設定のため内部ジョブを実行できません")
+
+    timeout = int(config.get("timeoutSeconds", 300))
+    req = urllib.request.Request(
+        f"{base}{path}",
+        method="POST",
+        data=b"{}",
+        headers={
+            "Content-Type": "application/json",
+            "X-MMS-Job-Secret": secret,
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            body = res.read().decode("utf-8")
+            return {"handled": "http", "path": path, "status": res.status, "body": body[:2000]}
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", errors="replace")[:2000]
+        raise RuntimeError(f"HTTP {e.code}: {detail}") from e
+
+
+HANDLERS = {"noop": run_noop, "script": run_script, "http": run_http}
 
 
 # ── DB アクセス ─────────────────────────────────────────────
