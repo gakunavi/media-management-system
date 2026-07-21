@@ -48,6 +48,11 @@ export default async function Dashboard() {
             獲得3ゴールの結果と、そこに至るファネルを1画面で
           </p>
         </div>
+        {health.tools.some((t) => t.kind === "balance") && (
+          <span className="rounded-md bg-[var(--bad)]/10 px-2 py-1 text-[12px] font-medium text-[var(--bad)]">
+            ● ツールの残高不足（段7）
+          </span>
+        )}
         {health.threads.alert === "red" && (
           <span className="rounded-md bg-[var(--bad)]/10 px-2 py-1 text-[12px] font-medium text-[var(--bad)]">
             ● Threads 投稿が {health.threads.gapDays}日 停止（段7）
@@ -353,6 +358,18 @@ function HealthPanel({ health }: { health: Awaited<ReturnType<typeof getJobHealt
           <>GSC 日次は最新（{jaDate(health.gsc.latestDate)}）</>
         )}
       </div>
+
+      {/* ツールの残高・判定期日（/costs）。実際に残高が枯渇しかけた */}
+      {health.tools.length > 0 && (
+        <div className="mt-2 rounded-lg border border-[var(--bad)]/40 bg-[var(--bad)]/[0.06] px-3 py-2.5 text-[13px] leading-snug text-[var(--bad)]">
+          {health.tools.map((t, i) => (
+            <div key={i}>{t.message}</div>
+          ))}
+          <a href="/costs" className="mt-1 inline-block text-[12px] underline opacity-80">
+            コスト画面で確認
+          </a>
+        </div>
+      )}
 
       {/* ★配信停止の検知。ジョブの失敗と違い「動いていないこと」はエラーに残らない */}
       <div className={`mt-2 rounded-lg border px-3 py-2.5 text-[13px] leading-snug ${threadsStyle}`}>

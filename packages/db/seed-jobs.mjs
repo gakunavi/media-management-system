@@ -97,6 +97,15 @@ const JOBS = [
     note: "ラッコ取り込み: data/rakko-inbox のエクスポートを KeywordResearch へ（§3-8）",
   },
   {
+    name: "tool-balance-daily",
+    // 毎日 04:00。SERP取得(月曜03:00)の後、他ジョブの前に残高を更新する
+    schedule: "0 4 * * *",
+    kind: "builtin",
+    config: { script: "tool_balance.py", timeoutSeconds: 300 },
+    enabled: true,
+    note: "ツール残高: API取得できるものを更新し、枯渇を段7で警告（/costs）",
+  },
+  {
     name: "operator-propose-weekly",
     schedule: "0 9 * * 1", // 毎週月曜 09:00 JST（§5.1 週次）
     kind: "http",

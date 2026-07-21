@@ -4,6 +4,7 @@
 //   MeasurementCoverage に行が無い指標は「未計測」。決して 0 と表示しない。
 //   この集計関数は「未計測」を null で返し、UI が "—(未計測)" と表示する。
 import { prisma } from "@mms/db";
+import { getToolAlerts } from "./tools";
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
@@ -181,6 +182,8 @@ export type JobHealth = {
   gsc: { latestDate: Date | null; gapDays: number | null; alert: "ok" | "warn" | "red" };
   /** ★配信が止まっていないか（§5.4 即通知の対象）。実際に2日気づかれなかった */
   threads: ThreadsDelivery;
+  /** ツールの残高不足・判定期日超過（/costs）。実際に残高が枯渇しかけた */
+  tools: { kind: string; message: string }[];
 };
 
 /**
@@ -236,6 +239,7 @@ export async function getJobHealth(now: Date = new Date()): Promise<JobHealth> {
     })),
     gsc: { latestDate: latest?.date ?? null, gapDays, alert },
     threads: await getThreadsDelivery(now),
+    tools: await getToolAlerts(now),
   };
 }
 

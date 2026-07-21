@@ -535,6 +535,7 @@ model Business {
   unitEconomics   UnitEconomics[]
   adSimulations   AdSimulation[]
   landingPages    LandingPage[]
+  toolSubscriptions ToolSubscription[]
 
   /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
   createdAt DateTime @default(now())
@@ -2238,6 +2239,80 @@ model ProductionCost {
 
   @@index([contentItemId, kind])
   @@index([producedAt])
+}
+
+/// ★設計書に無い追加モデル（2026-07-21）。運用ツールの契約管理。
+///
+/// 導入理由: 同日に2件の実害が出た。
+///   1) ラッコのプランを誤認し、使えない機能で作業させた（契約状態がどこにも無かった）
+///   2) DataForSEO の残高が枯渇し、週次のSERP取得が止まる寸前だった（誰も見ていなかった）
+/// どちらも「今どのプランで、いくら払い、あといくら残っているか」が
+/// 可視化されていれば防げた。
+///
+/// ★効果（ROI）は自動算出しない。「このツールが何円の売上を生んだか」は
+///   分解不能で、算出すると根拠のない数字が出る。代わりに導入時に
+///   purpose / expectedOutcome / decideBy を書き、期日に人が判定する
+///   （既存の Action → Intervention → Learning と同じ形）。
+model ToolSubscription {
+  id         String @id @default(cuid())
+  businessId String
+
+  name   String
+  vendor String?
+  /// 契約プラン名（Free / エントリー / スタンダード 等）
+  plan   String?
+
+  billingType ToolBillingType @default(monthly)
+  /// 月額（円）。billingType=prepaid / free では null
+  monthlyYen  Decimal?        @db.Decimal(12, 2)
+
+  /// 前払い残高（DataForSEO 等）。★自動取得できるものは vendorKey で紐づける
+  balance          Decimal? @db.Decimal(14, 4)
+  balanceCurrency  String?
+  balanceCheckedAt DateTime?
+  /// 残高の自動取得に使う識別子（例: "dataforseo"）。null なら手入力のみ
+  vendorKey        String?
+
+  state     ToolState @default(considering)
+  startedAt DateTime?
+  endedAt   DateTime?
+
+  /// ★何のために入れたか（必須運用）。空欄のまま増えるのを防ぐ
+  purpose         String
+  /// 期待した効果（判定の基準になる）
+  expectedOutcome String?
+  /// いつ継続/停止を判断するか
+  decideBy        DateTime?
+  /// 判定結果と根拠
+  decision        String?
+  decidedAt       DateTime?
+
+  note String?
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessId, name])
+  @@index([state])
+  @@index([decideBy])
+}
+
+/// ToolSubscription.billingType
+enum ToolBillingType {
+  monthly
+  prepaid
+  free
+}
+
+/// ToolSubscription.state
+enum ToolState {
+  considering
+  trial
+  active
+  stopped
 }
 
 /// §3.6.7 ★⑦ 記事の終息管理（プルーニング・404・統合）

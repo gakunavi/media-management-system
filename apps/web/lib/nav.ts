@@ -49,6 +49,7 @@ export const NAV: NavGroup[] = [
     title: "運用",
     items: [
       { href: "/experiments", label: "施策・PDCA", ready: true, icon: "experiments" },
+      { href: "/costs", label: "コスト", ready: true, icon: "costs" },
       { href: "/jobs", label: "ジョブ", ready: true, icon: "jobs" },
     ],
   },

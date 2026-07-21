@@ -77,6 +77,12 @@ const paths: Record<string, React.ReactNode> = {
       <path d="M9 3h6M10 3v6l-4.5 8A2 2 0 0 0 7.3 20h9.4a2 2 0 0 0 1.8-3L14 9V3" />
     </>
   ),
+  costs: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M14.5 9.2a3 3 0 0 0-5 2.3c0 2.6 5 1.6 5 4.1a3 3 0 0 1-5 2.2M12 7v10" />
+    </>
+  ),
   jobs: (
     <>
       <circle cx="12" cy="12" r="3" />
