@@ -49,6 +49,11 @@ type Payload = {
   posts?: IncomingPost[];
   /** フォロワー数の日次履歴。viewsPerFollower の急落検知に使う */
   account?: IncomingAccountDay[];
+  /**
+   * 投稿キューの残り本数（GAS の pending 件数）。
+   * ★未指定/null は「取れなかった」。0（本当に空）と混同しない（§3）。
+   */
+  queuePending?: number | null;
 };
 
 /**
@@ -220,6 +225,27 @@ export async function POST(req: Request) {
   const accountDays = Array.isArray(body.account) ? body.account : [];
   const healthRows = await upsertAccountHealth(channel.id, accountDays);
 
+  // ── 投稿キューの残り本数（在庫切れを「切れる前」に警告するため）──
+  // ★最新の健康度行にだけ載せる。フォロワー数が必須なので行を新規に作れない。
+  //   届かなかった日は null のまま＝「不明」として残す（§3）。
+  const queuePending =
+    typeof body.queuePending === "number" && Number.isFinite(body.queuePending)
+      ? Math.max(0, Math.trunc(body.queuePending))
+      : null;
+  if (queuePending !== null) {
+    const latest = await prisma.snsAccountHealth.findFirst({
+      where: { channelId: channel.id },
+      orderBy: { date: "desc" },
+      select: { id: true },
+    });
+    if (latest) {
+      await prisma.snsAccountHealth.update({
+        where: { id: latest.id },
+        data: { queuePending },
+      });
+    }
+  }
+
   // ── 計測開始の記録（§3 規約）──
   if (metricRows > 0) {
     const cov = await prisma.measurementCoverage.findFirst({
@@ -244,6 +270,7 @@ export async function POST(req: Request) {
     metrics: metricRows,
     skipped,
     accountDays: healthRows,
+    queuePending,
   });
 }
 

@@ -201,11 +201,23 @@ export type ThreadsDelivery = {
   gapDays: number | null;
   alert: "ok" | "warn" | "red" | "unknown";
   reason: string;
+  /** 投稿キューの残り本数。null は「取れていない」で 0（空）とは別（§3） */
+  queuePending: number | null;
 };
 
 /** 投稿が止まったとみなす日数。毎時トリガーで日次投稿している前提 */
 const THREADS_STALL_WARN_DAYS = 2;
 const THREADS_STALL_RED_DAYS = 3;
+
+/**
+ * キューの残り本数の閾値。
+ *
+ * ★空になってから気づく設計だと、気づいた時点で既に数日止まっている。
+ *   実績ベースの投稿間隔は約90分＝1日15本前後なので、
+ *   15本を「明日には切れる」、45本を「3日以内に切れる」と見る。
+ */
+const QUEUE_RED_POSTS = 15;
+const QUEUE_WARN_POSTS = 45;
 
 export async function getJobHealth(now: Date = new Date()): Promise<JobHealth> {
   const jobs = await prisma.job.findMany({
@@ -250,6 +262,14 @@ async function getThreadsDelivery(now: Date): Promise<ThreadsDelivery> {
     select: { publishedAt: true },
   });
 
+  // 直近に記録されたキュー残数（threads_sync が毎日更新する）
+  const health = await prisma.snsAccountHealth.findFirst({
+    where: { channel: { type: "threads" }, queuePending: { not: null } },
+    orderBy: { date: "desc" },
+    select: { queuePending: true },
+  });
+  const queuePending = health?.queuePending ?? null;
+
   if (!last?.publishedAt) {
     // ★1件も無いのは「止まった」ではなく「まだ同期していない」（§3）
     return {
@@ -257,6 +277,7 @@ async function getThreadsDelivery(now: Date): Promise<ThreadsDelivery> {
       gapDays: null,
       alert: "unknown",
       reason: "投稿の同期がまだありません（止まっているとは限りません）",
+      queuePending,
     };
   }
 
@@ -266,12 +287,22 @@ async function getThreadsDelivery(now: Date): Promise<ThreadsDelivery> {
   d.setUTCHours(0, 0, 0, 0);
   const gapDays = Math.floor((today.getTime() - d.getTime()) / 86400000);
 
+  // ★残数が分かっているときは、そちらを理由に添える。
+  //   「止まりました」より「あと何本で切れます」の方が手が打てる。
+  const stock =
+    queuePending === null
+      ? "キュー残数は不明（同期待ち）"
+      : queuePending === 0
+        ? "キューは空（在庫切れ）"
+        : `キュー残り${queuePending}本`;
+
   if (gapDays >= THREADS_STALL_RED_DAYS) {
     return {
       lastPostedAt: last.publishedAt,
       gapDays,
       alert: "red",
-      reason: `最終投稿から${gapDays}日。投稿キューが空か、トリガーが止まっている可能性`,
+      reason: `最終投稿から${gapDays}日。${stock}`,
+      queuePending,
     };
   }
   if (gapDays >= THREADS_STALL_WARN_DAYS) {
@@ -279,13 +310,36 @@ async function getThreadsDelivery(now: Date): Promise<ThreadsDelivery> {
       lastPostedAt: last.publishedAt,
       gapDays,
       alert: "warn",
-      reason: `最終投稿から${gapDays}日。キューの残数を確認してください`,
+      reason: `最終投稿から${gapDays}日。${stock}`,
+      queuePending,
     };
   }
+
+  // ★配信は続いているが在庫が細っている状態。ここで言えれば止まらずに済む
+  if (queuePending !== null && queuePending <= QUEUE_RED_POSTS) {
+    return {
+      lastPostedAt: last.publishedAt,
+      gapDays,
+      alert: "red",
+      reason: `${stock}。今の配信ペース（1日約15本）だと明日には止まります`,
+      queuePending,
+    };
+  }
+  if (queuePending !== null && queuePending <= QUEUE_WARN_POSTS) {
+    return {
+      lastPostedAt: last.publishedAt,
+      gapDays,
+      alert: "warn",
+      reason: `${stock}。3日以内に補充が要ります`,
+      queuePending,
+    };
+  }
+
   return {
     lastPostedAt: last.publishedAt,
     gapDays,
     alert: "ok",
-    reason: `最終投稿は${gapDays}日前`,
+    reason: `最終投稿は${gapDays}日前・${stock}`,
+    queuePending,
   };
 }

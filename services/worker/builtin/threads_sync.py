@@ -176,6 +176,26 @@ def gas_fetch_account() -> list[dict]:
     return out
 
 
+def gas_fetch_queue_pending() -> int | None:
+    """投稿キューの残り本数（pending 件数）を取る。
+
+    ★なぜ要るか: 2026-07-19 に在庫が尽きて投稿が止まったが、
+      「止まった」と分かったのは3日後だった。残数が分かれば切れる前に言える。
+
+    ★取得できないときは None を返す。0 を返してはいけない。
+      0 は「本当に空」という強い警告で、通信失敗と混ぜると意味が壊れる（§3）。
+    """
+    try:
+        payload = gas_fetch("stats")
+    except RuntimeError as e:
+        log(f"★キュー残数を取得できません: {e}")
+        return None
+    if not isinstance(payload, dict):
+        return None
+    n = to_num(payload.get("pending"))
+    return int(n) if n is not None else None
+
+
 def gas_fetch(action: str) -> dict:
     base = os.environ.get("MMS_THREADS_GAS_URL", "").strip()
     key = os.environ.get("MMS_THREADS_GAS_KEY", "").strip()
@@ -283,7 +303,12 @@ def is_measured(row: dict, metrics: dict) -> bool:
     return any(v for v in metrics.values())
 
 
-def post_to_ingest(posts: list[dict], account_ref: str, account: list[dict] | None = None) -> dict:
+def post_to_ingest(
+    posts: list[dict],
+    account_ref: str,
+    account: list[dict] | None = None,
+    queue_pending: int | None = None,
+) -> dict:
     secret = os.environ.get("MMS_INGEST_SECRET", "")
     if not secret:
         raise RuntimeError("MMS_INGEST_SECRET が未設定です（受口が 503 を返します）")
@@ -292,6 +317,9 @@ def post_to_ingest(posts: list[dict], account_ref: str, account: list[dict] | No
     payload = {"accountRef": account_ref, "posts": posts}
     if account:
         payload["account"] = account
+    # ★None のときはキー自体を送らない。null と 0 を区別させる（§3）
+    if queue_pending is not None:
+        payload["queuePending"] = queue_pending
     body = json.dumps(payload, ensure_ascii=False)
     ts = str(int(time.time()))
     sig = hmac.new(
@@ -343,13 +371,24 @@ def main() -> int:
     account = gas_fetch_account()
     log(f"フォロワー数の履歴 {len(account)}日分")
 
+    queue_pending = gas_fetch_queue_pending()
+    if queue_pending is None:
+        log("キュー残数: 取得できず（不明のまま残します）")
+    else:
+        log(f"キュー残数: {queue_pending} 本")
+
     upserted = metrics = skipped = account_days = 0
     for i in range(0, len(posts), CHUNK):
         chunk = posts[i : i + CHUNK]
         # ★アカウント指標は最後のチャンクにだけ載せる。投稿を全部入れてから
         #   計算しないと、その日の平均viewsが未取り込みの投稿を欠いた値になる
         is_last = i + CHUNK >= len(posts)
-        res = post_to_ingest(chunk, account_ref, account if is_last else None)
+        res = post_to_ingest(
+            chunk,
+            account_ref,
+            account if is_last else None,
+            queue_pending if is_last else None,
+        )
         if not res.get("ok"):
             raise RuntimeError(f"ingest が失敗を返しました: {res}")
         upserted += res.get("upserted", 0)

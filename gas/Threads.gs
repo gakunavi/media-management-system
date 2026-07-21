@@ -146,20 +146,45 @@ function validatePostText_(text) {
  *   あわせて /g フラグを外した。test() は /g があると lastIndex を
  *   持ち回るため、同じ正規表現オブジェクトを再利用すると判定が飛ぶ。
  *
+ * ★v2.2 の修正: v2.1 は「語が出たら即ブロック」だったため、
+ *   2026-07-22 時点で error になっていた7件のうち6件が誤検出だった。
+ *
+ *     ・100%  … 「取得価額の100%を経費化」「即時償却100%」は
+ *               経営強化税制の**制度上の数値**。断定表現ではない。
+ *     ・裏ワザ … 「派手な裏ワザではなく」「一発の裏技ではなく」は
+ *               煽りを**否定**している。煽りを戒める投稿ほど落ちていた。
+ *     ・確実に … 「年内反映を確実にしたいなら11月までに」は
+ *               手続きの話で、節税効果の保証ではない。
+ *
+ *   そこで「その語の直後に**効果の主張**が来るか」で判定する。
+ *   ゆるめた分の担保として、打ち消し文脈だけを除外し、
+ *   「100%節税できる」「確実に還付されます」は従来どおり落とす。
+ *
  * @param {string} text
  * @returns {string[]} 検出された違反のリスト（空配列なら問題なし）
  */
 function checkYMYL_(text) {
   var violations = [];
 
+  // ★打ち消し文脈の煽り語は先に取り除いてから判定する。
+  //   「裏ワザではなく王道を」は煽りではなく、むしろ推奨したい書き方。
+  var scanned = String(text).replace(
+    /(?:裏ワザ|裏技)(?:ではなく|ではありません|じゃなく|より|に頼ら|は不要|は存在し|などない|はない)/g,
+    ''
+  );
+
   // 断定表現
+  //   ★「効果の主張」が続くときだけ落とす（制度上の数値・手続きの話は通す）
+  //   ★間の文字から「取」を外している。外さないと「確実に設備を取得したい」の
+  //     "取**得し**" を効果の主張と誤認する。
+  var BENEFIT = '[^。、\\n取]{0,4}(?:節税|減税|還付|戻り|戻る|得する|得し|得られ|儲か|安くな|下が|有利|安全|保証)';
   var assertive = [
-    { pattern: /必ず(?:節税できる|儲かる|得する|減税|戻る)/, label: '断定「必ず〜」' },
-    { pattern: /確実に/,                                     label: '断定「確実に」' },
-    { pattern: /絶対に?(?:節税|得|儲|損しない)/,             label: '断定「絶対に〜」' },
-    { pattern: /間違いなく/,                                 label: '断定「間違いなく」' },
-    { pattern: /100\s*[%％]/,                                label: '断定「100%」' },
-    { pattern: /guaranteed|保証します/,                      label: '保証表現' }
+    { pattern: /必ず(?:節税できる|儲かる|得する|減税|戻る)/,          label: '断定「必ず〜」' },
+    { pattern: new RegExp('確実に' + BENEFIT),         label: '断定「確実に〜」' },
+    { pattern: /絶対に?(?:節税|得|儲|損しない)/,                      label: '断定「絶対に〜」' },
+    { pattern: new RegExp('間違いなく' + BENEFIT),      label: '断定「間違いなく〜」' },
+    { pattern: new RegExp('100\\s*[%％]' + BENEFIT),    label: '断定「100%〜」' },
+    { pattern: /guaranteed|保証します/,                               label: '保証表現' }
   ];
 
   // 煽り表現
@@ -183,7 +208,7 @@ function checkYMYL_(text) {
   var allPatterns = assertive.concat(sensational).concat(taxAdvice);
 
   for (var i = 0; i < allPatterns.length; i++) {
-    if (allPatterns[i].pattern.test(text)) {
+    if (allPatterns[i].pattern.test(scanned)) {
       violations.push('⚠️ ' + allPatterns[i].label + ' が検出されました');
     }
   }

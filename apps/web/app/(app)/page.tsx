@@ -55,7 +55,12 @@ export default async function Dashboard() {
         )}
         {health.threads.alert === "red" && (
           <span className="rounded-md bg-[var(--bad)]/10 px-2 py-1 text-[12px] font-medium text-[var(--bad)]">
-            ● Threads 投稿が {health.threads.gapDays}日 停止（段7）
+            {/* ★止まってからだけでなく「切れそう」でも赤にする */}
+            ● Threads{" "}
+            {health.threads.gapDays !== null && health.threads.gapDays >= 2
+              ? `投稿が ${health.threads.gapDays}日 停止`
+              : `投稿キュー残り${health.threads.queuePending}本`}
+            （段7）
           </span>
         )}
         {health.gsc.alert === "red" && (
@@ -379,8 +384,18 @@ function HealthPanel({ health }: { health: Awaited<ReturnType<typeof getJobHealt
           <>Threads 投稿は継続中（{health.threads.reason}）</>
         ) : (
           <>
-            Threads 投稿が{" "}
-            <strong className="tnum">{health.threads.gapDays}日 止まっています</strong>
+            {health.threads.gapDays !== null && health.threads.gapDays >= 2 ? (
+              <>
+                Threads 投稿が{" "}
+                <strong className="tnum">{health.threads.gapDays}日 止まっています</strong>
+              </>
+            ) : (
+              // ★まだ配信は続いているが在庫が細っている状態
+              <>
+                Threads の投稿キューが{" "}
+                <strong className="tnum">残り{health.threads.queuePending}本</strong>
+              </>
+            )}
             <span className="opacity-70">（最終 {jaDate(health.threads.lastPostedAt)}）</span>
             <br />
             {health.threads.reason}

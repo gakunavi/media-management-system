@@ -2545,6 +2545,12 @@ model SnsAccountHealth {
   /// Threads トークン期限（60日）。段7で残日数表示（9日前から黄）
   tokenExpiresAt       DateTime?
 
+  /// 投稿キューの残り本数（GAS の pending 件数）。
+  /// ★null は「取得できていない」で 0 とは別物（§3）。0 は本当に空。
+  ///   2026-07-19 に在庫切れで投稿が止まったが、止まって3日経つまで
+  ///   誰も気づけなかった。残数を持てば「切れる前」に警告できる。
+  queuePending         Int?
+
   channel Channel @relation(fields: [channelId], references: [id])
 
   /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）

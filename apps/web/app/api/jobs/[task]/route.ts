@@ -35,7 +35,8 @@ async function sendHealthAlerts(): Promise<{ sent: number; alerts: string[] }> {
     alerts.push(`GSC 日次が ${health.gsc.gapDays}日欠測（最終 ${health.gsc.latestDate?.toLocaleDateString("ja-JP")}）`);
   }
   if (health.threads.alert === "red" || health.threads.alert === "warn") {
-    alerts.push(`Threads 投稿が ${health.threads.gapDays}日 停止 — ${health.threads.reason}`);
+    // ★「何日止まった」だけでなく残数も出す。止まる前に打てる手が変わる
+    alerts.push(`Threads 配信: ${health.threads.reason}`);
   }
   for (const t of health.tools) alerts.push(t.message);
   for (const j of health.jobs) {
