@@ -123,6 +123,15 @@ const JOBS = [
     note: "ネタ供給: Threads反響（§13.4-④）とAIO未引用（§3.3.6）から自動起票",
   },
   {
+    name: "dm-log-import-daily",
+    // 毎日 10:00。cowork の日次監視（DM検知・返信案作成）が終わった後に取り込む
+    schedule: "0 10 * * *",
+    kind: "builtin",
+    config: { script: "dm_log_import.py", timeoutSeconds: 300 },
+    enabled: true,
+    note: "代理店DM取り込み: cowork の dm-log.md を AgencyLead へ（§3-6・読み取りのみ）",
+  },
+  {
     name: "queue-refill-daily",
     // 毎日 05:00。その日の初回投稿（07:00）より前に補充を終える
     schedule: "0 5 * * *",

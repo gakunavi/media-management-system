@@ -76,6 +76,8 @@ export async function getAgencyData(): Promise<AgencyData> {
         receivedAt: true,
         sourcePostId: true,
         stage: true,
+        // cowork の dm-log.md 由来のリードはアングルだけを持つ（投稿は特定できない）
+        screeningAnswers: true,
       },
     }),
     prisma.contentItem.findMany({
@@ -92,10 +94,16 @@ export async function getAgencyData(): Promise<AgencyData> {
     postsPerAngle.set(a, (postsPerAngle.get(a) ?? 0) + 1);
   }
 
-  const rows: AgencyLeadRow[] = leads.map((l) => ({
-    ...l,
-    sourceAngle: l.sourcePostId ? (angleByPost.get(l.sourcePostId) ?? null) : null,
-  }));
+  // ★アングルの引き方は2通りある。
+  //   1) 手入力のリード … sourcePostId（THR-xxx）から投稿の note を引く
+  //   2) cowork 由来   … dm-log.md にアングル記号しか無いので screeningAnswers から
+  //   2つ目を見ないと、cowork が検知した実DMが全部「angle不明」になる。
+  const rows: AgencyLeadRow[] = leads.map(({ screeningAnswers, ...l }) => {
+    const fromPost = l.sourcePostId ? (angleByPost.get(l.sourcePostId) ?? null) : null;
+    const a = screeningAnswers as { angle?: unknown } | null;
+    const fromLog = typeof a?.angle === "string" && a.angle ? a.angle : null;
+    return { ...l, sourceAngle: fromPost ?? fromLog };
+  });
 
   const stageCount = new Map<string, number>();
   for (const l of leads) stageCount.set(l.stage, (stageCount.get(l.stage) ?? 0) + 1);

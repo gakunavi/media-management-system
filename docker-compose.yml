@@ -127,6 +127,8 @@ services:
       MMS_DATAFORSEO_MAX_KEYWORDS: ${MMS_DATAFORSEO_MAX_KEYWORDS:-400}
       # ラッコのエクスポート（builtin/rakko_import.py・§3-8）
       MMS_RAKKO_EXPORTS_DIR: /app/rakko-exports
+      # 代理店DMログ（builtin/dm_log_import.py・§3-6）。cowork の日次監視が書いている
+      MMS_DM_LOG_PATH: /app/cowork-threads/sns-account-create/children/setsuzei-soken/05-sales/agency-recruitment/dm-log.md
     volumes:
       # ★設計書 §6「既存 Python 資産は書き直さない」。
       #   コピーすると本体と乖離するため、元のディレクトリを **読み取り専用でマウント**する。
@@ -137,6 +139,9 @@ services:
       # ★ラッコのエクスポートはメディア事業部側が正本（rakko-required.md の規約）。
       #   MMS は読むだけ。書き込むと保存先が二重になりどちらが正か分からなくなる
       - ${MMS_RAKKO_EXPORTS_DIR_HOST:-./data/rakko-exports}:/app/rakko-exports:ro
+      # ★代理店DMログは cowork 側が正本。日次監視タスクが追記している。
+      #   MMS は読むだけ（書くと運用の実体と二重管理になる・§6）
+      - ${MMS_COWORK_THREADS_DIR_HOST:-./data/cowork-threads}:/app/cowork-threads:ro
     depends_on:
       db:
         condition: service_healthy
