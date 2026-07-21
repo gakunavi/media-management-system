@@ -1142,6 +1142,11 @@ model Keyword {
   status           String?
   /// §3.3.7 市場を「商材／テーマ」単位で束ねる
   keywordClusterId String?
+  /// ★AI Overview の**引用ドメイン**まで取得するか（§3.3.6）。
+  ///   AIOの「有無」は全KWで取れるが、引用元の取得は1SERPあたり約5倍の
+  ///   コストがかかる（実測 $0.0006 → $0.0030）。主戦場KWだけONにする運用。
+  ///   ★コストが伴う判断なので .env ではなく画面から切り替える（§12.3）
+  aioTracked       Boolean   @default(false)
 
   business       Business        @relation(fields: [businessId], references: [id])
   keywordCluster KeywordCluster? @relation(fields: [keywordClusterId], references: [id])

@@ -34,6 +34,14 @@ try {
   wpReady = false;
   threadsReady = false;
 }
+let dataforseoReady = false;
+try {
+  const envText = readFileSync(path.resolve(process.cwd(), "../../.env"), "utf8");
+  dataforseoReady =
+    /^MMS_DATAFORSEO_LOGIN=.+$/m.test(envText) && /^MMS_DATAFORSEO_PASSWORD=.+$/m.test(envText);
+} catch {
+  dataforseoReady = false;
+}
 
 const JOBS = [
   {
@@ -67,6 +75,17 @@ const JOBS = [
     note: threadsReady
       ? "Threads同期: GAS Web App から投稿実績と反応を pull（§13.4-④）"
       : "Threads同期【停止中】.env に MMS_THREADS_GAS_URL / MMS_THREADS_GAS_KEY / MMS_INGEST_SECRET を設定して再実行",
+  },
+  {
+    name: "serp-fetch-weekly",
+    // 月曜 03:00。立案（09:00）より前に競合順位を最新化しておく
+    schedule: "0 3 * * 1",
+    kind: "builtin",
+    config: { script: "dataforseo_serp.py", timeoutSeconds: 3600 },
+    enabled: dataforseoReady,
+    note: dataforseoReady
+      ? "SERP取得: 1〜20位の全ドメインとAIO有無を記録（§3.3.5・360KWで約$0.22/回）"
+      : "SERP取得【停止中】.env に MMS_DATAFORSEO_LOGIN / MMS_DATAFORSEO_PASSWORD を設定して再実行",
   },
   {
     name: "operator-propose-weekly",

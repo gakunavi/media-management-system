@@ -48,6 +48,39 @@ GAS_TIMEOUT = 120
 
 METRIC_KEYS = ("views", "likes", "replies", "reposts", "quotes", "shares")
 
+# ── フォーマット表記ゆれの吸収 ──────────────────────────────
+# 運用の途中でラベルを変えた結果、同一フォーマットが2つの名前に割れていた。
+# 集計が分断されると「投稿数が多いフォーマット」の評価を誤る。
+#
+# ★統合するのは「同じものを別表記で書いただけ」に限る。
+#   修飾語がついたもの（例: 質問型アンケート / ストーリー実例）は
+#   別フォーマットの可能性があるため**触らない**。統合は情報を失う操作で、
+#   後から分け直せない。判断は運用側に委ねる。
+FORMAT_ALIASES: dict[str, str] = {
+    # 表記スタイルの違いのみ（2026-05-18 に Good/Bad へ統一されたが旧表記が残存）
+    "good-bad": "Good/Bad",
+    "good/bad": "Good/Bad",
+}
+
+# 「hayakuchi コンボ1」〜「hayakuchi コンボ7」（2026-05-07〜09 のみ）は
+# 「早口」のローマ字表記。接頭辞で一括して寄せる
+FORMAT_ALIAS_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("hayakuchi", "早口"),
+)
+
+
+def normalize_format(fmt: str) -> str:
+    s = str(fmt or "").strip()
+    if not s:
+        return s
+    exact = FORMAT_ALIASES.get(s.lower())
+    if exact:
+        return exact
+    for prefix, canonical in FORMAT_ALIAS_PREFIXES:
+        if s.lower().startswith(prefix):
+            return canonical
+    return s
+
 # GAS 側の項目名が camelCase / snake_case どちらで返ってきても拾えるようにする。
 # （Api.gs を書き換えずに使うための保険。キーは小文字化し _ を除いて突合する）
 FIELD_ALIASES: dict[str, tuple[str, ...]] = {
@@ -187,7 +220,7 @@ def to_ingest_post(row: dict) -> dict | None:
     # これが無いとフォーマット別の効果比較（§13.4-④）ができない
     fmt = pick(row, ("format",))
     if fmt and "notes" not in post:
-        post["notes"] = str(fmt)
+        post["notes"] = normalize_format(fmt)
 
     # ── 指標（§3「欠測とゼロの区別」）──
     # ★GAS 側がまだ Insights を回収していない行も、top_posts は 0 を並べて返す。

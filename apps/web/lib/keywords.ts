@@ -32,6 +32,8 @@ export type KeywordRow = {
   ctr: number | null;
   band: Band | null;
   asOf: Date | null;
+  /// AI Overview の引用ドメインまで取得する対象か（§3.3.6・コストが伴うため画面で切替）
+  aioTracked: boolean;
 };
 
 type RankRow = {
@@ -50,7 +52,7 @@ export async function getKeywordList(): Promise<{
   droppedOut: number;
 }> {
   const [keywords, rankings] = await Promise.all([
-    prisma.keyword.findMany({ select: { id: true, keyword: true } }),
+    prisma.keyword.findMany({ select: { id: true, keyword: true, aioTracked: true } }),
     prisma.keywordRanking.findMany({
       select: {
         keywordId: true,
@@ -99,6 +101,7 @@ export async function getKeywordList(): Promise<{
       ctr: latest.ctr,
       band: bandOf(latest.position),
       asOf: latest.date,
+      aioTracked: k.aioTracked,
     });
   }
 

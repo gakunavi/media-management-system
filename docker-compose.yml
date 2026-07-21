@@ -118,6 +118,10 @@ services:
       MMS_THREADS_GAS_KEY: ${MMS_THREADS_GAS_KEY:-}
       MMS_THREADS_ACCOUNT_REF: ${MMS_THREADS_ACCOUNT_REF:-setsuzei_masa}
       MMS_INGEST_SECRET: ${MMS_INGEST_SECRET:-}
+      # DataForSEO SERP（builtin/dataforseo_serp.py・§3.3.5）
+      MMS_DATAFORSEO_LOGIN: ${MMS_DATAFORSEO_LOGIN:-}
+      MMS_DATAFORSEO_PASSWORD: ${MMS_DATAFORSEO_PASSWORD:-}
+      MMS_DATAFORSEO_MAX_KEYWORDS: ${MMS_DATAFORSEO_MAX_KEYWORDS:-400}
     volumes:
       # ★設計書 §6「既存 Python 資産は書き直さない」。
       #   コピーすると本体と乖離するため、元のディレクトリを **読み取り専用でマウント**する。
