@@ -12,11 +12,12 @@ import { getJobHealth } from "@/lib/dashboard";
 import { notify } from "@/lib/notify";
 import { evaluateDueInterventions } from "@/lib/evaluate";
 import { safeEqual } from "@/lib/crypto";
+import { refillQueue } from "@/lib/threads-queue";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TASKS = ["propose", "evaluate", "ideas", "alerts"] as const;
+const TASKS = ["propose", "evaluate", "ideas", "alerts", "queue-refill"] as const;
 type Task = (typeof TASKS)[number];
 
 function isTask(v: string): v is Task {
@@ -88,6 +89,26 @@ export async function POST(
       // ★画面に出すだけでは、画面を開くまで誰も気づかない。実際に
       //   「投稿が2日止まっている」「残高が枯渇しかけ」を誰も知らなかった。
       const r = await sendHealthAlerts();
+      return NextResponse.json({ ok: true, task, ...r });
+    }
+    if (task === "queue-refill") {
+      // ★承認を挟まずに draft を公開待ちへ上げる。止めないことを優先する。
+      //   YMYL に触れた原稿だけは error に落として残す（捨てない）。
+      const r = await refillQueue();
+      if (r.held > 0 || r.pendingAfter <= 15) {
+        await notify({
+          event: "threads.queue",
+          title:
+            r.pendingAfter <= 15
+              ? `⚠️ Threads キュー残り${r.pendingAfter}本（補充が追いつきません）`
+              : `Threads 自動補充: ${r.held}本を保留しました`,
+          body: [
+            `公開待ちに追加: ${r.promoted}本`,
+            `YMYLで保留: ${r.held}本（シートの error 行を確認）`,
+            `残り draft: ${r.draftsLeft}本`,
+          ].join("\n"),
+        });
+      }
       return NextResponse.json({ ok: true, task, ...r });
     }
     if (task === "ideas") {

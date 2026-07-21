@@ -123,6 +123,15 @@ const JOBS = [
     note: "ネタ供給: Threads反響（§13.4-④）とAIO未引用（§3.3.6）から自動起票",
   },
   {
+    name: "queue-refill-daily",
+    // 毎日 05:00。その日の初回投稿（07:00）より前に補充を終える
+    schedule: "0 5 * * *",
+    kind: "http",
+    config: { path: "/api/jobs/queue-refill", timeoutSeconds: 900 },
+    enabled: true,
+    note: "投稿キュー自動補充: cowork が生成した draft を承認なしで公開待ちへ（YMYL違反のみ保留）",
+  },
+  {
     name: "health-alert-daily",
     // 毎朝 09:30。日次ジョブが一通り終わった後に、異常だけを通知する
     schedule: "30 9 * * *",

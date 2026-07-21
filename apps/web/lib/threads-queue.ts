@@ -242,6 +242,100 @@ export async function approveDrafts(rowIndexes: number[]): Promise<{ approved: n
 }
 
 /**
+ * 自動補充: draft を承認なしで pending に上げる（毎日実行）。
+ *
+ * ★承認を挟まない運用にした理由（2026-07-22 石井さんの判断）
+ *   Threads の目的は代理店募集・DM・送客であり、投稿は量と継続が効く。
+ *   1本ずつ人が押す設計は、押す人が忙しい日に必ず止まる。実際
+ *   7/19〜7/22 は止まっていた。止まると4つの目的が全部止まる。
+ *
+ * ★人の承認を外した代わりに、機械の門を2枚残している:
+ *   1. ここでの YMYL 判定（gas/Threads.gs v2.2 と同じ規則）
+ *   2. 投稿直前の GAS 側 validatePostText_
+ *   どちらかに触れた原稿は pending に上げず error にして残す。
+ *   「静かに捨てる」と、なぜ投稿数が足りないのか分からなくなる。
+ *
+ * @param targetDays 何日分まで埋めるか
+ */
+export async function refillQueue(
+  targetDays = 7,
+): Promise<{ promoted: number; held: number; pendingAfter: number; draftsLeft: number }> {
+  const list = await gasGet("list", { limit: "2000" });
+  const rows: QueueRow[] = (Array.isArray(list?.posts) ? list.posts : []).map(toRow);
+
+  const publishedTexts = new Set(
+    rows.filter((r) => r.status === "posted" && r.text).map((r) => normalize(r.text)),
+  );
+  const pendingRows = rows.filter((r) => r.status === "pending");
+  const taken = new Set(
+    rows.filter((r) => r.status === "pending" || r.status === "posted").map((r) => r.scheduledAt),
+  );
+
+  const target = targetDays * SLOT_HOURS.length;
+  const room = target - pendingRows.length;
+  if (room <= 0) {
+    return {
+      promoted: 0,
+      held: 0,
+      pendingAfter: pendingRows.length,
+      draftsLeft: rows.filter((r) => r.status === "draft").length,
+    };
+  }
+
+  // 候補は draft のみ。skip は「没かどうか判別できない」ので自動では触らない
+  const seen = new Set<string>();
+  const drafts: QueueRow[] = [];
+  for (const r of rows) {
+    if (r.status !== "draft") continue;
+    const t = normalize(r.text);
+    // ★同じ本文を二度出さない。生成が同じネタを拾うことは普通に起きる
+    if (!t || publishedTexts.has(t) || seen.has(t)) continue;
+    seen.add(t);
+    drafts.push(r);
+  }
+
+  const good: QueueRow[] = [];
+  const bad: QueueRow[] = [];
+  for (const d of drafts) (checkYmyl(d.text).ok ? good : bad).push(d);
+
+  // ★問題のある原稿は先に error にして見えるようにする（捨てない）
+  let held = 0;
+  for (const b of bad) {
+    const c = checkYmyl(b.text);
+    await gasPost({
+      action: "update",
+      row_index: b.rowIndex,
+      fields: {
+        status: "error",
+        error: `自動補充で保留: ${[...c.violations, c.tooLong ? `${c.length}字` : ""]
+          .filter(Boolean)
+          .join(" / ")}`,
+      },
+    });
+    held += 1;
+  }
+
+  const promote = good.slice(0, room);
+  const slots = nextSlots(promote.length, taken);
+  let promoted = 0;
+  for (let i = 0; i < promote.length && i < slots.length; i++) {
+    await gasPost({
+      action: "update",
+      row_index: promote[i].rowIndex,
+      fields: { status: "pending", scheduled_at: slots[i] },
+    });
+    promoted += 1;
+  }
+
+  return {
+    promoted,
+    held,
+    pendingAfter: pendingRows.length + promoted,
+    draftsLeft: good.length - promoted,
+  };
+}
+
+/**
  * 却下: 理由を必ず残す（§5.6 却下理由は学習データになる）。
  *
  * status には rejected を入れる。skip のまま放置すると、
