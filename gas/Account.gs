@@ -136,7 +136,13 @@ function getAccountSheet_() {
   return sheet;
 }
 
-/** 日次トリガー（毎日 5:30。Insights回収の前に取る） */
+/**
+ * 日次トリガー（毎日 5:30。Insights回収の前に取る）。
+ *
+ * ★登録と同時に**その場で1件記録する**。トリガーだけ張って翌朝を待つと、
+ *   初日のデータが丸ごと落ちる。followers_count は過去に遡れないため、
+ *   落ちた1日は永久に埋まらない。
+ */
 function installAccountTrigger() {
   var existing = ScriptApp.getProjectTriggers();
   var deleted = 0;
@@ -154,7 +160,16 @@ function installAccountTrigger() {
     .everyDays(1)
     .create();
 
+  // ★初回を今すぐ記録する（翌朝まで待たない）
+  var followers = null;
+  try {
+    followers = collectAccountDaily();
+  } catch (e) {
+    alog_('⚠️ トリガーは登録できましたが初回記録に失敗: ' + e.message);
+  }
+
   alog_('✅ 日次のフォロワー数記録を開始しました（毎日 5:30）'
       + ' / 既存トリガー削除: ' + deleted + '件'
+      + (followers === null ? '' : ' / 本日分を記録: ' + followers + '人')
       + ' / ★履歴は今日から積み上がります。過去には遡れません');
 }
