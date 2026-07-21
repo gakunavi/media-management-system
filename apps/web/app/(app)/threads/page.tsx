@@ -1,4 +1,6 @@
 import { getThreadsData, MIN_POSTS_FOR_STAT, type GroupStat } from "@/lib/threads";
+import { getAgencyData } from "@/lib/agency";
+import { AgencySection } from "./agency-section";
 
 // Threads 実績（設計書 §4.2 /threads・§13.4-④）
 //
@@ -12,7 +14,10 @@ const jaDate = (d: Date | null) =>
 const num = (n: number | null) => (n === null ? "—" : n.toLocaleString("ja-JP"));
 
 export default async function ThreadsPage() {
-  const { summary, byFormat, byTarget, byCore, byAgencyAngle, top } = await getThreadsData();
+  const [{ summary, byFormat, byTarget, byCore, byAgencyAngle, top }, agency] = await Promise.all([
+    getThreadsData(),
+    getAgencyData(),
+  ]);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -52,6 +57,7 @@ export default async function ThreadsPage() {
           median={null}
         />
       )}
+      <AgencySection data={agency} />
       <Section title="ターゲット別" rows={byTarget} median={summary.medianFormatAvg} />
       <Section title="コアメッセージ別" rows={byCore} median={summary.medianFormatAvg} />
 
@@ -102,7 +108,7 @@ export default async function ThreadsPage() {
         </a>{" "}
         に出ます。
         <br />
-        ★代理店DMの状態遷移（P5.6）と viewsPerFollower 急落検知は未実装です。
+        ★viewsPerFollower の急落検知（配信制限のサイン）は未実装です。
       </p>
     </div>
   );
