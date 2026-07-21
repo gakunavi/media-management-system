@@ -5,7 +5,11 @@ worker には**読み取り専用**でマウントされます（`/app/secrets:r
 
 ---
 
-## GSC（Google Search Console）日次取得
+## GSC（Google Search Console）日次取得 — ✅ 稼働中
+
+> 既存の `asset-support@asset-support-492811.iam.gserviceaccount.com` が
+> 既に GSC に siteOwner 権限を持っていたため、そのまま利用している。
+> （`gcloud-tts-service-account.json` を `gsc-service-account.json` として配置）
 
 ### 置くファイル
 
