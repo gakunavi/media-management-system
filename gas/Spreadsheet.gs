@@ -191,8 +191,10 @@ function resetErrorRows() {
   }
   range.setValues(values);
 
-  SpreadsheetApp.getUi().alert(
-    reset + '件を pending に戻しました。\n次回のトリガーで再投稿されます。\n\n' +
-    '※本文を直していない行は同じ理由で再び error になります。'
-  );
+  var msg = reset + '件を pending に戻しました。次回のトリガーで再投稿されます。'
+          + '（本文を直していない行は同じ理由で再び error になります）';
+  Logger.log(msg);
+  // ★alert はメニューから実行したときだけ出す。GASエディタから ▶ 実行すると
+  //   ダイアログがスプレッドシート側のタブに出て、気づかないまま固まる
+  try { SpreadsheetApp.getUi().alert(msg); } catch (e) { /* UIが無い文脈では無視 */ }
 }
