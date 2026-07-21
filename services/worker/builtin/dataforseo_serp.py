@@ -188,10 +188,15 @@ def post_tasks(keywords: list[tuple[str, str, bool]]) -> dict[str, str]:
     return task_by_id
 
 
-def collect_results(task_by_id: dict[str, str]) -> dict[str, dict]:
-    """完了したタスクを回収する。{keyword_id: result} を返す"""
+def collect_results(task_by_id: dict[str, str], on_done) -> int:
+    """完了したタスクを回収し、1件ずつ on_done に渡す。取得できた件数を返す。
+
+    ★取得のたびに保存＆コミットする。以前は全件そろってから一括保存していたが、
+      360KW の実行が途中で終わると**1件も残らなかった**。長時間バッチで
+      「全部そろってから書く」は事故に弱い。
+    """
     pending = dict(task_by_id)
-    done: dict[str, dict] = {}
+    n_done = 0
     deadline = time.time() + POLL_MAX_MINUTES * 60
 
     while pending and time.time() < deadline:
@@ -212,15 +217,16 @@ def collect_results(task_by_id: dict[str, str]) -> dict[str, dict]:
                 continue
             results = t.get("result") or []
             if results:
-                done[pending[task_id]] = results[0]
+                on_done(pending[task_id], results[0])
+                n_done += 1
             pending.pop(task_id, None)
-        log(f"  回収 {len(done)}/{len(task_by_id)}（待機中 {len(pending)}）")
+        log(f"  回収 {n_done}/{len(task_by_id)}（待機中 {len(pending)}）")
 
     if pending:
         # ★取れなかったものを 0件として保存すると「20位以内に誰もいない」と
         #   誤読される。§3 の規約どおり、記録しない＝未計測のままにする
         log(f"★{len(pending)}件がタイムアウト。未計測として記録しません")
-    return done
+    return n_done
 
 
 def parse_items(result: dict, ours: str) -> tuple[list[dict], bool, list[str]]:
@@ -318,19 +324,21 @@ def main() -> int:
         if not task_by_id:
             raise RuntimeError("タスクが1件も作成できませんでした")
 
-        results = collect_results(task_by_id)
+        stats = {"saved": 0, "aio": 0, "ours": 0}
 
-        saved = aio_count = 0
-        ours_ranked = 0
-        for kid, result in results.items():
+        def handle(kid: str, result: dict) -> None:
             rows, has_aio, aio_domains = parse_items(result, ours)
             if not rows:
-                continue  # ★空を保存しない（未計測として残す）
-            saved += save(cur, kid, day, rows, has_aio, aio_domains)
+                return  # ★空を保存しない（未計測として残す）
+            stats["saved"] += save(cur, kid, day, rows, has_aio, aio_domains)
             if has_aio:
-                aio_count += 1
+                stats["aio"] += 1
             if any(r["isOurs"] for r in rows):
-                ours_ranked += 1
+                stats["ours"] += 1
+            conn.commit()  # ★1KWごとに確定させる（途中終了で失わない）
+
+        n_results = collect_results(task_by_id, handle)
+        saved, aio_count, ours_ranked = stats["saved"], stats["aio"], stats["ours"]
 
         # ── 計測開始の記録（§3 規約）──
         now = datetime.now(JST)
@@ -355,7 +363,7 @@ def main() -> int:
         conn.commit()
 
     log(
-        f"完了: {len(results)}KW 取得 / SerpSnapshot {saved}行 / "
+        f"完了: {n_results}KW 取得 / SerpSnapshot {saved}行 / "
         f"AIOあり {aio_count}KW / 自社が20位以内 {ours_ranked}KW"
     )
     if probe:

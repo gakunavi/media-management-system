@@ -18,6 +18,53 @@ const BAND_STYLE: Record<Band, string> = {
 
 type SortKey = "impressions" | "clicks" | "position";
 
+/** 上位ドメインとAIO有無（§3.3.5 / §3.3.6）。未計測は「—」で表し 0 と区別する */
+function SerpCell({ row }: { row: KeywordRow }) {
+  if (!row.serp) {
+    return <span className="text-[var(--faint)]" title="SERP未取得">—</span>;
+  }
+  const { topDomains, ourPosition } = row.serp;
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="truncate text-[11px] text-[var(--muted)]" title={topDomains.join(" / ")}>
+        {topDomains.map((d) => d.replace(/^www\./, "")).join(" · ") || "—"}
+      </span>
+      <span className="text-[10px] text-[var(--faint)]">
+        自社{" "}
+        {ourPosition === null ? (
+          <strong className="text-[var(--bad)]">20位圏外</strong>
+        ) : (
+          <strong className="text-[#1a7a2e]">{ourPosition}位</strong>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function AioCell({ row }: { row: KeywordRow }) {
+  if (!row.serp) return <span className="text-[var(--faint)]">—</span>;
+  if (!row.serp.hasAiOverview) {
+    return <span className="text-[11px] text-[var(--faint)]">なし</span>;
+  }
+  const cited = row.serp.aioCitedDomains;
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <span className="rounded bg-[var(--warn)]/15 px-1.5 py-0.5 text-[11px] font-medium text-[#9a6a00]">
+        あり
+      </span>
+      {/* ★引用元は aioTracked をONにしたKWでしか取っていない。
+          空配列を「引用ゼロ」と読ませないため、未計測は明示する（§3） */}
+      {cited.length > 0 ? (
+        <span className="text-[10px] text-[var(--faint)]" title={cited.join(" / ")}>
+          引用 {cited.length}社
+        </span>
+      ) : (
+        <span className="text-[10px] text-[var(--faint)]">引用元 未計測</span>
+      )}
+    </div>
+  );
+}
+
 function PositionDelta({ delta }: { delta: number | null }) {
   if (delta === null || delta === 0) return <span className="text-[var(--faint)]">±0</span>;
   const improved = delta > 0;
@@ -145,14 +192,16 @@ export function KeywordTable({ rows }: { rows: KeywordRow[] }) {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-[var(--border)] bg-[var(--panel-2)] text-left text-[12px] text-[var(--muted)]">
-                <th className="px-3 py-2 font-medium">キーワード</th>
-                <th className="px-3 py-2 text-right font-medium">現在順位</th>
-                <th className="px-3 py-2 text-right font-medium">前週差</th>
-                <th className="px-3 py-2 text-center font-medium">帯</th>
-                <th className="px-3 py-2 text-right font-medium">クリック</th>
-                <th className="px-3 py-2 text-right font-medium">表示</th>
-                <th className="px-3 py-2 text-right font-medium">CTR</th>
-                <th className="px-3 py-2 text-center font-medium">AIO引用</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">キーワード</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">現在順位</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">前週差</th>
+                <th className="whitespace-nowrap px-3 py-2 text-center font-medium">帯</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">クリック</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">表示</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">CTR</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">SERP上位（自社順位）</th>
+                <th className="whitespace-nowrap px-3 py-2 text-center font-medium">AIO</th>
+                <th className="whitespace-nowrap px-3 py-2 text-center font-medium">引用取得</th>
               </tr>
             </thead>
             <tbody>
@@ -163,7 +212,7 @@ export function KeywordTable({ rows }: { rows: KeywordRow[] }) {
                     r.band === "striking" ? "bg-[var(--warn)]/[0.04]" : ""
                   }`}
                 >
-                  <td className="max-w-[360px] truncate px-3 py-2.5">{r.keyword}</td>
+                  <td className="max-w-[240px] truncate px-3 py-2.5">{r.keyword}</td>
                   <td className="tnum px-3 py-2.5 text-right font-medium">
                     {r.position === null ? "圏外" : r.position.toFixed(1)}
                   </td>
@@ -185,6 +234,12 @@ export function KeywordTable({ rows }: { rows: KeywordRow[] }) {
                   </td>
                   <td className="tnum px-3 py-2.5 text-right text-[var(--muted)]">
                     {r.ctr === null ? "—" : `${(r.ctr * 100).toFixed(1)}%`}
+                  </td>
+                  <td className="max-w-[220px] px-3 py-2.5">
+                    <SerpCell row={r} />
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <AioCell row={r} />
                   </td>
                   <td className="px-3 py-2.5 text-center">
                     <AioToggle row={r} onDone={(msg, ok) => setToast({ msg, ok })} />

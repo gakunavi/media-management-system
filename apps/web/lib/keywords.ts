@@ -34,6 +34,21 @@ export type KeywordRow = {
   asOf: Date | null;
   /// AI Overview の引用ドメインまで取得する対象か（§3.3.6・コストが伴うため画面で切替）
   aioTracked: boolean;
+  /// ── SERP実測（DataForSEO・§3.3.5）。未取得なら null＝「未計測」であって0ではない
+  serp: SerpInfo | null;
+};
+
+/** 最新SERPスナップショットの要約（§3.3.5 競合の動きを追う） */
+export type SerpInfo = {
+  asOf: Date;
+  /** 1〜3位のドメイン。誰に面を取られているか */
+  topDomains: string[];
+  /** 自社が20位以内にいればその順位。いなければ null＝圏外 */
+  ourPosition: number | null;
+  /** AI Overview が出るKWか（§3.3.6 AIO有無でCTR曲線を分ける） */
+  hasAiOverview: boolean;
+  /** AIOの引用ドメイン。空配列は「未計測」の場合もある（aioTracked を見て判断） */
+  aioCitedDomains: string[];
 };
 
 type RankRow = {
@@ -51,7 +66,7 @@ export async function getKeywordList(): Promise<{
   /** 最新スナップショットで追跡外（＝順位が落ちて top-N から消えた）KW 数 */
   droppedOut: number;
 }> {
-  const [keywords, rankings] = await Promise.all([
+  const [keywords, rankings, serpRows] = await Promise.all([
     prisma.keyword.findMany({ select: { id: true, keyword: true, aioTracked: true } }),
     prisma.keywordRanking.findMany({
       select: {
@@ -64,7 +79,44 @@ export async function getKeywordList(): Promise<{
       },
       orderBy: { date: "desc" },
     }),
+    // ★SERPは1KWあたり最大20行。上位のみ使うので position<=10 に絞って読む
+    prisma.serpSnapshot.findMany({
+      where: { position: { lte: 10 } },
+      select: {
+        keywordId: true,
+        date: true,
+        position: true,
+        domain: true,
+        isOurs: true,
+        hasAiOverview: true,
+        aioCitedDomains: true,
+      },
+      orderBy: [{ date: "desc" }, { position: "asc" }],
+    }),
   ]);
+
+  // keywordId → 最新日のSERP要約。★日付を混ぜない（古い順位と新しい順位の合成を防ぐ）
+  const serpByKw = new Map<string, SerpInfo>();
+  const serpLatestDay = new Map<string, number>();
+  for (const r of serpRows) {
+    const day = r.date.getTime();
+    const known = serpLatestDay.get(r.keywordId);
+    if (known === undefined) {
+      serpLatestDay.set(r.keywordId, day);
+      serpByKw.set(r.keywordId, {
+        asOf: r.date,
+        topDomains: [],
+        ourPosition: null,
+        hasAiOverview: r.hasAiOverview,
+        aioCitedDomains: r.aioCitedDomains,
+      });
+    } else if (known !== day) {
+      continue; // 最新日以外は捨てる
+    }
+    const info = serpByKw.get(r.keywordId)!;
+    if (info.topDomains.length < 3) info.topDomains.push(r.domain);
+    if (r.isOurs && info.ourPosition === null) info.ourPosition = r.position;
+  }
 
   // 全体の最新／前回スナップショット日を求める
   const dates = [...new Set(rankings.map((r) => r.date.getTime()))].sort((a, b) => b - a);
@@ -102,6 +154,7 @@ export async function getKeywordList(): Promise<{
       band: bandOf(latest.position),
       asOf: latest.date,
       aioTracked: k.aioTracked,
+      serp: serpByKw.get(k.id) ?? null,
     });
   }
 
