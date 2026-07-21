@@ -54,8 +54,19 @@ export type QueueOverview = {
  */
 const CANDIDATE_STATUSES = new Set(["draft", "skip", "skipped"]);
 
-/** 実績の投稿時間帯（07〜22時に毎時1本。posted 579件の分布から） */
-const SLOT_HOURS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
+/**
+ * 投稿枠。1日10本（= operation-cycle.md の「10本/日・70本/週」）。
+ *
+ * ★07〜22時の毎時（16枠）にすると、実績 9.1本/日 に対して配信頻度を
+ *   75%上げることになる。運用の定義を勝手に変えない。
+ * ★時刻は実績で最も本数の多かった10時間を採用（posted 579件の分布）。
+ *   16時53本 / 20時44本 / 07時43本 / 08時41本 / 18時41本 /
+ *   10時40本 / 11時40本 / 13時40本 / 21時40本 / 17時35本
+ */
+const SLOT_HOURS = [7, 8, 10, 11, 13, 16, 17, 18, 20, 21];
+
+/** 実績の1日あたり投稿数（= SLOT_HOURS.length）。残数の警告に使う */
+export const POSTS_PER_DAY = SLOT_HOURS.length;
 
 function gasConfig(): { url: string; key: string } | null {
   const url = (process.env.MMS_THREADS_GAS_URL ?? "").trim();

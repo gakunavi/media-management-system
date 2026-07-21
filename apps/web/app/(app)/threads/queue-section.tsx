@@ -48,9 +48,9 @@ export function QueueSection({ data }: { data: QueueOverview }) {
       ? { text: "キュー残数を取得できていません", tone: "warn" as const }
       : data.pending === 0
         ? { text: "キューは空です。配信が止まります", tone: "bad" as const }
-        : data.pending <= 15
+        : data.pending <= 10
           ? { text: `キュー残り${data.pending}本。明日には止まります`, tone: "bad" as const }
-          : data.pending <= 45
+          : data.pending <= 30
             ? { text: `キュー残り${data.pending}本。3日以内に補充が要ります`, tone: "warn" as const }
             : { text: `キュー残り${data.pending}本`, tone: "ok" as const };
 
@@ -86,7 +86,7 @@ export function QueueSection({ data }: { data: QueueOverview }) {
           {data.candidates.length > 0 && (
             <>
               {" — "}シートに<strong>一度も投稿していない下書きが {data.candidates.length}件</strong>
-              あります（1日約16本なので約{Math.floor(data.candidates.length / 16)}日分）。
+              あります（1日10本なので約{Math.floor(data.candidates.length / 10)}日分）。
             </>
           )}
         </p>
@@ -111,7 +111,7 @@ export function QueueSection({ data }: { data: QueueOverview }) {
             （過去に配信されずに残った原稿）です。skip は没にしたのか予定時刻を
             過ぎただけなのか、記録からは判別できません。
             <strong>公開は取り消せない</strong>ので、承認は石井さんの操作にしています。
-            承認すると 07〜22時の空き枠に順に割り当てます（過去の時刻には入れません）。
+            承認すると実績の多い10枠（07/08/10/11/13/16/17/18/20/21時）に順に割り当てます（過去の時刻には入れません）。
           </p>
 
           <div className="mb-3 flex flex-wrap items-center gap-2">
