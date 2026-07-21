@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { NOT_MEASURED } from "@mms/shared";
 import {
   currentPeriod,
@@ -7,6 +8,7 @@ import {
   getJobHealth,
   type GoalRow,
 } from "@/lib/dashboard";
+import { getActionStats, type ActionStats } from "@/lib/actions-repo";
 
 // ★石井さんが毎日見る画面（設計書 §4.1 段1〜段3・段7）。
 //   段4/段5/段6 は operator（P4）で追加する。
@@ -29,11 +31,12 @@ const jaDateTime = (d: Date | null) =>
 
 export default async function Dashboard() {
   const period = currentPeriod();
-  const [goals, funnel, buyer, health] = await Promise.all([
+  const [goals, funnel, buyer, health, actionStats] = await Promise.all([
     getGoals(period),
     getFunnel(),
     getBuyerQuality(),
     getJobHealth(),
+    getActionStats(),
   ]);
 
   return (
@@ -55,6 +58,7 @@ export default async function Dashboard() {
       <div className="grid gap-4">
         <GoalsPanel goals={goals} />
         <FunnelPanel funnel={funnel} />
+        <NextActionsPanel stats={actionStats} />
         <div className="grid gap-4 lg:grid-cols-2">
           <BuyerPanel buyer={buyer} />
           <HealthPanel health={health} />
@@ -62,7 +66,7 @@ export default async function Dashboard() {
       </div>
 
       <p className="mt-6 text-center text-[12px] text-[var(--faint)]">
-        段4「今週の変化」・段5「次の一手」・段6「施策の生死」は P4（operator）で追加。
+        段4「今週の変化」・段6「施策の生死」は P4/P8 で追加。
         すべての値は <Unmeasured small /> と実測ゼロを区別しています（§3 規約）。
       </p>
     </div>
@@ -234,6 +238,52 @@ function FunnelPanel({ funnel }: { funnel: Awaited<ReturnType<typeof getFunnel>>
         CTA表示以降は計測タグ（P2.5）を本番設置し計測開始を記録すると表示される。
       </p>
     </Panel>
+  );
+}
+
+/* ─────────────────────────── 段5 ─────────────────────────── */
+
+function NextActionsPanel({ stats }: { stats: ActionStats }) {
+  return (
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+      <div className="mb-4 flex items-baseline gap-2.5">
+        <span className="inline-flex h-5 items-center rounded-md bg-[var(--ink)] px-1.5 text-[11px] font-semibold text-white">
+          段5
+        </span>
+        <h2 className="text-[15px] font-semibold">次の一手</h2>
+        <Link
+          href="/experiments"
+          className="ml-auto text-[12px] text-[var(--accent)] hover:underline"
+        >
+          施策・PDCA を開く →
+        </Link>
+      </div>
+      {stats.proposed > 0 ? (
+        <div className="flex items-center gap-4">
+          <div>
+            <span className="tnum text-3xl font-bold text-[var(--accent)]">{stats.proposed}</span>
+            <span className="ml-1.5 text-[13px] text-[var(--muted)]">件の承認待ち</span>
+          </div>
+          <Link
+            href="/experiments"
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-[13px] font-medium text-white hover:opacity-90"
+          >
+            承認する
+          </Link>
+          <span className="text-[12px] text-[var(--faint)]">
+            実行中 {stats.approved}・完了 {stats.done}
+          </span>
+        </div>
+      ) : (
+        <p className="text-[13px] text-[var(--muted)]">
+          承認待ちの提案はありません。
+          <Link href="/experiments" className="ml-1 text-[var(--accent)] hover:underline">
+            施策・PDCA
+          </Link>
+          で「立案を実行」すると、実測から改善案を起票します。
+        </p>
+      )}
+    </section>
   );
 }
 
