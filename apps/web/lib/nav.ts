@@ -25,16 +25,16 @@ export const NAV: NavGroup[] = [
   {
     title: "獲得",
     items: [
-      { href: "/leads", label: "リード", phase: "P2.6", ready: false, icon: "leads" },
+      { href: "/leads", label: "リード", ready: true, icon: "leads" },
       { href: "/threads", label: "Threads・代理店", phase: "P5", ready: false, icon: "threads" },
     ],
   },
   {
     title: "コンテンツ",
     items: [
-      { href: "/content", label: "記事・投稿", phase: "P7", ready: false, icon: "content" },
-      { href: "/clusters", label: "トピッククラスタ", phase: "P4.3", ready: false, icon: "clusters" },
-      { href: "/keywords", label: "キーワード", phase: "P4.5", ready: false, icon: "keywords" },
+      { href: "/content", label: "記事・投稿", ready: true, icon: "content" },
+      { href: "/clusters", label: "トピッククラスタ", ready: true, icon: "clusters" },
+      { href: "/keywords", label: "キーワード", ready: true, icon: "keywords" },
       { href: "/ideas", label: "ネタ", phase: "P4.6", ready: false, icon: "ideas" },
     ],
   },
@@ -48,8 +48,8 @@ export const NAV: NavGroup[] = [
   {
     title: "運用",
     items: [
-      { href: "/experiments", label: "施策・PDCA", phase: "P8", ready: false, icon: "experiments" },
-      { href: "/jobs", label: "ジョブ", phase: "P1", ready: false, icon: "jobs" },
+      { href: "/experiments", label: "施策・PDCA", ready: true, icon: "experiments" },
+      { href: "/jobs", label: "ジョブ", ready: true, icon: "jobs" },
     ],
   },
 ];
