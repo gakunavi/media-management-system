@@ -238,11 +238,11 @@ const THREADS_STALL_RED_DAYS = 3;
  * キューの残り本数の閾値。
  *
  * ★空になってから気づく設計だと、気づいた時点で既に数日止まっている。
- *   配信は 10本/日（operation-cycle.md の定義・実績9.1本/日）なので、
- *   10本を「明日には切れる」、30本を「3日以内に切れる」と見る。
+ *   配信は 13本/日（cowork の週次生成88本/週を収める枠数）なので、
+ *   13本を「明日には切れる」、39本を「3日以内に切れる」と見る。
  */
-const QUEUE_RED_POSTS = 10;
-const QUEUE_WARN_POSTS = 30;
+const QUEUE_RED_POSTS = 13;
+const QUEUE_WARN_POSTS = 39;
 
 export async function getJobHealth(now: Date = new Date()): Promise<JobHealth> {
   const jobs = await prisma.job.findMany({
@@ -394,7 +394,7 @@ async function getThreadsDelivery(now: Date): Promise<ThreadsDelivery> {
       lastPostedAt: last.publishedAt,
       gapDays,
       alert: "red",
-      reason: `${stock}。今の配信ペース（1日10本）だと明日には止まります`,
+      reason: `${stock}。今の配信ペース（1日13本）だと明日には止まります`,
       queuePending,
     };
   }
