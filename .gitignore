@@ -68,3 +68,6 @@ coverage/
 tmp/
 temp/
 *.tmp
+
+# ラッコへ渡すKWリスト（DBから再生成できる）
+data/rakko-requests/*.csv

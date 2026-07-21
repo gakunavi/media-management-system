@@ -9,7 +9,10 @@
 //   aio_miss   … AI Overview に競合は引用されているのに自社は引用されていないKW。
 //                 順位が取れていても引用されなければクリックは競合に行く（§3.3.6）
 //
-//   ★未実装: gsc_gap / rakko_paa / news（ラッコ連携=P4.5、News=P6）
+//   rakko_paa  … ラッコで取得した PAA（Googleが実際に表示している「他の人はこちらも質問」）
+//                のうち、**自社が記事を持っていないKW**の質問（§13.4-②）
+//
+//   ★未実装: gsc_gap / news（News=P6）
 import { prisma, type Prisma } from "@mms/db";
 
 /** 直近何日の実績を見るか。Threads は投稿頻度が高いので90日で十分な母数になる */
@@ -37,6 +40,7 @@ export async function generateIdeas(): Promise<IdeaGenResult> {
   const drafts = [
     ...(await fromThreadsHits(business.id)),
     ...(await fromAioMisses(business.id)),
+    ...(await fromRakkoQuestions(business.id)),
   ];
 
   let created = 0;
@@ -191,6 +195,73 @@ async function fromAioMisses(_businessId: string): Promise<IdeaDraft[]> {
   return out.slice(0, 10);
 }
 
+/**
+ * PAA（他の人はこちらも質問）からネタを作る（§13.4-② IdeaSource.rakko_paa）。
+ *
+ * ★「未回答のもの」をどう判定するか
+ *   本来は自社記事の本文と突き合わせたいが、wp_sync は本文を取得していない
+ *   （§3.9.1「本文全体は比較しない＝軽量」）。つまり**回答済みかは判定できない**。
+ *   そこで、**記事が1本も割り当たっていないKW**の質問だけを対象にする。
+ *   記事が無い以上そのKWの質問に答えていないことは確実で、推測が入らない。
+ *   記事があるKWの質問は「答えているかもしれない」ので起票しない（ノイズを出さない）。
+ *
+ * ★PAA を優先する。suggest 派生や合成された質問は、キーワードを疑問文に
+ *   言い換えただけのことがあり、実際に検索されている保証がない。
+ */
+async function fromRakkoQuestions(_businessId: string): Promise<IdeaDraft[]> {
+  // ★JSON列のnull判定は Prisma.DbNull（値）が要るが、ここは type import しか
+  //   していないので、取得後にJS側で弾く。件数は数十件なので問題にならない
+  const research = await prisma.keywordResearch.findMany({
+    where: {
+      source: "rakko",
+      // ★記事が割り当たっていないKWだけ（＝確実に未回答）
+      keyword: { assignments: { none: {} } },
+    },
+    orderBy: { fetchedAt: "desc" },
+    include: { keyword: { select: { keyword: true } } },
+  });
+
+  // ソース表記が10種類に揺れているため正規化する（PAA / rakko_paa / paa / lsi/paa …）
+  const isPaa = (v: unknown) => /paa/i.test(String(v ?? ""));
+
+  const seen = new Set<string>();
+  const out: IdeaDraft[] = [];
+
+  for (const r of research) {
+    const kw = r.keyword.keyword;
+    // ★検証用に作られた「テスト」KW を混ぜない
+    if (/^テスト$/i.test(kw.trim())) continue;
+
+    const items = Array.isArray(r.qaQuestions) ? r.qaQuestions : [];
+    const questions = items
+      .filter((q): q is { question: string; source?: string } =>
+        typeof q === "object" && q !== null && typeof (q as { question?: unknown }).question === "string",
+      )
+      .filter((q) => isPaa(q.source))
+      .map((q) => q.question.trim())
+      .filter((q) => q.length > 0);
+
+    for (const q of questions) {
+      if (seen.has(q)) continue;
+      seen.add(q);
+      out.push({
+        title: `[PAA] ${q}`,
+        body:
+          `Googleが「${kw}」の検索結果に表示している質問（他の人はこちらも質問）。` +
+          `★このKWには自社記事が1本も割り当たっていないため、未回答であることは確実。` +
+          `／PAAは検索結果に出ている＝実際に需要がある質問で、疑問文に言い換えただけの` +
+          `キーワードとは違う（§13.4-②）。`,
+        source: "rakko_paa",
+        sourceRef: { keyword: kw, question: q } as Prisma.InputJsonValue,
+        impacts: ["impressions", "clicks"],
+        state: "new",
+        keywordId: r.keywordId,
+      });
+    }
+  }
+  return out.slice(0, 15);
+}
+
 function firstLine(s: string, max = 40): string {
   const line = (s ?? "").split("\n").find((l) => l.trim()) ?? "";
   return line.trim().slice(0, max);
@@ -209,8 +280,8 @@ export type IdeaRow = {
 export const IDEA_SOURCE_LABEL: Record<string, string> = {
   threads_hit: "Threads反響",
   aio_miss: "AIO未引用",
+  rakko_paa: "PAA質問",
   gsc_gap: "GSCギャップ",
-  rakko_paa: "PAA",
   news: "News",
   lead_competitor: "競合",
   manual: "手動",

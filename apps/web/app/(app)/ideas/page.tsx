@@ -54,9 +54,10 @@ export default async function IdeasPage() {
       )}
 
       <p className="mt-4 text-[12px] text-[var(--faint)]">
-        供給源のうち稼働しているのは <strong>Threads反響</strong>（§13.4-④）と
-        <strong> AIO未引用</strong>（§3.3.6）の2つ。GSCギャップ・PAA・News は未実装
-        （ラッコ連携=P4.5 / News=P6）。
+        稼働中の供給源は <strong>Threads反響</strong>（§13.4-④）・
+        <strong>AIO未引用</strong>（§3.3.6）・<strong>PAA質問</strong>（§13.4-②）の3つ。
+        PAAは「自社記事が1本も割り当たっていないKW」の質問だけを出す（記事があるKWは
+        回答済みか判定できないため出さない）。GSCギャップ・News は未実装。
         <br />
         ★[記事化する] は「施策・PDCA」への起票までを行います。ラッコでのKW取得まで
         自動で繋ぐのは P4.5（ラッコ連携）の後です。
