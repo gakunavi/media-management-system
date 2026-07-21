@@ -18,6 +18,16 @@ import path from "node:path";
 const GSC_KEY = path.resolve(process.cwd(), "../../secrets/gsc-service-account.json");
 const gscKeyReady = existsSync(GSC_KEY);
 
+// WP 認証が .env にあるかで WP同期ジョブの有効/無効を決める
+import { readFileSync } from "node:fs";
+let wpReady = false;
+try {
+  const envText = readFileSync(path.resolve(process.cwd(), "../../.env"), "utf8");
+  wpReady = /^MMS_WP_APP_PASSWORD=.+$/m.test(envText) && /^MMS_WP_USER=.+$/m.test(envText);
+} catch {
+  wpReady = false;
+}
+
 const JOBS = [
   {
     name: "gsc-fetch-daily",
@@ -29,6 +39,16 @@ const JOBS = [
     note: gscKeyReady
       ? "GSC日次取得: 最終取得日〜昨日の欠測を毎回埋める（§3.2.2）"
       : "GSC日次取得【停止中】secrets/gsc-service-account.json を置いて再実行すると有効化",
+  },
+  {
+    name: "wp-sync-daily",
+    schedule: "0 6 * * *", // 毎日 06:00 JST（GSC取得の前）
+    kind: "builtin",
+    config: { script: "wp_sync.py", timeoutSeconds: 900 },
+    enabled: wpReady,
+    note: wpReady
+      ? "WP同期: 新規記事の取り込みとメタ差分の検出（§3.9.1・読み取りのみ）"
+      : "WP同期【停止中】.env に MMS_WP_USER / MMS_WP_APP_PASSWORD を設定して再実行",
   },
   {
     name: "operator-propose-weekly",

@@ -107,6 +107,11 @@ services:
       # GSC 日次取得（builtin/gsc_daily.py）。鍵は secrets/ を読み取り専用マウント
       GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/gsc-service-account.json
       MMS_GSC_SITE_URL: ${MMS_GSC_SITE_URL:-}
+      # WordPress 同期（読み取りのみ・§3.9.1）
+      MMS_WP_BASE_URL: ${MMS_WP_BASE_URL:-}
+      MMS_WP_USER: ${MMS_WP_USER:-}
+      MMS_WP_APP_PASSWORD: ${MMS_WP_APP_PASSWORD:-}
+      MMS_WP_POST_TYPE: ${MMS_WP_POST_TYPE:-posts}
     volumes:
       # ★設計書 §6「既存 Python 資産は書き直さない」。
       #   コピーすると本体と乖離するため、元のディレクトリを **読み取り専用でマウント**する。
