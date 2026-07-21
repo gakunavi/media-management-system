@@ -1,18 +1,21 @@
 import { getIdeas, IDEA_SOURCE_LABEL } from "@/lib/ideas";
 import { RunIdeas } from "./run-ideas";
+import { IdeaCard } from "./idea-card";
 
 // ネタ（設計書 §4.2 /ideas・§13.4-④「チャネル間でネタが循環する」）
 export const dynamic = "force-dynamic";
 
-const SOURCE_STYLE: Record<string, string> = {
-  threads_hit: "bg-[var(--accent-weak)] text-[var(--accent)]",
-  aio_miss: "bg-[var(--warn)]/15 text-[#9a6a00]",
-};
 
 export default async function IdeasPage() {
-  const ideas = await getIdeas();
+  const all = await getIdeas();
+  // ★未対応を上に。着手すべきものが埋もれないようにする
+  const order: Record<string, number> = { new: 0, adopted: 1, dismissed: 2 };
+  const ideas = [...all].sort(
+    (a, b) => (order[a.state] ?? 9) - (order[b.state] ?? 9) || +b.createdAt - +a.createdAt,
+  );
+  const openCount = all.filter((i) => i.state === "new").length;
   const bySource = new Map<string, number>();
-  for (const i of ideas) bySource.set(i.source, (bySource.get(i.source) ?? 0) + 1);
+  for (const i of all) if (i.state === "new") bySource.set(i.source, (bySource.get(i.source) ?? 0) + 1);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -20,7 +23,7 @@ export default async function IdeasPage() {
         <div>
           <h1 className="text-xl font-bold tracking-tight">ネタ</h1>
           <p className="mt-0.5 text-[13px] text-[var(--muted)]">
-            記事ネタの自動供給・{ideas.length}件
+            記事ネタの自動供給・未対応 {openCount}件 / 全{all.length}件
             {bySource.size > 0 && (
               <span className="text-[var(--faint)]">
                 （
@@ -45,35 +48,7 @@ export default async function IdeasPage() {
       ) : (
         <div className="space-y-2.5">
           {ideas.map((i) => (
-            <article
-              key={i.id}
-              className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-4"
-            >
-              <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                <span
-                  className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
-                    SOURCE_STYLE[i.source] ?? "bg-[var(--panel-2)] text-[var(--faint)]"
-                  }`}
-                >
-                  {IDEA_SOURCE_LABEL[i.source] ?? i.source}
-                </span>
-                {i.impacts.map((m) => (
-                  <span
-                    key={m}
-                    className="rounded bg-[var(--panel-2)] px-1.5 py-0.5 text-[11px] text-[var(--muted)]"
-                  >
-                    {m}
-                  </span>
-                ))}
-                <span className="ml-auto text-[11px] text-[var(--faint)]">
-                  {i.createdAt.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" })}
-                </span>
-              </div>
-              <h2 className="text-[14px] font-semibold">{i.title}</h2>
-              {i.body && (
-                <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted)]">{i.body}</p>
-              )}
-            </article>
+            <IdeaCard key={i.id} idea={i} />
           ))}
         </div>
       )}
@@ -83,7 +58,8 @@ export default async function IdeasPage() {
         <strong> AIO未引用</strong>（§3.3.6）の2つ。GSCギャップ・PAA・News は未実装
         （ラッコ連携=P4.5 / News=P6）。
         <br />
-        ★[記事化する] からラッコ取得ジョブまで繋ぐのは P4.6 の残作業です。
+        ★[記事化する] は「施策・PDCA」への起票までを行います。ラッコでのKW取得まで
+        自動で繋ぐのは P4.5（ラッコ連携）の後です。
       </p>
     </div>
   );
