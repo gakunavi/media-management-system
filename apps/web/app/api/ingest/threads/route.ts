@@ -36,11 +36,31 @@ type IncomingPost = {
   metrics?: Record<string, unknown>;
 };
 
+/** GAS の account シート1行分（§2454 SnsAccountHealth の元データ） */
+type IncomingAccountDay = {
+  /** "YYYY-MM-DD" */
+  date: string;
+  followers_count: number;
+};
+
 type Payload = {
   /** アカウント識別子。複数アカウント運用に備える（§11.3 投稿の分離ガード） */
   accountRef?: string;
   posts?: IncomingPost[];
+  /** フォロワー数の日次履歴。viewsPerFollower の急落検知に使う */
+  account?: IncomingAccountDay[];
 };
+
+/**
+ * 配信制限を疑う閾値（§2454 restrictionSuspected）。
+ *
+ * ★「投稿は普通にできているのに views だけ落ちる」を捕まえる。
+ *   フォロワーが減ったせいで views が落ちたのは制限ではないので、
+ *   viewsPerFollower（1フォロワーあたりの到達）で見る必要がある。
+ */
+const RESTRICTION_DROP_RATIO = 0.5;
+/** 基準線を引くのに必要な日数。これ未満は「判定不能」であって「正常」ではない */
+const RESTRICTION_MIN_HISTORY_DAYS = 7;
 
 const METRIC_KEYS = ["views", "likes", "replies", "reposts", "quotes", "shares"] as const;
 
@@ -196,6 +216,10 @@ export async function POST(req: Request) {
     }
   }
 
+  // ── アカウント指標（フォロワー数と viewsPerFollower）──
+  const accountDays = Array.isArray(body.account) ? body.account : [];
+  const healthRows = await upsertAccountHealth(channel.id, accountDays);
+
   // ── 計測開始の記録（§3 規約）──
   if (metricRows > 0) {
     const cov = await prisma.measurementCoverage.findFirst({
@@ -214,5 +238,110 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, upserted, metrics: metricRows, skipped });
+  return NextResponse.json({
+    ok: true,
+    upserted,
+    metrics: metricRows,
+    skipped,
+    accountDays: healthRows,
+  });
+}
+
+/**
+ * フォロワー数の履歴から SnsAccountHealth を作る（§2454）。
+ *
+ * 求めるのは「その日に投稿した分がフォロワー数に対してどれだけ届いたか」。
+ *   viewsPerFollower = その日の投稿の平均views / その日のフォロワー数
+ *
+ * ★フォロワーが横ばいなのに viewsPerFollower だけ落ちたら配信制限を疑う。
+ *   views の生値で見ると「フォロワーが減った」のか「配信が絞られた」のか
+ *   区別できず、書き直しても直らない問題に打ち手を打つことになる。
+ */
+async function upsertAccountHealth(
+  channelId: string,
+  days: IncomingAccountDay[],
+): Promise<number> {
+  if (days.length === 0) return 0;
+
+  // 日付順に整える（差分と基準線の計算に順序が要る）
+  const sorted = days
+    .map((d) => ({ date: new Date(`${d.date}T00:00:00Z`), followers: Number(d.followers_count) }))
+    .filter((d) => !Number.isNaN(d.date.getTime()) && Number.isFinite(d.followers) && d.followers > 0)
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  if (sorted.length === 0) return 0;
+
+  // その日に公開された投稿の views 平均（★未計測の投稿は平均に入れない・§3）
+  const since = sorted[0].date;
+  const posts = await prisma.contentItem.findMany({
+    where: { channelId, type: "post", publishedAt: { gte: since } },
+    select: { id: true, publishedAt: true },
+  });
+  const viewsByItem = new Map<string, number>();
+  if (posts.length > 0) {
+    const metrics = await prisma.contentMetric.groupBy({
+      by: ["contentItemId"],
+      where: { metric: "threads_views", contentItemId: { in: posts.map((p) => p.id) } },
+      _max: { value: true },
+    });
+    for (const m of metrics) viewsByItem.set(m.contentItemId, m._max.value ?? 0);
+  }
+
+  const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+  const postsByDay = new Map<string, { delivered: number; views: number[] }>();
+  for (const p of posts) {
+    if (!p.publishedAt) continue;
+    const k = dayKey(p.publishedAt);
+    const cur = postsByDay.get(k) ?? { delivered: 0, views: [] };
+    cur.delivered += 1;
+    const v = viewsByItem.get(p.id);
+    if (v !== undefined) cur.views.push(v); // 未計測は入れない
+    postsByDay.set(k, cur);
+  }
+
+  const vpfHistory: number[] = [];
+  let written = 0;
+
+  for (let i = 0; i < sorted.length; i++) {
+    const { date, followers } = sorted[i];
+    const prev = i > 0 ? sorted[i - 1].followers : null;
+    const stat = postsByDay.get(dayKey(date));
+    const avgViews =
+      stat && stat.views.length > 0
+        ? stat.views.reduce((s, v) => s + v, 0) / stat.views.length
+        : null;
+    const vpf = avgViews !== null ? avgViews / followers : null;
+
+    // ★基準線が無いうちは判定しない。false は「正常」ではなく「まだ判定できない」
+    let suspected = false;
+    if (vpf !== null && vpfHistory.length >= RESTRICTION_MIN_HISTORY_DAYS) {
+      const base = [...vpfHistory].sort((a, b) => a - b)[Math.floor(vpfHistory.length / 2)];
+      const followersStable = prev === null || followers >= prev * 0.98;
+      suspected = base > 0 && vpf < base * RESTRICTION_DROP_RATIO && followersStable;
+    }
+    if (vpf !== null) vpfHistory.push(vpf);
+
+    await prisma.snsAccountHealth.upsert({
+      where: { channelId_date: { channelId, date } },
+      update: {
+        followers,
+        followersDelta: prev === null ? 0 : followers - prev,
+        postsDelivered: stat?.delivered ?? 0,
+        avgViews,
+        viewsPerFollower: vpf,
+        restrictionSuspected: suspected,
+      },
+      create: {
+        channelId,
+        date,
+        followers,
+        followersDelta: prev === null ? 0 : followers - prev,
+        postsDelivered: stat?.delivered ?? 0,
+        avgViews,
+        viewsPerFollower: vpf,
+        restrictionSuspected: suspected,
+      },
+    });
+    written += 1;
+  }
+  return written;
 }

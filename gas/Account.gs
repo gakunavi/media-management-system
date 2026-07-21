@@ -21,10 +21,25 @@
  * ═══ 使い方 ═══
  *   1) まず checkFollowersCount() を手動実行し、取得できるか確認する
  *   2) 取れたら installAccountTrigger() で日次記録を開始する
+ *
+ * ★結果は「実行ログ」に出る（アラートは出さない）。GASエディタから実行すると
+ *   アラートはスプレッドシート側のタブに出てしまい、気づかないまま
+ *   「実行中」で固まるため。
  */
 
 /** 記録先シート名 */
 var ACCOUNT_SHEET = 'account';
+
+/**
+ * ★alert は使わない。
+ *   SpreadsheetApp.getUi().alert() はダイアログを**スプレッドシート側のタブ**に
+ *   出すため、GASエディタから ▶ 実行するとダイアログが見えないまま
+ *   「実行中」で固まる（実際に起きた）。セットアップ系の関数はエディタから
+ *   実行されるので、結果は実行ログにだけ出す。
+ */
+function alog_(msg) {
+  Logger.log(msg);
+}
 
 /**
  * 【まずこれを実行】フォロワー数が取得できるか確認する。
@@ -34,16 +49,12 @@ function checkFollowersCount() {
   assertConfig_();
   try {
     var n = fetchFollowersCount_();
-    var msg = 'フォロワー数の取得に成功しました: ' + n + '人\n\n'
-            + '次に installAccountTrigger() を実行すると日次記録が始まります。';
-    Logger.log(msg);
-    try { SpreadsheetApp.getUi().alert(msg); } catch (e) { /* トリガー実行時はUIが無い */ }
+    alog_('✅ フォロワー数の取得に成功: ' + n + '人'
+        + ' / 次に installAccountTrigger() を実行すると日次記録が始まります');
     return n;
   } catch (e) {
-    var err = 'フォロワー数を取得できませんでした:\n' + e.message + '\n\n'
-            + 'アクセストークンに threads_manage_insights 権限が必要な可能性があります。';
-    Logger.log(err);
-    try { SpreadsheetApp.getUi().alert(err); } catch (e2) { /* noop */ }
+    alog_('❌ フォロワー数を取得できません: ' + e.message
+        + ' / アクセストークンに threads_manage_insights 権限が必要な可能性があります');
     throw e;
   }
 }
@@ -143,9 +154,7 @@ function installAccountTrigger() {
     .everyDays(1)
     .create();
 
-  var msg = '日次のフォロワー数記録を開始しました（毎日 5:30）。\n'
-          + '既存トリガー削除: ' + deleted + '件\n\n'
-          + '★履歴は今日から積み上がります。過去には遡れません。';
-  Logger.log(msg);
-  try { SpreadsheetApp.getUi().alert(msg); } catch (e) { /* noop */ }
+  alog_('✅ 日次のフォロワー数記録を開始しました（毎日 5:30）'
+      + ' / 既存トリガー削除: ' + deleted + '件'
+      + ' / ★履歴は今日から積み上がります。過去には遡れません');
 }

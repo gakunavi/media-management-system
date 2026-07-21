@@ -1,4 +1,10 @@
-import { getThreadsData, MIN_POSTS_FOR_STAT, type GroupStat } from "@/lib/threads";
+import {
+  getThreadsData,
+  getAccountHealth,
+  MIN_POSTS_FOR_STAT,
+  type GroupStat,
+  type AccountHealth,
+} from "@/lib/threads";
 import { getAgencyData } from "@/lib/agency";
 import { AgencySection } from "./agency-section";
 
@@ -14,10 +20,8 @@ const jaDate = (d: Date | null) =>
 const num = (n: number | null) => (n === null ? "—" : n.toLocaleString("ja-JP"));
 
 export default async function ThreadsPage() {
-  const [{ summary, byFormat, byTarget, byCore, byAgencyAngle, top }, agency] = await Promise.all([
-    getThreadsData(),
-    getAgencyData(),
-  ]);
+  const [{ summary, byFormat, byTarget, byCore, byAgencyAngle, top }, agency, health] =
+    await Promise.all([getThreadsData(), getAgencyData(), getAccountHealth()]);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -42,6 +46,8 @@ export default async function ThreadsPage() {
           bad={summary.unmeasured > 0}
         />
       </div>
+
+      <HealthPanel health={health} />
 
       <Section
         title="フォーマット別"
@@ -108,8 +114,76 @@ export default async function ThreadsPage() {
         </a>{" "}
         に出ます。
         <br />
-        ★viewsPerFollower の急落検知（配信制限のサイン）は未実装です。
+        viewsPerFollower の急落は「投稿はできているのに配信が絞られている」サインで、
+        内容を書き直しても直りません。判定には{" "}
+        <strong>フォロワー数の履歴が最低{" "}
+        {/* HEALTH_MIN_DAYS と同じ値 */}7日分</strong> 必要です。
       </p>
+    </div>
+  );
+}
+
+/** 配信制限の兆候（§2454）。★履歴が足りないうちは「異常なし」と言わない */
+function HealthPanel({ health }: { health: AccountHealth }) {
+  const { latest, rows, hasBaseline, minDays, suspectedDays } = health;
+
+  if (!latest) {
+    return (
+      <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-4">
+        <h2 className="text-[14px] font-semibold">アカウントの健全性</h2>
+        <p className="mt-1 text-[12px] text-[var(--muted)]">
+          フォロワー数の履歴がまだありません。GAS の <code>Account.gs</code> で
+          日次記録を開始し、<code>Api.gs</code> を再デプロイすると取り込まれます。
+          <br />
+          ★<strong>これは「異常なし」ではなく「まだ測っていない」状態です。</strong>
+          followers_count は過去に遡れないため、記録を始めた日からしか履歴が作れません。
+        </p>
+      </div>
+    );
+  }
+
+  const measured = rows.filter((r) => r.viewsPerFollower !== null).length;
+
+  return (
+    <div className="mb-4">
+      <h2 className="mb-2 text-[14px] font-semibold">アカウントの健全性</h2>
+      {suspectedDays > 0 ? (
+        <p className="mb-2 rounded-md bg-[var(--bad)]/10 px-3 py-2 text-[12px] text-[var(--bad)]">
+          ★直近60日のうち <strong>{suspectedDays}日</strong> で viewsPerFollower の急落を検知
+          しました。フォロワーは横ばいなのに到達だけ落ちている状態＝
+          <strong>配信制限を疑うべき</strong>サインです。投稿内容の書き直しでは直りません。
+        </p>
+      ) : !hasBaseline ? (
+        <p className="mb-2 rounded-md bg-[var(--warn)]/12 px-3 py-2 text-[12px] text-[#9a6a00]">
+          判定に必要な履歴が足りません（計測済 {measured}日 / 必要 {minDays}日）。
+          ★<strong>「異常なし」ではなく「まだ判定できない」</strong>状態です。
+        </p>
+      ) : null}
+
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Stat
+          label="フォロワー"
+          value={latest.followers.toLocaleString("ja-JP")}
+          hint={`前日比 ${latest.followersDelta >= 0 ? "+" : ""}${latest.followersDelta}`}
+        />
+        <Stat
+          label="平均views"
+          value={latest.avgViews === null ? "—" : Math.round(latest.avgViews).toLocaleString("ja-JP")}
+          hint="その日に公開した投稿の平均"
+        />
+        <Stat
+          label="views/フォロワー"
+          value={latest.viewsPerFollower === null ? "—" : latest.viewsPerFollower.toFixed(2)}
+          hint="1フォロワーあたりの到達"
+          accent
+        />
+        <Stat
+          label="配信制限の疑い"
+          value={!hasBaseline ? "判定不能" : suspectedDays > 0 ? `${suspectedDays}日` : "なし"}
+          hint={hasBaseline ? `直近${rows.length}日で判定` : `履歴 ${measured}/${minDays}日`}
+          bad={suspectedDays > 0}
+        />
+      </div>
     </div>
   );
 }

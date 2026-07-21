@@ -150,6 +150,32 @@ def to_num(v):
         return None
 
 
+def gas_fetch_account() -> list[dict]:
+    """フォロワー数の日次履歴を取る（§2454 SnsAccountHealth の元データ）。
+
+    ★Api.gs に action=account を足していない古いデプロイでは 400 が返る。
+      その場合は空で続行する。ここで落として投稿の同期まで止めるのは筋が悪い。
+    """
+    try:
+        payload = gas_fetch("account")
+    except RuntimeError as e:
+        log(f"★アカウント指標を取得できません（Api.gs の再デプロイが必要かも）: {e}")
+        return []
+    rows = payload.get("account") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        return []
+    out = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        d = str(r.get("date") or "").strip()
+        n = to_num(r.get("followers_count"))
+        # ★0 や欠損は捨てる。フォロワー0人という誤った履歴を残さない（§3）
+        if d and n:
+            out.append({"date": d, "followers_count": int(n)})
+    return out
+
+
 def gas_fetch(action: str) -> dict:
     base = os.environ.get("MMS_THREADS_GAS_URL", "").strip()
     key = os.environ.get("MMS_THREADS_GAS_KEY", "").strip()
@@ -257,13 +283,16 @@ def is_measured(row: dict, metrics: dict) -> bool:
     return any(v for v in metrics.values())
 
 
-def post_to_ingest(posts: list[dict], account_ref: str) -> dict:
+def post_to_ingest(posts: list[dict], account_ref: str, account: list[dict] | None = None) -> dict:
     secret = os.environ.get("MMS_INGEST_SECRET", "")
     if not secret:
         raise RuntimeError("MMS_INGEST_SECRET が未設定です（受口が 503 を返します）")
     base = os.environ.get("MMS_WEB_INTERNAL_URL", "http://web:3000").rstrip("/")
 
-    body = json.dumps({"accountRef": account_ref, "posts": posts}, ensure_ascii=False)
+    payload = {"accountRef": account_ref, "posts": posts}
+    if account:
+        payload["account"] = account
+    body = json.dumps(payload, ensure_ascii=False)
     ts = str(int(time.time()))
     sig = hmac.new(
         secret.encode(), f"{ts}.{body}".encode(), hashlib.sha256
@@ -311,18 +340,28 @@ def main() -> int:
     with_metrics = sum(1 for p in posts if p.get("metrics"))
     log(f"送信対象 {len(posts)} 件（うちインサイトあり {with_metrics} 件）")
 
-    upserted = metrics = skipped = 0
+    account = gas_fetch_account()
+    log(f"フォロワー数の履歴 {len(account)}日分")
+
+    upserted = metrics = skipped = account_days = 0
     for i in range(0, len(posts), CHUNK):
         chunk = posts[i : i + CHUNK]
-        res = post_to_ingest(chunk, account_ref)
+        # ★アカウント指標は最後のチャンクにだけ載せる。投稿を全部入れてから
+        #   計算しないと、その日の平均viewsが未取り込みの投稿を欠いた値になる
+        is_last = i + CHUNK >= len(posts)
+        res = post_to_ingest(chunk, account_ref, account if is_last else None)
         if not res.get("ok"):
             raise RuntimeError(f"ingest が失敗を返しました: {res}")
         upserted += res.get("upserted", 0)
         metrics += res.get("metrics", 0)
         skipped += res.get("skipped", 0)
+        account_days += res.get("accountDays", 0)
         log(f"  {i + len(chunk)}/{len(posts)} 送信済み")
 
-    log(f"完了: 投稿 {upserted} 件 / 指標 {metrics} 行 / スキップ {skipped} 件")
+    log(
+        f"完了: 投稿 {upserted} 件 / 指標 {metrics} 行 / スキップ {skipped} 件 / "
+        f"アカウント指標 {account_days} 日分"
+    )
     if with_metrics == 0:
         # ★§3 規約「欠測とゼロの区別」。0 を書くのではなく未計測として警告する
         log("★インサイトが1件も取れていません。GAS 側 Insights.gs の収集を確認してください")

@@ -200,3 +200,55 @@ function groupBy(posts: ThreadsPost[], key: (p: ThreadsPost) => string): GroupSt
   });
   return out;
 }
+
+
+// ── アカウントの健全性（§2454 SnsAccountHealth・配信制限の検知）──
+
+export type HealthRow = {
+  date: Date;
+  followers: number;
+  followersDelta: number;
+  postsDelivered: number;
+  avgViews: number | null;
+  viewsPerFollower: number | null;
+  restrictionSuspected: boolean;
+};
+
+export type AccountHealth = {
+  rows: HealthRow[];
+  latest: HealthRow | null;
+  /** 基準線を引けるだけの履歴があるか。無いうちは「異常なし」と言ってはいけない */
+  hasBaseline: boolean;
+  /** 判定に必要な日数（UIで残り日数を出すため） */
+  minDays: number;
+  suspectedDays: number;
+};
+
+/** 基準線に要る日数。route.ts の RESTRICTION_MIN_HISTORY_DAYS と揃える */
+export const HEALTH_MIN_DAYS = 7;
+
+export async function getAccountHealth(): Promise<AccountHealth> {
+  const rows = await prisma.snsAccountHealth.findMany({
+    where: { channel: { type: "threads" } },
+    orderBy: { date: "desc" },
+    take: 60,
+    select: {
+      date: true,
+      followers: true,
+      followersDelta: true,
+      postsDelivered: true,
+      avgViews: true,
+      viewsPerFollower: true,
+      restrictionSuspected: true,
+    },
+  });
+
+  const measured = rows.filter((r) => r.viewsPerFollower !== null).length;
+  return {
+    rows,
+    latest: rows[0] ?? null,
+    hasBaseline: measured >= HEALTH_MIN_DAYS,
+    minDays: HEALTH_MIN_DAYS,
+    suspectedDays: rows.filter((r) => r.restrictionSuspected).length,
+  };
+}
