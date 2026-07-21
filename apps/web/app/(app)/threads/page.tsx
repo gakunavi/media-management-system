@@ -2,6 +2,7 @@ import {
   getThreadsData,
   getAccountHealth,
   MIN_POSTS_FOR_STAT,
+  MIN_ENGAGEMENTS_FOR_RATE,
   type GroupStat,
   type AccountHealth,
 } from "@/lib/threads";
@@ -67,7 +68,7 @@ export default async function ThreadsPage() {
 
       <Section
         title="フォーマット別"
-        note={`集客コンテンツのみ（代理店募集${summary.agencyPosts}投稿は別枠）。平均は計測済 ${MIN_POSTS_FOR_STAT}件以上のグループだけ算出する。倍率は中央値 ${num(summary.medianFormatAvg)} views 比。`}
+        note={`集客コンテンツのみ（代理店募集${summary.agencyPosts}投稿は別枠）。平均は計測済 ${MIN_POSTS_FOR_STAT}件以上のグループだけ算出する。倍率は中央値 ${num(summary.medianFormatAvg)} views 比。★views・いいね率・返信数で順位が食い違う（質問型は views 1位・いいね率11位・返信 2位）。どれを「反応が良い」と呼ぶかで採るべきフォーマットが変わるので、目的に合う列を見ること。`}
         rows={byFormat}
         median={summary.medianFormatAvg}
       />
@@ -317,7 +318,10 @@ function Section({
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">投稿数</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">計測済</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">平均views</th>
-                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">平均反応</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">いいね率</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">返信/投稿</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">いいね</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">返信</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">総views</th>
               </tr>
             </thead>
@@ -361,8 +365,27 @@ function Section({
                         </>
                       )}
                     </td>
+                    {/* ★いいね率と返信は views と順位が食い違う。並べて出す */}
+                    <td className="tnum px-3 py-2 text-right font-medium">
+                      {g.likeRate === null ? (
+                        <span
+                          className="text-[11px] text-[var(--faint)]"
+                          title={`いいね計 ${g.totalLikes}件 < ${MIN_ENGAGEMENTS_FOR_RATE}件のため率を出さない（少ない=優秀ではない）`}
+                        >
+                          反応不足
+                        </span>
+                      ) : (
+                        `${g.likeRate.toFixed(2)}%`
+                      )}
+                    </td>
+                    <td className="tnum px-3 py-2 text-right font-medium">
+                      {g.repliesPerPost === null ? "—" : g.repliesPerPost.toFixed(2)}
+                    </td>
                     <td className="tnum px-3 py-2 text-right text-[var(--muted)]">
-                      {g.avgEngagement === null ? "—" : g.avgEngagement}
+                      {g.totalLikes}
+                    </td>
+                    <td className="tnum px-3 py-2 text-right text-[var(--muted)]">
+                      {g.totalReplies}
                     </td>
                     <td className="tnum px-3 py-2 text-right text-[var(--muted)]">
                       {g.totalViews.toLocaleString("ja-JP")}

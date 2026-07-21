@@ -32,6 +32,10 @@ export type ThreadsPost = {
   /** null = 未計測（Insights 未回収）。0 とは意味が違う */
   views: number | null;
   engagement: number | null;
+  /** 内訳。null は未計測（§3）。quotes は実測0が続いているので合計にのみ含める */
+  likes: number | null;
+  replies: number | null;
+  reposts: number | null;
   /** 代理店募集トラック。集客コンテンツとは評価軸が違う */
   isAgency: boolean;
 };
@@ -44,6 +48,18 @@ export type GroupStat = {
   avgViews: number | null;
   avgEngagement: number | null;
   totalViews: number;
+
+  // ── 反応の内訳 ────────────────────────────────
+  //  ★views だけで並べると順位が実態とずれる。2026-07-22 の実測で
+  //    質問型は views 1位・いいね率11位・返信数2位だった。
+  //    「反応が良い」の定義によって勝つフォーマットが変わる。
+  totalLikes: number;
+  totalReplies: number;
+  totalReposts: number;
+  /** いいね ÷ views（％）。反応が少なすぎるときは null（§16.5） */
+  likeRate: number | null;
+  /** 1投稿あたりの返信数。会話が始まった度合い＝DM に最も近い指標 */
+  repliesPerPost: number | null;
 };
 
 export type ThreadsSummary = {
@@ -73,6 +89,17 @@ export type ThreadsData = {
 
 /** 集計に足る母数。これ未満のグループは平均を出さない（§16.5 の考え方） */
 export const MIN_POSTS_FOR_STAT = 10;
+
+/**
+ * いいね率を出すのに必要な、そのグループの合計いいね数（§16.5）。
+ *
+ * ★2026-07-22 の実測: 579投稿で いいね計 約400・返信計 約110。
+ *   いいねが付いた投稿は 166/579、返信が付いた投稿は 44/579 しかない。
+ *   この粗さで率を出すと、いいね3件（A12）の 0.39% が
+ *   いいね120件（あるある型）の 0.31% より上に並ぶ。
+ *   件数が足りないものは「不明」であって「優秀」ではない。
+ */
+export const MIN_ENGAGEMENTS_FOR_RATE = 10;
 
 export async function getThreadsData(): Promise<ThreadsData> {
   const items = await prisma.contentItem.findMany({
@@ -120,6 +147,9 @@ export async function getThreadsData(): Promise<ThreadsData> {
       publishedAt: it.publishedAt,
       views,
       engagement,
+      likes: m?.likes ?? null,
+      replies: m?.replies ?? null,
+      reposts: m?.reposts ?? null,
       isAgency: (it.targetLabel ?? "").trim() === AGENCY_TARGET,
     };
   });
@@ -177,6 +207,9 @@ function groupBy(posts: ThreadsPost[], key: (p: ThreadsPost) => string): GroupSt
     const measured = arr.filter((p) => p.views !== null);
     const totalViews = measured.reduce((s, p) => s + (p.views ?? 0), 0);
     const totalEng = measured.reduce((s, p) => s + (p.engagement ?? 0), 0);
+    const totalLikes = measured.reduce((s, p) => s + (p.likes ?? 0), 0);
+    const totalReplies = measured.reduce((s, p) => s + (p.replies ?? 0), 0);
+    const totalReposts = measured.reduce((s, p) => s + (p.reposts ?? 0), 0);
     out.push({
       name,
       posts: arr.length,
@@ -189,6 +222,19 @@ function groupBy(posts: ThreadsPost[], key: (p: ThreadsPost) => string): GroupSt
           ? Math.round((totalEng / measured.length) * 10) / 10
           : null,
       totalViews,
+      totalLikes,
+      totalReplies,
+      totalReposts,
+      // ★反応そのものが少ないうちは率を出さない。いいね3件の 0.39% と
+      //   いいね120件の 0.31% を並べると、前者が上に来て判断を誤る（§16.5）
+      likeRate:
+        totalLikes >= MIN_ENGAGEMENTS_FOR_RATE && totalViews > 0
+          ? Math.round((totalLikes / totalViews) * 10000) / 100
+          : null,
+      repliesPerPost:
+        measured.length >= MIN_POSTS_FOR_STAT
+          ? Math.round((totalReplies / measured.length) * 100) / 100
+          : null,
     });
   }
   // 平均が出せるものを上に、その中で平均views降順
