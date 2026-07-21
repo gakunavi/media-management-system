@@ -8,6 +8,8 @@ import {
 import { getAgencyData } from "@/lib/agency";
 import { getPostBriefs, type PostBriefs } from "@/lib/post-briefs";
 import { AgencySection } from "./agency-section";
+import { getQueueOverview } from "@/lib/threads-queue";
+import { QueueSection } from "./queue-section";
 
 // Threads 実績（設計書 §4.2 /threads・§13.4-④）
 //
@@ -21,13 +23,20 @@ const jaDate = (d: Date | null) =>
 const num = (n: number | null) => (n === null ? "—" : n.toLocaleString("ja-JP"));
 
 export default async function ThreadsPage() {
-  const [{ summary, byFormat, byTarget, byCore, byAgencyAngle, top }, agency, health, briefs] =
-    await Promise.all([
-      getThreadsData(),
-      getAgencyData(),
-      getAccountHealth(),
-      getPostBriefs(),
-    ]);
+  const [
+    { summary, byFormat, byTarget, byCore, byAgencyAngle, top },
+    agency,
+    health,
+    briefs,
+    queue,
+  ] = await Promise.all([
+    getThreadsData(),
+    getAgencyData(),
+    getAccountHealth(),
+    getPostBriefs(),
+    // ★GAS への往復が入る。落ちても他が出るよう getQueueOverview 側で握る
+    getQueueOverview(),
+  ]);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -70,6 +79,9 @@ export default async function ThreadsPage() {
           median={null}
         />
       )}
+      {/* ★配信が止まると他の指標も全部止まる。先に出す */}
+      <QueueSection data={queue} />
+
       <AgencySection data={agency} />
       <Section title="ターゲット別" rows={byTarget} median={summary.medianFormatAvg} />
       <Section title="コアメッセージ別" rows={byCore} median={summary.medianFormatAvg} />
