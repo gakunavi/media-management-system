@@ -34,6 +34,13 @@ export type KeywordRow = {
   asOf: Date | null;
   /// AI Overview の引用ドメインまで取得する対象か（§3.3.6・コストが伴うため画面で切替）
   aioTracked: boolean;
+  /// ラッコ由来（§3-8）。null は未取得であって 0 ではない
+  volume: number | null;
+  difficulty: number | null;
+  /// 割り当てた記事の externalId（§3.1 KeywordAssignment）
+  assignedArticle: string | null;
+  /// 順位の状態。★「一度も計測していない」と「追跡外に落ちた」は別物
+  rankState: "ranked" | "dropped" | "never";
   /// ── SERP実測（DataForSEO・§3.3.5）。未取得なら null＝「未計測」であって0ではない
   serp: SerpInfo | null;
 };
@@ -67,7 +74,20 @@ export async function getKeywordList(): Promise<{
   droppedOut: number;
 }> {
   const [keywords, rankings, serpRows] = await Promise.all([
-    prisma.keyword.findMany({ select: { id: true, keyword: true, aioTracked: true } }),
+    prisma.keyword.findMany({
+      select: {
+        id: true,
+        keyword: true,
+        aioTracked: true,
+        volume: true,
+        difficulty: true,
+        assignments: {
+          where: { role: "main" },
+          select: { contentItem: { select: { externalId: true } } },
+          take: 1,
+        },
+      },
+    }),
     prisma.keywordRanking.findMany({
       select: {
         keywordId: true,
@@ -132,13 +152,37 @@ export async function getKeywordList(): Promise<{
     else if (r.date.getTime() === prevMs) prevByKw.set(r.keywordId, r);
   }
 
+  // 一度でも順位が付いたことがあるKW（★「未計測」と「圏外」を分けるため）
+  const everRanked = new Set(rankings.map((r) => r.keywordId));
+
   // ★最新スナップショットに存在するKWだけを「現在順位」として扱う（古い順位を混ぜない）
   const rows: KeywordRow[] = [];
   let droppedOut = 0;
   for (const k of keywords) {
     const latest = latestByKw.get(k.id);
     if (!latest) {
-      droppedOut += 1; // 最新に居ない＝追跡外に落ちた
+      // ★ラッコから取り込んだばかりのKWは順位データが1件も無い。
+      //   これを「圏外に落ちた」と同じ扱いで消すと、追加したKWが
+      //   画面から消えて「入れたのに見えない」になる（実際に起きた）
+      const never = !everRanked.has(k.id);
+      if (!never) droppedOut += 1;
+      rows.push({
+        id: k.id,
+        keyword: k.keyword,
+        position: null,
+        positionDelta: null,
+        clicks: 0,
+        impressions: 0,
+        ctr: null,
+        band: null,
+        asOf: null,
+        aioTracked: k.aioTracked,
+        volume: k.volume,
+        difficulty: k.difficulty,
+        assignedArticle: k.assignments[0]?.contentItem?.externalId ?? null,
+        rankState: never ? "never" : "dropped",
+        serp: serpByKw.get(k.id) ?? null,
+      });
       continue;
     }
     const prev = prevByKw.get(k.id);
@@ -154,12 +198,20 @@ export async function getKeywordList(): Promise<{
       band: bandOf(latest.position),
       asOf: latest.date,
       aioTracked: k.aioTracked,
+      volume: k.volume,
+      difficulty: k.difficulty,
+      assignedArticle: k.assignments[0]?.contentItem?.externalId ?? null,
+      rankState: "ranked",
       serp: serpByKw.get(k.id) ?? null,
     });
   }
 
-  // 機会順: 表示が多い順（1ページ目未達の伸びしろが上に来やすい）
-  rows.sort((a, b) => b.impressions - a.impressions);
+  // 機会順: 順位のあるKWを上に、その中で表示が多い順
+  rows.sort((a, b) => {
+    if (a.rankState !== b.rankState) return a.rankState === "ranked" ? -1 : 1;
+    if (b.impressions !== a.impressions) return b.impressions - a.impressions;
+    return (b.volume ?? 0) - (a.volume ?? 0);
+  });
   return { rows, latestDate, droppedOut };
 }
 

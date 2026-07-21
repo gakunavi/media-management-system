@@ -43,8 +43,8 @@ export default async function KeywordsPage() {
       <KeywordTable rows={rows} />
 
       <p className="mt-3 text-[12px] text-[var(--faint)]">
-        volume・難易度・割当記事・鮮度は未取得（ラッコ連携＝P4.5/P4.10、記事割当＝P4.5）。
-        striking distance の自動起票（段5）は P4.7。
+        検索数・難易度・担当記事はラッコの調査済みKWのみ（§3-8）。「—」は未取得であって0ではない。
+        順位の「未計測」は一度も順位が付いたことがないKW（追加直後）で、「圏外」とは別。
       </p>
     </div>
   );

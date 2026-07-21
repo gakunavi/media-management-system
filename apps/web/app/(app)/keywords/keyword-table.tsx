@@ -199,6 +199,9 @@ export function KeywordTable({ rows }: { rows: KeywordRow[] }) {
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">クリック</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">表示</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">CTR</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">検索数</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">難易度</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">担当記事</th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium">SERP上位（自社順位）</th>
                 <th className="whitespace-nowrap px-3 py-2 text-center font-medium">AIO</th>
                 <th className="whitespace-nowrap px-3 py-2 text-center font-medium">引用取得</th>
@@ -214,7 +217,16 @@ export function KeywordTable({ rows }: { rows: KeywordRow[] }) {
                 >
                   <td className="max-w-[240px] truncate px-3 py-2.5">{r.keyword}</td>
                   <td className="tnum px-3 py-2.5 text-right font-medium">
-                    {r.position === null ? "圏外" : r.position.toFixed(1)}
+                    {r.position !== null ? (
+                      r.position.toFixed(1)
+                    ) : r.rankState === "never" ? (
+                      // ★「圏外」ではない。一度も順位が付いたことがない＝未計測（§3）
+                      <span className="text-[11px] text-[var(--faint)]" title="順位データが1件もありません">
+                        未計測
+                      </span>
+                    ) : (
+                      <span className="text-[var(--faint)]">圏外</span>
+                    )}
                   </td>
                   <td className="tnum px-3 py-2.5 text-right">
                     <PositionDelta delta={r.positionDelta} />
@@ -234,6 +246,23 @@ export function KeywordTable({ rows }: { rows: KeywordRow[] }) {
                   </td>
                   <td className="tnum px-3 py-2.5 text-right text-[var(--muted)]">
                     {r.ctr === null ? "—" : `${(r.ctr * 100).toFixed(1)}%`}
+                  </td>
+                  <td className="tnum px-3 py-2.5 text-right text-[var(--muted)]">
+                    {r.volume === null ? (
+                      <span className="text-[var(--faint)]" title="ラッコ未取得">—</span>
+                    ) : (
+                      r.volume.toLocaleString("ja-JP")
+                    )}
+                  </td>
+                  <td className="tnum px-3 py-2.5 text-right text-[var(--muted)]">
+                    {r.difficulty === null ? (
+                      <span className="text-[var(--faint)]">—</span>
+                    ) : (
+                      r.difficulty
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-[11px] text-[var(--faint)]">
+                    {r.assignedArticle ?? "—"}
                   </td>
                   <td className="max-w-[220px] px-3 py-2.5">
                     <SerpCell row={r} />
