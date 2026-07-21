@@ -188,11 +188,129 @@ npm run events:test   # 7段送信・冪等・不正step拒否・413 を確認
 
 ---
 
-## 3. 未接続（後続 Phase）
+## 3. Threads（GAS → MMS・受口は実装済み）
+
+### 3.1 方針：GAS はそのまま。MMS は「受け取るだけ」
+
+設計書 §6 が「**Threads GAS は継続**。Insights を `/api/ingest/threads` へ POST する
+よう1関数追加するだけ」としている通り、**投稿の仕組みは触りません**。
+
+| | |
+|---|---|
+| **Threads トークン** | **MMS には不要**。GAS 側に置いたままでよい（MMS は Threads API を叩かない） |
+| **認証** | 他の Webhook と同じ **HMAC-SHA256**（`MMS_INGEST_SECRET`） |
+| **解決したい問題** | 「投稿はできているが**反応が測れていない**」。views 等を蓄積すると、平均の1.5倍跳ねた投稿を記事化ネタとして自動起票できる（§13.4-④） |
+
+### 3.2 受口
+
+```
+POST /api/ingest/threads
+```
+
+```jsonc
+{
+  "accountRef": "setsuzei_masa",     // アカウント識別子（複数運用に備える・§11.3）
+  "posts": [
+    {
+      "id": "THR-001",               // 必須。シートの id 列
+      "postId": "17977672592851956",
+      "text": "本文…",
+      "target": "法人",               // → ContentItem.targetLabel
+      "coreMessage": "柱②税理士外",   // → ContentItem.category
+      "scheduledAt": "2026-05-08T07:00:00+09:00",
+      "postedAt": "2026-05-07T15:06:05+09:00",
+      "status": "posted",
+      "notes": "good-bad / 利回り%の罠",
+      "metrics": { "views": 17, "likes": 0, "replies": 0, "reposts": 0, "quotes": 0 }
+    }
+  ]
+}
+```
+
+- **冪等**: 同じ `id` は上書き。`metrics` は同日・同指標を最新値で更新（インサイトは後から増えるため）
+- 1リクエスト **500件**まで
+
+### 3.3 GAS に足す関数（コピペ1回）
+
+> ★既存の投稿処理は**一切変更しません**。この関数を追加し、
+> 「キューを一括処理」の最後か、時間トリガーで呼ぶだけです。
+
+```javascript
+/** MMS へ投稿実績を送る（既存の投稿処理は変更しない） */
+function syncToMms() {
+  var ENDPOINT = PropertiesService.getScriptProperties().getProperty('MMS_INGEST_URL');
+  var SECRET   = PropertiesService.getScriptProperties().getProperty('MMS_INGEST_SECRET');
+  if (!ENDPOINT || !SECRET) { Logger.log('MMS 設定なし'); return; }
+
+  var sh = SpreadsheetApp.getActive().getSheetByName('queue');
+  var values = sh.getDataRange().getValues();
+  var head = values[0];
+  var col = {};
+  head.forEach(function (h, i) { col[h] = i; });
+
+  var posts = [];
+  for (var r = 1; r < values.length; r++) {
+    var row = values[r];
+    if (!row[col['id']]) continue;
+    if (row[col['status']] !== 'posted') continue;   // 投稿済みだけ送る
+    posts.push({
+      id:          String(row[col['id']]),
+      postId:      row[col['post_id']]      ? String(row[col['post_id']]) : undefined,
+      text:        row[col['text']]         ? String(row[col['text']])    : undefined,
+      target:      row[col['target']]       ? String(row[col['target']])  : undefined,
+      coreMessage: row[col['core_message']] ? String(row[col['core_message']]) : undefined,
+      scheduledAt: row[col['scheduled_at']] ? new Date(row[col['scheduled_at']]).toISOString() : undefined,
+      postedAt:    row[col['posted_at']]    ? new Date(row[col['posted_at']]).toISOString()    : undefined,
+      status:      String(row[col['status']]),
+      notes:       row[col['notes']]        ? String(row[col['notes']])   : undefined,
+      metrics: {
+        views:   row[col['views']]   !== '' ? Number(row[col['views']])   : undefined,
+        likes:   col['likes']   !== undefined ? Number(row[col['likes']])   : undefined,
+        replies: col['replies'] !== undefined ? Number(row[col['replies']]) : undefined
+      }
+    });
+  }
+  if (!posts.length) { Logger.log('送る行なし'); return; }
+
+  // 500件ずつ送る
+  for (var i = 0; i < posts.length; i += 500) {
+    var payload = JSON.stringify({ accountRef: 'setsuzei_masa', posts: posts.slice(i, i + 500) });
+    var ts  = String(Math.floor(Date.now() / 1000));
+    var raw = Utilities.computeHmacSha256Signature(ts + '.' + payload, SECRET);
+    var sig = raw.map(function (b) {
+      return ('0' + (b < 0 ? b + 256 : b).toString(16)).slice(-2);
+    }).join('');
+
+    var res = UrlFetchApp.fetch(ENDPOINT, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: payload,
+      headers: { 'X-MMS-Timestamp': ts, 'X-MMS-Signature': sig },
+      muteHttpExceptions: true
+    });
+    Logger.log('MMS: ' + res.getResponseCode() + ' ' + res.getContentText().slice(0, 200));
+  }
+}
+```
+
+### 3.4 GAS 側の設定（スクリプトプロパティに2つ追加）
+
+Apps Script → **プロジェクトの設定 → スクリプト プロパティ**:
+
+| キー | 値 |
+|---|---|
+| `MMS_INGEST_URL` | `https://<MMSの公開URL>/api/ingest/threads` |
+| `MMS_INGEST_SECRET` | MMS の `.env` の `MMS_INGEST_SECRET` と同じ値 |
+
+> ★MMS は現在 `localhost` のみなので、**Cloudflare Tunnel（P9）で公開してから**
+> でないと GAS から到達できません。それまでは受口だけ用意した状態になります。
+
+---
+
+## 4. 未接続（後続 Phase）
 
 | 接続先 | 受口 | Phase |
 |---|---|---|
-| Threads GAS（Insights） | `/api/ingest/threads` | **P5** |
 | LINE Messaging API | `/api/ingest/line` | **P5.7** |
 | WordPress への**書き込み** | `/api/wp/publish` | **P1.8** |
 | m2（成約の還流） | `/api/ingest/m2` | **P6.10** |
