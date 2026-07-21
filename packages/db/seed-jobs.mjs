@@ -123,6 +123,15 @@ const JOBS = [
     note: "ネタ供給: Threads反響（§13.4-④）とAIO未引用（§3.3.6）から自動起票",
   },
   {
+    name: "health-alert-daily",
+    // 毎朝 09:30。日次ジョブが一通り終わった後に、異常だけを通知する
+    schedule: "30 9 * * *",
+    kind: "http",
+    config: { path: "/api/jobs/alerts", timeoutSeconds: 120 },
+    enabled: true,
+    note: "運用アラート: 段7の異常（欠測/配信停止/残高/ジョブ失敗）をSlackへ（§5.4）",
+  },
+  {
     name: "intervention-evaluate-daily",
     schedule: "0 8 * * *", // 毎日 08:00 JST（§5.1 日次）
     kind: "http",

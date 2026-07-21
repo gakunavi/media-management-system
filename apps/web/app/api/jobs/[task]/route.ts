@@ -8,17 +8,49 @@
 import { NextResponse } from "next/server";
 import { generateProposals } from "@/lib/operator";
 import { generateIdeas } from "@/lib/ideas";
+import { getJobHealth } from "@/lib/dashboard";
+import { notify } from "@/lib/notify";
 import { evaluateDueInterventions } from "@/lib/evaluate";
 import { safeEqual } from "@/lib/crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TASKS = ["propose", "evaluate", "ideas"] as const;
+const TASKS = ["propose", "evaluate", "ideas", "alerts"] as const;
 type Task = (typeof TASKS)[number];
 
 function isTask(v: string): v is Task {
   return (TASKS as readonly string[]).includes(v);
+}
+
+/**
+ * 段7の異常だけを通知する。異常が無ければ何も送らない。
+ * ★毎日「異常なし」を送ると通知が無視されるようになり、本当の異常を見逃す。
+ */
+async function sendHealthAlerts(): Promise<{ sent: number; alerts: string[] }> {
+  const health = await getJobHealth();
+  const alerts: string[] = [];
+
+  if (health.gsc.alert === "red") {
+    alerts.push(`GSC 日次が ${health.gsc.gapDays}日欠測（最終 ${health.gsc.latestDate?.toLocaleDateString("ja-JP")}）`);
+  }
+  if (health.threads.alert === "red" || health.threads.alert === "warn") {
+    alerts.push(`Threads 投稿が ${health.threads.gapDays}日 停止 — ${health.threads.reason}`);
+  }
+  for (const t of health.tools) alerts.push(t.message);
+  for (const j of health.jobs) {
+    if (j.lastStatus === "failed") alerts.push(`ジョブ失敗: ${j.name}`);
+  }
+
+  if (alerts.length === 0) return { sent: 0, alerts: [] };
+
+  await notify({
+    event: "health.alert",
+    title: `⚠️ MMS 運用アラート（${alerts.length}件）`,
+    body: alerts.map((a) => `・${a}`).join("\n"),
+    url: process.env.MMS_PUBLIC_URL ?? "http://localhost:3000",
+  });
+  return { sent: alerts.length, alerts };
 }
 
 export async function POST(
@@ -48,6 +80,13 @@ export async function POST(
   try {
     if (task === "propose") {
       const r = await generateProposals();
+      return NextResponse.json({ ok: true, task, ...r });
+    }
+    if (task === "alerts") {
+      // 段7の警告を通知する（§5.4「石井さんへ即通知」）。
+      // ★画面に出すだけでは、画面を開くまで誰も気づかない。実際に
+      //   「投稿が2日止まっている」「残高が枯渇しかけ」を誰も知らなかった。
+      const r = await sendHealthAlerts();
       return NextResponse.json({ ok: true, task, ...r });
     }
     if (task === "ideas") {
