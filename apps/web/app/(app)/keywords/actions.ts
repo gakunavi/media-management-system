@@ -42,3 +42,52 @@ export async function setAioTracked(keywordId: string, tracked: boolean): Promis
       : `「${kw.keyword}」のAIO引用取得を外しました（対象 ${total}件・追加コスト 約$${extra.toFixed(2)}/月）`,
   };
 }
+
+/**
+ * 追跡候補を追跡対象に追加する（§3-8）。
+ *
+ * ★追加すると SERP取得のコストが増える（$0.0006/KW/週 ≒ $0.03/KW/年）。
+ *   自動追加せず人が選ぶのはそのため。
+ */
+export async function trackCandidate(input: {
+  keyword: string;
+  volume?: number;
+  difficulty?: number | null;
+}): Promise<Result> {
+  const session = await auth();
+  if (!session?.user || session.user.role !== "owner") {
+    return { ok: false, error: "権限がありません（owner のみ）" };
+  }
+
+  const keyword = input.keyword.trim();
+  if (!keyword) return { ok: false, error: "キーワードが空です" };
+
+  const business = await prisma.business.findFirst({
+    where: { slug: process.env.MMS_DEFAULT_BUSINESS_SLUG ?? "tax-saving-agency" },
+    select: { id: true },
+  });
+  if (!business) return { ok: false, error: "Business がありません" };
+
+  const dup = await prisma.keyword.findFirst({
+    where: { businessId: business.id, keyword },
+    select: { id: true },
+  });
+  if (dup) return { ok: false, error: `「${keyword}」は既に追跡中です` };
+
+  await prisma.keyword.create({
+    data: {
+      businessId: business.id,
+      keyword,
+      slug: keyword.toLowerCase().replace(/\s+/g, "-").slice(0, 80),
+      volume: input.volume ?? null,
+      difficulty: input.difficulty ?? null,
+    },
+  });
+
+  const total = await prisma.keyword.count({ where: { businessId: business.id } });
+  revalidatePath("/keywords");
+  return {
+    ok: true,
+    message: `「${keyword}」を追跡対象に追加しました（計${total}KW・SERP取得 約$${(total * 0.0006).toFixed(2)}/週）`,
+  };
+}

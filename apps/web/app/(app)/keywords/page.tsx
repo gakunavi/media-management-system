@@ -1,5 +1,7 @@
 import { getKeywordList, computeStats } from "@/lib/keywords";
+import { getKeywordCandidates } from "@/lib/keyword-candidates";
 import { KeywordTable } from "./keyword-table";
+import { Candidates } from "./candidates";
 
 // キーワード（設計書 §4.2 /keywords・§13.3 striking distance・§3.3.3 順位分布）
 export const dynamic = "force-dynamic";
@@ -8,7 +10,10 @@ const jaDate = (d: Date | null) =>
   d ? d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" }) : "—";
 
 export default async function KeywordsPage() {
-  const { rows, latestDate, droppedOut } = await getKeywordList();
+  const [{ rows, latestDate, droppedOut }, candidates] = await Promise.all([
+    getKeywordList(),
+    getKeywordCandidates(),
+  ]);
   const s = computeStats(rows);
 
   return (
@@ -39,6 +44,8 @@ export default async function KeywordsPage() {
         />
         <BandStat label="21位〜" value={s.out} tone="faint" hint="圏外に近い" />
       </div>
+
+      <Candidates candidates={candidates} />
 
       <KeywordTable rows={rows} />
 
