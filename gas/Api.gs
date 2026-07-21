@@ -312,7 +312,12 @@ function buildRowArray_(post) {
     post.target       || '',
     post.core_message || '',
     post.article_link || '',
-    post.status       || 'pending',
+    // ★既定を pending から draft に変更した。
+    //   API で流し込まれた原稿がそのまま公開されるのは、生成の自動化と
+    //   相性が悪い（YMYL領域で人の確認を挟めない）。draft で入れておけば
+    //   MMS の /threads で承認したものだけが pending になる。
+    //   自分で書いた行をすぐ流したいときは status: "pending" を明示する。
+    post.status       || 'draft',
     '',  // posted_at  (自動記録)
     '',  // post_id    (自動記録)
     '',  // error      (自動記録)

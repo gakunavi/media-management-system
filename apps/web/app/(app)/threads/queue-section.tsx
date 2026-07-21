@@ -107,8 +107,9 @@ export function QueueSection({ data }: { data: QueueOverview }) {
       {open && (
         <div className="mt-3 rounded-xl border border-[var(--border-strong)] bg-[var(--panel)] p-3.5">
           <p className="mb-3 text-[12px] leading-relaxed text-[var(--muted)]">
-            ★これらは status が <code>skip</code> のまま残っていた原稿です。没にしたのか、
-            予定時刻を過ぎて配信されなかったのかは記録から判別できません。
+            ★<code>draft</code>（cowork が週次で生成した原稿）と <code>skip</code>
+            （過去に配信されずに残った原稿）です。skip は没にしたのか予定時刻を
+            過ぎただけなのか、記録からは判別できません。
             <strong>公開は取り消せない</strong>ので、承認は石井さんの操作にしています。
             承認すると 07〜22時の空き枠に順に割り当てます（過去の時刻には入れません）。
           </p>

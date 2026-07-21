@@ -46,6 +46,14 @@ export type QueueOverview = {
   error: string | null;
 };
 
+/**
+ * 承認画面に載せるステータス。
+ *
+ * ★cowork（週次の一括生成）は draft で書き込む。pending に直接書くと
+ *   承認画面を素通りして公開される。生成物をそのまま出さないための境界。
+ */
+const CANDIDATE_STATUSES = new Set(["draft", "skip", "skipped"]);
+
 /** 実績の投稿時間帯（07〜22時に毎時1本。posted 579件の分布から） */
 const SLOT_HOURS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
 
@@ -146,7 +154,11 @@ export async function getQueueOverview(): Promise<QueueOverview> {
   const candidates: DraftCandidate[] = [];
   for (const r of rows) {
     // pending / posted / error は候補ではない（error は本文を直す対象）
-    if (r.status !== "skip" && r.status !== "skipped") continue;
+    //
+    //   draft   … cowork が週次で生成した新しい原稿（承認待ちの本命）
+    //   skip    … 過去に配信されずに残った原稿（没かどうかは記録から不明）
+    //   skipped … dup auto-skip で落ちた行。本文が posted と一致するものは下で除く
+    if (!CANDIDATE_STATUSES.has(r.status)) continue;
     const t = normalize(r.text);
     if (!t || publishedTexts.has(t) || seen.has(t)) continue;
     seen.add(t);

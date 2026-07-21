@@ -68,8 +68,9 @@ function getQueueSheet_() {
 
     // status 列にドロップダウン
     var statusRule = SpreadsheetApp.newDataValidation()
+      // draft    … cowork が週次で生成した原稿。MMS の承認画面を通ってから pending になる
       // rejected … MMS の承認画面で石井さんが却下した行（理由は notes に残る・§5.6）
-      .requireValueInList(['pending', 'posted', 'error', 'skipped', 'rejected'], true)
+      .requireValueInList(['draft', 'pending', 'posted', 'error', 'skipped', 'rejected'], true)
       .setAllowInvalid(true)
       .build();
     sheet.getRange(2, CONFIG.COL.STATUS, 500, 1).setDataValidation(statusRule);
