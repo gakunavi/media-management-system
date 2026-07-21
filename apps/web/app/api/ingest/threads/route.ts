@@ -207,8 +207,8 @@ export async function POST(req: Request) {
           metric: COVERED_METRIC,
           channelId: channel.id,
           startedAt: new Date(),
-          method: "gas_sheet_webhook",
-          note: "Threads GAS からの投稿実績連携により計測開始",
+          method: "gas_sheet_api",
+          note: "Threads GAS（Apps Script ウェブアプリ）から pull した投稿実績により計測開始",
         },
       });
     }

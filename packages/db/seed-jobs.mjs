@@ -21,11 +21,18 @@ const gscKeyReady = existsSync(GSC_KEY);
 // WP 認証が .env にあるかで WP同期ジョブの有効/無効を決める
 import { readFileSync } from "node:fs";
 let wpReady = false;
+let threadsReady = false;
 try {
   const envText = readFileSync(path.resolve(process.cwd(), "../../.env"), "utf8");
   wpReady = /^MMS_WP_APP_PASSWORD=.+$/m.test(envText) && /^MMS_WP_USER=.+$/m.test(envText);
+  // Threads は GAS Web App から pull する。URL と鍵が揃って初めて有効化する
+  threadsReady =
+    /^MMS_THREADS_GAS_URL=.+$/m.test(envText) &&
+    /^MMS_THREADS_GAS_KEY=.+$/m.test(envText) &&
+    /^MMS_INGEST_SECRET=.+$/m.test(envText);
 } catch {
   wpReady = false;
+  threadsReady = false;
 }
 
 const JOBS = [
@@ -49,6 +56,17 @@ const JOBS = [
     note: wpReady
       ? "WP同期: 新規記事の取り込みとメタ差分の検出（§3.9.1・読み取りのみ）"
       : "WP同期【停止中】.env に MMS_WP_USER / MMS_WP_APP_PASSWORD を設定して再実行",
+  },
+  {
+    name: "threads-sync-daily",
+    // GAS 側の Insights 収集（日次06:00）が終わった頃に取りに行く
+    schedule: "30 6 * * *",
+    kind: "builtin",
+    config: { script: "threads_sync.py", timeoutSeconds: 900 },
+    enabled: threadsReady,
+    note: threadsReady
+      ? "Threads同期: GAS Web App から投稿実績と反応を pull（§13.4-④）"
+      : "Threads同期【停止中】.env に MMS_THREADS_GAS_URL / MMS_THREADS_GAS_KEY / MMS_INGEST_SECRET を設定して再実行",
   },
   {
     name: "operator-propose-weekly",

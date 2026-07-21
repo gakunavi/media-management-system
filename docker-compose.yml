@@ -112,6 +112,12 @@ services:
       MMS_WP_USER: ${MMS_WP_USER:-}
       MMS_WP_APP_PASSWORD: ${MMS_WP_APP_PASSWORD:-}
       MMS_WP_POST_TYPE: ${MMS_WP_POST_TYPE:-posts}
+      # Threads 同期（builtin/threads_sync.py）。GAS Web App から pull し
+      # /api/ingest/threads へ HMAC 署名つきで投げ直すため INGEST_SECRET も要る
+      MMS_THREADS_GAS_URL: ${MMS_THREADS_GAS_URL:-}
+      MMS_THREADS_GAS_KEY: ${MMS_THREADS_GAS_KEY:-}
+      MMS_THREADS_ACCOUNT_REF: ${MMS_THREADS_ACCOUNT_REF:-setsuzei_masa}
+      MMS_INGEST_SECRET: ${MMS_INGEST_SECRET:-}
     volumes:
       # ★設計書 §6「既存 Python 資産は書き直さない」。
       #   コピーすると本体と乖離するため、元のディレクトリを **読み取り専用でマウント**する。

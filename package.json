@@ -34,7 +34,7 @@
     "ingest:test": "bash scripts/ingest-test.sh",
     "events:test": "bash scripts/events-test.sh",
     "seed:leads": "npm run seed:leads --workspace @mms/db",
-    "seed:jobs": "npm run seed:jobs --workspace @mms/db"
+    "seed:jobs": "MMS_DATABASE_URL=$(bash scripts/host-dsn.sh) npm run seed:jobs --workspace @mms/db"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3"
