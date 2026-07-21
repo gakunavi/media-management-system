@@ -35,7 +35,7 @@ export const NAV: NavGroup[] = [
       { href: "/content", label: "記事・投稿", ready: true, icon: "content" },
       { href: "/clusters", label: "トピッククラスタ", ready: true, icon: "clusters" },
       { href: "/keywords", label: "キーワード", ready: true, icon: "keywords" },
-      { href: "/ideas", label: "ネタ", phase: "P4.6", ready: false, icon: "ideas" },
+      { href: "/ideas", label: "ネタ", ready: true, icon: "ideas" },
     ],
   },
   {

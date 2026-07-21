@@ -96,6 +96,15 @@ const JOBS = [
     note: "立案: CTR異常 / striking distance / 弱いピラー から Action を起票",
   },
   {
+    name: "ideas-collect-weekly",
+    // 月曜 08:30。立案(09:00)の直前にネタを補充しておく
+    schedule: "30 8 * * 1",
+    kind: "http",
+    config: { path: "/api/jobs/ideas", timeoutSeconds: 300 },
+    enabled: true,
+    note: "ネタ供給: Threads反響（§13.4-④）とAIO未引用（§3.3.6）から自動起票",
+  },
+  {
     name: "intervention-evaluate-daily",
     schedule: "0 8 * * *", // 毎日 08:00 JST（§5.1 日次）
     kind: "http",

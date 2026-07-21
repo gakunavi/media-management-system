@@ -7,13 +7,14 @@
 //   ★この受口は認証必須なので middleware の公開パスに入れない。
 import { NextResponse } from "next/server";
 import { generateProposals } from "@/lib/operator";
+import { generateIdeas } from "@/lib/ideas";
 import { evaluateDueInterventions } from "@/lib/evaluate";
 import { safeEqual } from "@/lib/crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TASKS = ["propose", "evaluate"] as const;
+const TASKS = ["propose", "evaluate", "ideas"] as const;
 type Task = (typeof TASKS)[number];
 
 function isTask(v: string): v is Task {
@@ -47,6 +48,11 @@ export async function POST(
   try {
     if (task === "propose") {
       const r = await generateProposals();
+      return NextResponse.json({ ok: true, task, ...r });
+    }
+    if (task === "ideas") {
+      // §4.2 /ideas「記事ネタの自動供給」。Threads反響・AIO未引用から起票
+      const r = await generateIdeas();
       return NextResponse.json({ ok: true, task, ...r });
     }
     const r = await evaluateDueInterventions();
