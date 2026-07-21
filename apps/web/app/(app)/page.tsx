@@ -48,6 +48,11 @@ export default async function Dashboard() {
             獲得3ゴールの結果と、そこに至るファネルを1画面で
           </p>
         </div>
+        {health.threads.alert === "red" && (
+          <span className="rounded-md bg-[var(--bad)]/10 px-2 py-1 text-[12px] font-medium text-[var(--bad)]">
+            ● Threads 投稿が {health.threads.gapDays}日 停止（段7）
+          </span>
+        )}
         {health.gsc.alert === "red" && (
           <span className="rounded-full bg-[var(--bad)]/10 px-3 py-1 text-[12px] font-medium text-[var(--bad)]">
             ● 計測に問題あり（段7）
@@ -321,8 +326,17 @@ function HealthPanel({ health }: { health: Awaited<ReturnType<typeof getJobHealt
         ? "border-[var(--warn)]/40 bg-[var(--warn)]/[0.08] text-[#9a6a00]"
         : "border-[var(--ok)]/40 bg-[var(--ok)]/[0.08] text-[#1a7a2e]";
 
+  const threadsStyle =
+    health.threads.alert === "red"
+      ? "border-[var(--bad)]/40 bg-[var(--bad)]/[0.06] text-[var(--bad)]"
+      : health.threads.alert === "warn"
+        ? "border-[var(--warn)]/40 bg-[var(--warn)]/[0.08] text-[#9a6a00]"
+        : health.threads.alert === "unknown"
+          ? "border-[var(--border)] bg-[var(--panel-2)] text-[var(--muted)]"
+          : "border-[var(--ok)]/40 bg-[var(--ok)]/[0.08] text-[#1a7a2e]";
+
   return (
-    <Panel n={7} title="ジョブ健全性・欠測">
+    <Panel n={7} title="ジョブ健全性・配信・欠測">
       <div className={`rounded-lg border px-3 py-2.5 text-[13px] leading-snug ${style}`}>
         {health.gsc.latestDate === null ? (
           "GSC 実測データがありません"
@@ -337,6 +351,23 @@ function HealthPanel({ health }: { health: Awaited<ReturnType<typeof getJobHealt
           <>GSC 反映がやや遅れ（最終 {jaDate(health.gsc.latestDate)}）</>
         ) : (
           <>GSC 日次は最新（{jaDate(health.gsc.latestDate)}）</>
+        )}
+      </div>
+
+      {/* ★配信停止の検知。ジョブの失敗と違い「動いていないこと」はエラーに残らない */}
+      <div className={`mt-2 rounded-lg border px-3 py-2.5 text-[13px] leading-snug ${threadsStyle}`}>
+        {health.threads.alert === "unknown" ? (
+          <>Threads 投稿: {health.threads.reason}</>
+        ) : health.threads.alert === "ok" ? (
+          <>Threads 投稿は継続中（{health.threads.reason}）</>
+        ) : (
+          <>
+            Threads 投稿が{" "}
+            <strong className="tnum">{health.threads.gapDays}日 止まっています</strong>
+            <span className="opacity-70">（最終 {jaDate(health.threads.lastPostedAt)}）</span>
+            <br />
+            {health.threads.reason}
+          </>
         )}
       </div>
 

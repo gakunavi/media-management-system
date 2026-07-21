@@ -179,7 +179,30 @@ export type JobHealth = {
   jobs: { name: string; lastStatus: string | null; lastRunAt: Date | null }[];
   /** ★欠測アラート（§3.2.2）。最終計測日から今日までの空き日数 */
   gsc: { latestDate: Date | null; gapDays: number | null; alert: "ok" | "warn" | "red" };
+  /** ★配信が止まっていないか（§5.4 即通知の対象）。実際に2日気づかれなかった */
+  threads: ThreadsDelivery;
 };
+
+/**
+ * Threads の配信が続いているか。
+ *
+ * ★なぜ要るか: 2026-07-21 時点で投稿が7/19から止まっていたのに、
+ *   システムは誰にも知らせなかった。投稿が止まると獲得も、
+ *   viewsPerFollower の基準線作りも同時に止まる。
+ *   「動いていないこと」は放っておくと気づけない類の障害で、
+ *   ジョブの失敗と違ってエラーログにも残らない。
+ */
+export type ThreadsDelivery = {
+  lastPostedAt: Date | null;
+  /** 最終投稿から今日までの空き日数 */
+  gapDays: number | null;
+  alert: "ok" | "warn" | "red" | "unknown";
+  reason: string;
+};
+
+/** 投稿が止まったとみなす日数。毎時トリガーで日次投稿している前提 */
+const THREADS_STALL_WARN_DAYS = 2;
+const THREADS_STALL_RED_DAYS = 3;
 
 export async function getJobHealth(now: Date = new Date()): Promise<JobHealth> {
   const jobs = await prisma.job.findMany({
@@ -212,5 +235,53 @@ export async function getJobHealth(now: Date = new Date()): Promise<JobHealth> {
       lastRunAt: j.runs[0]?.startedAt ?? null,
     })),
     gsc: { latestDate: latest?.date ?? null, gapDays, alert },
+    threads: await getThreadsDelivery(now),
+  };
+}
+
+async function getThreadsDelivery(now: Date): Promise<ThreadsDelivery> {
+  const last = await prisma.contentItem.findFirst({
+    where: { type: "post", channel: { type: "threads" }, publishedAt: { not: null } },
+    orderBy: { publishedAt: "desc" },
+    select: { publishedAt: true },
+  });
+
+  if (!last?.publishedAt) {
+    // ★1件も無いのは「止まった」ではなく「まだ同期していない」（§3）
+    return {
+      lastPostedAt: null,
+      gapDays: null,
+      alert: "unknown",
+      reason: "投稿の同期がまだありません（止まっているとは限りません）",
+    };
+  }
+
+  const today = new Date(now.getTime() + JST_OFFSET_MS);
+  today.setUTCHours(0, 0, 0, 0);
+  const d = new Date(last.publishedAt.getTime() + JST_OFFSET_MS);
+  d.setUTCHours(0, 0, 0, 0);
+  const gapDays = Math.floor((today.getTime() - d.getTime()) / 86400000);
+
+  if (gapDays >= THREADS_STALL_RED_DAYS) {
+    return {
+      lastPostedAt: last.publishedAt,
+      gapDays,
+      alert: "red",
+      reason: `最終投稿から${gapDays}日。投稿キューが空か、トリガーが止まっている可能性`,
+    };
+  }
+  if (gapDays >= THREADS_STALL_WARN_DAYS) {
+    return {
+      lastPostedAt: last.publishedAt,
+      gapDays,
+      alert: "warn",
+      reason: `最終投稿から${gapDays}日。キューの残数を確認してください`,
+    };
+  }
+  return {
+    lastPostedAt: last.publishedAt,
+    gapDays,
+    alert: "ok",
+    reason: `最終投稿は${gapDays}日前`,
   };
 }
