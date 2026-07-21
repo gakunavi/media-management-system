@@ -30,8 +30,10 @@ GAS(投稿・Insights回収) → スプレッドシート → Api.gs Web App
 | `Threads.gs` | 未反映 | **C** YMYL正規表現バグ（正当な表現を誤ブロック）／**C-2** ログへのトークン露出／**D-4** `AUTO_PUBLISH` 経路の削除 |
 | `Spreadsheet.gs` | 未反映 | **D-1** status空欄の行が投稿される／**D-3** `resetErrorRows` 追加 |
 | `Menu.gs` | 未反映 | **D-3** メニュー項目追加 |
-| `Api.gs` | 未反映 | **D-5** HTTPステータスが常に200／**D-6** `insights_updated_at` を返す／`format` 判定を `extractFormat_` に統一 |
+| `Api.gs` | 一部反映 | **D-5/D-6 は反映済**。今回 `action=account`（フォロワー数履歴）を追加したため再デプロイが要る |
+| `Menu.gs` | 一部反映 | 今回「フォロワー数を確認」「日次記録を開始」を追加 |
 | `Config.gs` | 未反映 | **D-2** 定数2つ（下記）。ファイル全文は復元できなかったため手動 |
+| `Account.gs` | 未反映 | **新規**。フォロワー数の日次記録（views/follower の急落＝配信制限の検知に使う） |
 | `PATCHES.md` | — | 各修正の背景と根拠 |
 
 ## 反映手順

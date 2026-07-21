@@ -32,6 +32,8 @@ function doGet(e) {
         return handleTopPosts_(e);
       case 'format_analysis':
         return handleFormatAnalysis_();
+      case 'account':
+        return handleAccount_(e);
       case 'ping':
         return jsonResponse_({ ok: true, timestamp: new Date().toISOString() });
       default:
@@ -360,6 +362,41 @@ function jsonResponse_(data, statusCode) {
   body.status = statusCode || 200;
   return ContentService.createTextOutput(JSON.stringify(body))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * アカウント指標の履歴（フォロワー数）。★v2.2 で追加
+ * ?action=account&days=180
+ *
+ * MMS が views/follower を出して配信制限の兆候を見るために使う。
+ * ★シートが無い/空なら空配列を返す。0 を返してはいけない（未計測とゼロの区別）。
+ */
+function handleAccount_(e) {
+  var days = parseInt(e.parameter.days || '365', 10);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(typeof ACCOUNT_SHEET !== 'undefined' ? ACCOUNT_SHEET : 'account');
+  if (!sheet || sheet.getLastRow() <= 1) {
+    return jsonResponse_({ account: [], total: 0, note: 'まだ記録がありません（Account.gs 未稼働）' });
+  }
+
+  var tz = Session.getScriptTimeZone();
+  var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+  var cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+
+  var out = [];
+  for (var i = 0; i < values.length; i++) {
+    var d = values[i][0];
+    var followers = values[i][1];
+    if (followers === '' || followers === null) continue; // 未計測は返さない
+    var dt = (d instanceof Date) ? d : new Date(String(d));
+    if (isNaN(dt.getTime()) || dt < cutoff) continue;
+    out.push({
+      date: Utilities.formatDate(dt, tz, 'yyyy-MM-dd'),
+      followers_count: Number(followers)
+    });
+  }
+  return jsonResponse_({ account: out, total: out.length });
 }
 
 // ─── 分析系 GET handlers ───────────────────────────────

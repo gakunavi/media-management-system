@@ -15,6 +15,8 @@ function onOpen() {
     .addItem('📊 週次サマリー更新', 'updateWeeklySummary')
     .addSeparator()
     .addItem('接続テスト（whoAmI）', 'runWhoAmI')
+    .addItem('フォロワー数を確認', 'checkFollowersCount')
+    .addItem('⏰ フォロワー数の日次記録を開始', 'installAccountTrigger')
     .addItem('⏰ 毎時トリガー登録（10投稿/日対応）', 'installTriggers')
     .addItem('⏰ Insightsトリガー登録（日次+週次）', 'installInsightsTriggers')
     .addItem('⏰ 旧トリガーに戻す（3回/日）', 'installTriggersLegacy')
