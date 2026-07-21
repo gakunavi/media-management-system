@@ -11,6 +11,7 @@ COPY services/worker/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY services/worker/worker.py ./worker.py
+COPY services/worker/builtin/ ./builtin/
 COPY services/worker/legacy/ ./legacy/
 
 # root で動かさない

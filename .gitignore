@@ -8,7 +8,8 @@
 *.pfx
 credentials*.json
 service-account*.json
-secrets/
+secrets/*
+!secrets/README.md
 .direnv/
 
 # ローカル専用設定（P0-a で追記）

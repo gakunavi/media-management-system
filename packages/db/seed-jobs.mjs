@@ -11,7 +11,25 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+// secrets/gsc-service-account.json があるかで GSC ジョブの有効/無効を決める。
+// ★鍵が無いまま有効にすると失敗が段7を赤で埋める（services/worker/legacy/README.md N5）
+import { existsSync } from "node:fs";
+import path from "node:path";
+const GSC_KEY = path.resolve(process.cwd(), "../../secrets/gsc-service-account.json");
+const gscKeyReady = existsSync(GSC_KEY);
+
 const JOBS = [
+  {
+    name: "gsc-fetch-daily",
+    schedule: "0 7 * * *", // 毎日 07:00 JST（§5.1 日次07:00）
+    kind: "builtin",
+    config: { script: "gsc_daily.py", timeoutSeconds: 1800 },
+    // ★鍵が置かれたら自動で有効になる。無い間は停止（失敗で段7を汚さない）
+    enabled: gscKeyReady,
+    note: gscKeyReady
+      ? "GSC日次取得: 最終取得日〜昨日の欠測を毎回埋める（§3.2.2）"
+      : "GSC日次取得【停止中】secrets/gsc-service-account.json を置いて再実行すると有効化",
+  },
   {
     name: "operator-propose-weekly",
     schedule: "0 9 * * 1", // 毎週月曜 09:00 JST（§5.1 週次）
@@ -35,7 +53,7 @@ async function main() {
     const { note, ...data } = j;
     await prisma.job.upsert({
       where: { name: j.name },
-      update: { schedule: data.schedule, kind: data.kind, config: data.config },
+      update: { schedule: data.schedule, kind: data.kind, config: data.config, enabled: data.enabled },
       create: data,
     });
     console.log(`✓ ${j.name}  [${j.schedule}]  ${note}`);

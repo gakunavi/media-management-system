@@ -103,11 +103,17 @@ services:
       MMS_WORKER_LEGACY_DIR: /app/legacy
       MMS_JOB_SECRET: ${MMS_JOB_SECRET:-}
       MMS_WEB_INTERNAL_URL: ${MMS_WEB_INTERNAL_URL:-http://web:3000}
+      MMS_DEFAULT_BUSINESS_SLUG: ${MMS_DEFAULT_BUSINESS_SLUG:-tax-saving-agency}
+      # GSC 日次取得（builtin/gsc_daily.py）。鍵は secrets/ を読み取り専用マウント
+      GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/gsc-service-account.json
+      MMS_GSC_SITE_URL: ${MMS_GSC_SITE_URL:-}
     volumes:
       # ★設計書 §6「既存 Python 資産は書き直さない」。
       #   コピーすると本体と乖離するため、元のディレクトリを **読み取り専用でマウント**する。
       #   これにより メディア事業部側で更新されたスクリプトが即座に worker に反映される。
       - ${MMS_LEGACY_SCRIPTS_DIR:-./services/worker/legacy}:/app/legacy:ro
+      # ★認証鍵は読み取り専用でマウント（イメージに焼き込まない）
+      - ./secrets:/app/secrets:ro
     depends_on:
       db:
         condition: service_healthy

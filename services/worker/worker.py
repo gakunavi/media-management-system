@@ -42,6 +42,8 @@ JST = timezone(timedelta(hours=9), "JST")
 
 POLL_SECONDS = int(os.environ.get("MMS_WORKER_POLL_SECONDS", "20"))
 LEGACY_DIR = Path(os.environ.get("MMS_WORKER_LEGACY_DIR", "/app/legacy"))
+# MMS 専用スクリプト（イメージ同梱。legacy とは別枠）
+BUILTIN_DIR = Path(os.environ.get("MMS_WORKER_BUILTIN_DIR", "/app/builtin"))
 
 
 def normalize_dsn(url: str | None) -> str | None:
@@ -172,7 +174,43 @@ def run_http(config: dict) -> dict:
         raise RuntimeError(f"HTTP {e.code}: {detail}") from e
 
 
-HANDLERS = {"noop": run_noop, "script": run_script, "http": run_http}
+def run_builtin(config: dict) -> dict:
+    """worker イメージに同梱した MMS 専用スクリプト（/app/builtin）を実行する。
+
+    legacy（読み取り専用マウント・§6「書き直さない」）とは別枠。
+    MMS のために新しく書いたものはこちらに置く。
+    """
+    script = config.get("script")
+    if not script:
+        raise ValueError("config.script が指定されていません")
+
+    target = (BUILTIN_DIR / script).resolve()
+    if not str(target).startswith(str(BUILTIN_DIR.resolve())):
+        raise ValueError(f"builtin ディレクトリ外は実行できません: {script}")
+    if not target.exists():
+        raise FileNotFoundError(f"スクリプトがありません: {target}")
+
+    args = [str(a) for a in config.get("args", [])]
+    timeout = int(config.get("timeoutSeconds", 1800))
+    proc = subprocess.run(
+        [sys.executable, str(target), *args],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"exit={proc.returncode}\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+        )
+    return {"handled": "builtin", "script": script, "stdout_tail": proc.stdout[-2000:]}
+
+
+HANDLERS = {
+    "noop": run_noop,
+    "script": run_script,
+    "http": run_http,
+    "builtin": run_builtin,
+}
 
 
 # ── DB アクセス ─────────────────────────────────────────────
