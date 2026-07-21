@@ -88,6 +88,15 @@ const JOBS = [
       : "SERP取得【停止中】.env に MMS_DATAFORSEO_LOGIN / MMS_DATAFORSEO_PASSWORD を設定して再実行",
   },
   {
+    name: "rakko-import-daily",
+    // 毎日 05:00。cowork が置いたファイルがあれば取り込む（無ければ即終了）
+    schedule: "0 5 * * *",
+    kind: "builtin",
+    config: { script: "rakko_import.py", timeoutSeconds: 600 },
+    enabled: true,
+    note: "ラッコ取り込み: data/rakko-inbox のエクスポートを KeywordResearch へ（§3-8）",
+  },
+  {
     name: "operator-propose-weekly",
     schedule: "0 9 * * 1", // 毎週月曜 09:00 JST（§5.1 週次）
     kind: "http",

@@ -122,6 +122,8 @@ services:
       MMS_DATAFORSEO_LOGIN: ${MMS_DATAFORSEO_LOGIN:-}
       MMS_DATAFORSEO_PASSWORD: ${MMS_DATAFORSEO_PASSWORD:-}
       MMS_DATAFORSEO_MAX_KEYWORDS: ${MMS_DATAFORSEO_MAX_KEYWORDS:-400}
+      # ラッコのエクスポート受け口（builtin/rakko_import.py・§3-8）
+      MMS_RAKKO_INBOX: /app/rakko-inbox
     volumes:
       # ★設計書 §6「既存 Python 資産は書き直さない」。
       #   コピーすると本体と乖離するため、元のディレクトリを **読み取り専用でマウント**する。
@@ -129,6 +131,8 @@ services:
       - ${MMS_LEGACY_SCRIPTS_DIR:-./services/worker/legacy}:/app/legacy:ro
       # ★認証鍵は読み取り専用でマウント（イメージに焼き込まない）
       - ./secrets:/app/secrets:ro
+      # ★ラッコのエクスポート。取り込み後に processed/ へ移すため書き込み可
+      - ./data/rakko-inbox:/app/rakko-inbox
     depends_on:
       db:
         condition: service_healthy

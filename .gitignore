@@ -68,3 +68,7 @@ coverage/
 tmp/
 temp/
 *.tmp
+
+# ラッコのエクスポート（サイズが大きく、再取得可能）
+data/rakko-inbox/*
+!data/rakko-inbox/README.md
