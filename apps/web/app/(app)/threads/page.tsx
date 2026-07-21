@@ -6,6 +6,7 @@ import {
   type AccountHealth,
 } from "@/lib/threads";
 import { getAgencyData } from "@/lib/agency";
+import { getPostBriefs, type PostBriefs } from "@/lib/post-briefs";
 import { AgencySection } from "./agency-section";
 
 // Threads 実績（設計書 §4.2 /threads・§13.4-④）
@@ -20,8 +21,13 @@ const jaDate = (d: Date | null) =>
 const num = (n: number | null) => (n === null ? "—" : n.toLocaleString("ja-JP"));
 
 export default async function ThreadsPage() {
-  const [{ summary, byFormat, byTarget, byCore, byAgencyAngle, top }, agency, health] =
-    await Promise.all([getThreadsData(), getAgencyData(), getAccountHealth()]);
+  const [{ summary, byFormat, byTarget, byCore, byAgencyAngle, top }, agency, health, briefs] =
+    await Promise.all([
+      getThreadsData(),
+      getAgencyData(),
+      getAccountHealth(),
+      getPostBriefs(),
+    ]);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -47,6 +53,7 @@ export default async function ThreadsPage() {
         />
       </div>
 
+      <BriefPanel briefs={briefs} />
       <HealthPanel health={health} />
 
       <Section
@@ -119,6 +126,90 @@ export default async function ThreadsPage() {
         <strong>フォロワー数の履歴が最低{" "}
         {/* HEALTH_MIN_DAYS と同じ値 */}7日分</strong> 必要です。
       </p>
+    </div>
+  );
+}
+
+/**
+ * 次に書く投稿の指示。
+ * ★文章は生成しない。「どの型で・どのテーマを」だけ出して人が書く（YMYL領域のため）。
+ */
+function BriefPanel({ briefs }: { briefs: PostBriefs }) {
+  const urgent = (briefs.gapDays ?? 0) >= 2;
+
+  return (
+    <div className="mb-5">
+      <h2 className="mb-2 text-[14px] font-semibold">次に書く投稿</h2>
+
+      {briefs.gapDays !== null && (
+        <p
+          className={`mb-2 rounded-md px-3 py-2 text-[12px] ${
+            urgent
+              ? "bg-[var(--bad)]/10 text-[var(--bad)]"
+              : "bg-[var(--panel-2)] text-[var(--muted)]"
+          }`}
+        >
+          最終投稿から <strong>{briefs.gapDays}日</strong>
+          {briefs.postsPerDay !== null && (
+            <>
+              ・実績は1日あたり約 <strong>{briefs.postsPerDay}投稿</strong>
+              {briefs.needed ? (
+                <>
+                  {" "}→ 空きを埋めるには <strong>約{briefs.needed}件</strong> の補充が必要
+                </>
+              ) : null}
+            </>
+          )}
+        </p>
+      )}
+
+      {briefs.blocked ? (
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-4 text-[12px] text-[var(--muted)]">
+          指示を出せません: {briefs.blocked}
+        </div>
+      ) : (
+        <>
+          <p className="mb-2 text-[12px] text-[var(--faint)]">
+            ★文章は生成しません。効いている「型」と需要のある「テーマ」の組み合わせだけを出します。
+            税務はYMYL領域で、実際に7件がYMYLチェックで停止しています。本文は人が書いてください。
+          </p>
+          <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="border-b border-[var(--border)] bg-[var(--panel-2)] text-left text-[12px] text-[var(--muted)]">
+                    <th className="whitespace-nowrap px-3 py-2 font-medium">型</th>
+                    <th className="whitespace-nowrap px-3 py-2 font-medium">テーマ</th>
+                    <th className="whitespace-nowrap px-3 py-2 font-medium">根拠</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {briefs.briefs.map((b, i) => (
+                    <tr
+                      key={`${b.format}-${i}`}
+                      className="border-b border-[var(--border)] last:border-0 align-top"
+                    >
+                      <td className="whitespace-nowrap px-3 py-2.5">
+                        <strong>{b.format}</strong>
+                        <span className="ml-1 text-[11px] text-[#1a7a2e]">×{b.formatRatio}</span>
+                      </td>
+                      <td className="max-w-[300px] px-3 py-2.5">
+                        {b.theme}
+                        <span className="ml-1 rounded bg-[var(--panel-2)] px-1 py-0.5 text-[10px] text-[var(--faint)]">
+                          {b.themeSourceLabel}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-[11px] leading-relaxed text-[var(--muted)]">
+                        {b.rationale}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
