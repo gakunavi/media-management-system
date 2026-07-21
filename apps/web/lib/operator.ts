@@ -5,6 +5,7 @@
 //   起票された Action は段5に並び、人が承認/却下する（責任は人に残す・§12.3）。
 import { prisma, type Prisma } from "@mms/db";
 import { decodeEntities } from "./content";
+import { getThreadsData } from "./threads";
 
 const DAY = 86400000;
 
@@ -50,6 +51,7 @@ export async function generateProposals(): Promise<{ created: number; scanned: n
     ...(await proposeFromArticleMetrics()),
     ...(await proposeFromWeakPillars()),
     ...(await proposeFromSerp()),
+    ...(await proposeFromThreadsFormats()),
   ];
 
   let created = 0;
@@ -363,6 +365,71 @@ async function proposeFromSerp(): Promise<Proposal[]> {
 
   out.sort((a, b) => (b.signal.impressions28 as number) - (a.signal.impressions28 as number));
   return out.slice(0, 10);
+}
+
+/**
+ * Rule F（threads_format_shift）: Threads のフォーマット別の効きが偏っているとき、
+ * 低調なフォーマットの配分を高調なフォーマットへ寄せることを提案する。
+ *
+ * ★根拠は /threads 画面でそのまま確認できる（承認前に人が見られる）。
+ * ★未計測の投稿は平均から除外する。0として混ぜると低調フォーマットが
+ *   実際より悪く見え、まだ効いているものを切ってしまう（§3）。
+ */
+async function proposeFromThreadsFormats(): Promise<Proposal[]> {
+  const { summary, byFormat } = await getThreadsData();
+  const median = summary.medianFormatAvg;
+  if (median === null) return []; // 母数が足りず基準を作れない
+
+  // 平均を出せた（＝計測済がMIN_POSTS_FOR_STAT件以上）フォーマットだけを比較する
+  const rated = byFormat.filter((g) => g.avgViews !== null);
+  if (rated.length < 3) return []; // 比較対象が少なすぎると「偏り」を語れない
+
+  const best = rated[0]; // avgViews 降順
+  const worst = rated[rated.length - 1];
+  if (best.avgViews === null || worst.avgViews === null) return [];
+  // 最下位が中央値の6割未満、かつ最上位と2倍以上の開きがあるときだけ提案する
+  if (worst.avgViews >= median * 0.6) return [];
+  if (best.avgViews < worst.avgViews * 2) return [];
+
+  return [
+    {
+      ruleKey: "threads_format",
+      targetKey: slugify(worst.name),
+      contentItemId: null,
+      contentExternalId: null,
+      type: "threads_format_shift",
+      title: `[Threads配分]「${worst.name}」を減らし「${best.name}」に寄せる`,
+      rationale:
+        `フォーマット別の平均views: ${worst.name} ${worst.avgViews.toLocaleString("ja-JP")}` +
+        `（${worst.measured}投稿・中央値比 ×${(worst.avgViews / median).toFixed(1)}）に対し、` +
+        `${best.name} ${best.avgViews.toLocaleString("ja-JP")}（${best.measured}投稿・` +
+        `×${(best.avgViews / median).toFixed(1)}）で ` +
+        `${(best.avgViews / worst.avgViews).toFixed(1)}倍の開き。` +
+        `低調なフォーマットの投稿枠を高調な方へ振り替える。` +
+        `／★これは期間を揃えていない単純平均であり、投稿時期の違い（開設直後は` +
+        `リーチが低い）を含む。/threads で内訳を確認してから判断すること。`,
+      impacts: ["threads_views", "impressions"],
+      signal: {
+        worstFormat: worst.name,
+        worstAvgViews: worst.avgViews,
+        worstPosts: worst.measured,
+        bestFormat: best.name,
+        bestAvgViews: best.avgViews,
+        bestPosts: best.measured,
+        medianFormatAvg: median,
+        unmeasuredPosts: summary.unmeasured,
+      },
+    },
+  ];
+}
+
+function slugify(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9ぁ-んァ-ン一-龥]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
 }
 
 /**

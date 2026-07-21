@@ -26,7 +26,7 @@ export const NAV: NavGroup[] = [
     title: "獲得",
     items: [
       { href: "/leads", label: "リード", ready: true, icon: "leads" },
-      { href: "/threads", label: "Threads・代理店", phase: "P5", ready: false, icon: "threads" },
+      { href: "/threads", label: "Threads・代理店", ready: true, icon: "threads" },
     ],
   },
   {
