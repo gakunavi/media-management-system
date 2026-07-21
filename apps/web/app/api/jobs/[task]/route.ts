@@ -39,6 +39,10 @@ async function sendHealthAlerts(): Promise<{ sent: number; alerts: string[] }> {
     // ★「何日止まった」だけでなく残数も出す。止まる前に打てる手が変わる
     alerts.push(`Threads 配信: ${health.threads.reason}`);
   }
+  if (health.insights.alert === "red" || health.insights.alert === "warn") {
+    // ★投稿が出ていることと、その結果が測れていることは別の障害
+    alerts.push(`Threads 計測: ${health.insights.reason}`);
+  }
   for (const t of health.tools) alerts.push(t.message);
   for (const j of health.jobs) {
     if (j.lastStatus === "failed") alerts.push(`ジョブ失敗: ${j.name}`);

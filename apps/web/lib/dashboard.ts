@@ -184,7 +184,32 @@ export type JobHealth = {
   threads: ThreadsDelivery;
   /** ツールの残高不足・判定期日超過（/costs）。実際に残高が枯渇しかけた */
   tools: { kind: string; message: string }[];
+  /** Threads Insights の回収が生きているか（cowork 日次 Step1 から移管） */
+  insights: InsightsHealth;
 };
+
+/**
+ * Insights の回収が止まっていないか。
+ *
+ * ★cowork の日次監視 Step1 が queue の insights_updated_at で見ていた項目。
+ *   日次監視から配信チェックを外すにあたり、ここが空くと
+ *   「投稿は出ているのに数字が入ってこない」状態に誰も気づけなくなる。
+ *   投稿が出ていることと、その結果が測れていることは別の障害。
+ *
+ * ★24時間以内の投稿は対象外。GAS 側が「24h以上経過した投稿」だけを
+ *   回収しているので、直後の未計測は正常（欠測ではない・§3）。
+ */
+export type InsightsHealth = {
+  /** 25時間〜14日前の投稿のうち、views が1件も無いもの */
+  unmeasured: number;
+  target: number;
+  alert: "ok" | "warn" | "red";
+  reason: string;
+};
+
+/** 未計測がこの割合を超えたら回収が壊れていると見る */
+const INSIGHTS_WARN_RATIO = 0.1;
+const INSIGHTS_RED_RATIO = 0.3;
 
 /**
  * Threads の配信が続いているか。
@@ -252,6 +277,54 @@ export async function getJobHealth(now: Date = new Date()): Promise<JobHealth> {
     gsc: { latestDate: latest?.date ?? null, gapDays, alert },
     threads: await getThreadsDelivery(now),
     tools: await getToolAlerts(now),
+    insights: await getInsightsHealth(now),
+  };
+}
+
+async function getInsightsHealth(now: Date): Promise<InsightsHealth> {
+  const from = new Date(now.getTime() - 14 * 86400000);
+  const to = new Date(now.getTime() - 25 * 3600000);
+  const posts = await prisma.contentItem.findMany({
+    where: {
+      type: "post",
+      channel: { type: "threads" },
+      publishedAt: { gte: from, lt: to },
+    },
+    select: { id: true },
+  });
+  if (posts.length === 0) {
+    // ★対象が無いのは「回収が壊れた」ではない。0件で赤にしない（§16.5）
+    return { unmeasured: 0, target: 0, alert: "ok", reason: "判定対象の投稿がありません" };
+  }
+
+  const withMetric = await prisma.contentMetric.groupBy({
+    by: ["contentItemId"],
+    where: { metric: "threads_views", contentItemId: { in: posts.map((p) => p.id) } },
+  });
+  const unmeasured = posts.length - withMetric.length;
+  const ratio = unmeasured / posts.length;
+
+  if (ratio >= INSIGHTS_RED_RATIO) {
+    return {
+      unmeasured,
+      target: posts.length,
+      alert: "red",
+      reason: `直近2週の投稿 ${posts.length}件のうち ${unmeasured}件が未計測。Insights の回収が止まっている可能性`,
+    };
+  }
+  if (ratio >= INSIGHTS_WARN_RATIO) {
+    return {
+      unmeasured,
+      target: posts.length,
+      alert: "warn",
+      reason: `直近2週の投稿 ${posts.length}件のうち ${unmeasured}件が未計測`,
+    };
+  }
+  return {
+    unmeasured,
+    target: posts.length,
+    alert: "ok",
+    reason: `直近2週 ${posts.length}件中 ${unmeasured}件が未計測`,
   };
 }
 
