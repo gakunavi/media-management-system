@@ -21,6 +21,17 @@ type MetricKey = (typeof METRICS)[number];
  */
 const AGENCY_TARGET = "代理店候補";
 
+/**
+ * 送客クリックの指標名。
+ * ★`threads_link_clicks_lp__setsuzei-diagnosis-a` のような変種別も
+ *   同じ接頭辞を持つ。合計に足すと二重計上になるので、明示列挙する。
+ */
+const LINK_CLICK_METRICS = [
+  "threads_link_clicks_soken",
+  "threads_link_clicks_lp",
+  "threads_link_clicks_line",
+];
+
 export type ThreadsPost = {
   id: string;
   externalId: string;
@@ -32,6 +43,10 @@ export type ThreadsPost = {
   /** null = 未計測（Insights 未回収）。0 とは意味が違う */
   views: number | null;
   engagement: number | null;
+  /** 送客クリック（リンクを貼っていない投稿は 0） */
+  clicks: number;
+  /** 投稿に貼った送客リンク。null なら導線なし */
+  linkUrl: string | null;
   /** 内訳。null は未計測（§3）。quotes は実測0が続いているので合計にのみ含める */
   likes: number | null;
   replies: number | null;
@@ -60,6 +75,16 @@ export type GroupStat = {
   likeRate: number | null;
   /** 1投稿あたりの返信数。会話が始まった度合い＝DM に最も近い指標 */
   repliesPerPost: number | null;
+
+  /**
+   * 送客クリック数（節税総研 / 診断LP / 公式LINE の合計）。
+   * ★4つの目的のうち2つ（LP送客・LINE送客）に直接対応する唯一の実測値。
+   *   リンクを貼った投稿がまだ無い間は 0 が並ぶが、これは「導線が無い」であって
+   *   「効かなかった」ではない。linkedPosts と併せて読むこと。
+   */
+  clicks: number;
+  /** そのグループでリンクを貼った投稿数。0 なら clicks=0 は当然 */
+  linkedPosts: number;
 };
 
 export type ThreadsSummary = {
@@ -112,6 +137,7 @@ export async function getThreadsData(): Promise<ThreadsData> {
       targetLabel: true,
       category: true,
       publishedAt: true,
+      url: true,
     },
   });
 
@@ -120,6 +146,17 @@ export async function getThreadsData(): Promise<ThreadsData> {
     where: { metric: { in: METRICS.map((m) => `threads_${m}`) } },
     _max: { value: true },
   });
+
+  // ★送客クリックは views と違って日次で積み上がる（最大値ではなく合計）。
+  //   変種別（__setsuzei-diagnosis-a 等）は内訳なので二重に数えない
+  const clickRows = await prisma.contentMetric.groupBy({
+    by: ["contentItemId"],
+    where: {
+      metric: { in: LINK_CLICK_METRICS },
+    },
+    _sum: { value: true },
+  });
+  const clicksByItem = new Map(clickRows.map((r) => [r.contentItemId, r._sum.value ?? 0]));
 
   const byItem = new Map<string, Partial<Record<MetricKey, number>>>();
   for (const m of metrics) {
@@ -147,6 +184,8 @@ export async function getThreadsData(): Promise<ThreadsData> {
       publishedAt: it.publishedAt,
       views,
       engagement,
+      clicks: clicksByItem.get(it.id) ?? 0,
+      linkUrl: it.url,
       likes: m?.likes ?? null,
       replies: m?.replies ?? null,
       reposts: m?.reposts ?? null,
@@ -210,6 +249,9 @@ function groupBy(posts: ThreadsPost[], key: (p: ThreadsPost) => string): GroupSt
     const totalLikes = measured.reduce((s, p) => s + (p.likes ?? 0), 0);
     const totalReplies = measured.reduce((s, p) => s + (p.replies ?? 0), 0);
     const totalReposts = measured.reduce((s, p) => s + (p.reposts ?? 0), 0);
+    // ★送客は未計測の概念が無い（クリックされなければ0）。measured で絞らない
+    const clicks = arr.reduce((s, p) => s + p.clicks, 0);
+    const linkedPosts = arr.filter((p) => p.linkUrl).length;
     out.push({
       name,
       posts: arr.length,
@@ -235,6 +277,8 @@ function groupBy(posts: ThreadsPost[], key: (p: ThreadsPost) => string): GroupSt
         measured.length >= MIN_POSTS_FOR_STAT
           ? Math.round((totalReplies / measured.length) * 100) / 100
           : null,
+      clicks,
+      linkedPosts,
     });
   }
   // 平均が出せるものを上に、その中で平均views降順

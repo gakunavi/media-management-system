@@ -416,3 +416,126 @@ async function getThreadsDelivery(now: Date): Promise<ThreadsDelivery> {
     queuePending,
   };
 }
+
+// ── 指標の鮮度（測っているつもりで止まっているのを見つける）──────────
+//
+// ★なぜ要るか
+//   2026-07-22 の点検で、全ジョブが success なのに pv が 7/13 から
+//   9日間更新されていなかった。段7 は「ジョブが緑か」しか見ておらず、
+//   「指標が増えているか」を見ていなかったため誰も気づけない。
+//   ジョブの成功と、そのジョブが本来書くはずのデータが入っていることは別。
+//
+//   同じ理由で weekly_* 6指標（各572行）も 7/13 で止まり、
+//   かつアプリのどこからも参照されていなかった。
+//
+// ★「古い」と「そもそも計測していない」を混同しない（§3）。
+//   ここに出るのは1行でも入ったことがある指標だけ。
+//   一度も無い指標は未計測であって、鮮度の問題ではない。
+
+export type MetricFreshness = {
+  metric: string;
+  rows: number;
+  lastDate: Date;
+  /** 最終更新から今日までの日数（JST） */
+  ageDays: number;
+  /** 履歴から推定した更新間隔（日）。null は推定できるだけの点数が無い */
+  intervalDays: number | null;
+  alert: "ok" | "warn" | "red";
+  /** 画面のどこかで使われているか。false なら貯めているだけ */
+  used: boolean;
+};
+
+/**
+ * 期待間隔は決め打ちしない。**その指標自身の履歴から求める**。
+ *
+ * ★最初は指標ごとに日数を手で書いていたが、それだと自分が知っている指標しか
+ *   守れない。実際、決め打ち版は最重要の pv（9日停止）を見逃し、
+ *   正常な threads_views（反映遅延で3日）を警告に出していた。
+ *   日次で入る指標は中央値1日、週次なら7日と、履歴が間隔を教えてくれる。
+ *
+ * ★許容は「中央値の3倍」。日次なら3日、週次なら21日で警告になる。
+ *   1回飛んだだけで鳴らせば、鳴っても誰も見なくなる。
+ */
+const STALE_MULTIPLIER = 3;
+/** 履歴が短い指標で過敏にならないための下限（日） */
+const STALE_MIN_DAYS = 3;
+/** 間隔を推定するのに必要な最低データ点数。これ未満は判定しない（§16.5） */
+const MIN_POINTS_FOR_INTERVAL = 4;
+
+/** 日付列から更新間隔の中央値（日）を求める。求まらなければ null */
+function medianIntervalDays(dates: Date[]): number | null {
+  if (dates.length < MIN_POINTS_FOR_INTERVAL) return null;
+  const sorted = [...dates].sort((a, b) => a.getTime() - b.getTime());
+  const gaps: number[] = [];
+  for (let i = 1; i < sorted.length; i++) {
+    gaps.push((sorted[i].getTime() - sorted[i - 1].getTime()) / 86400000);
+  }
+  gaps.sort((a, b) => a - b);
+  return gaps[Math.floor(gaps.length / 2)];
+}
+
+/** アプリが実際に読んでいる指標（読んでいないものは「貯めているだけ」と出す） */
+const METRICS_IN_USE = new Set([
+  "clicks",
+  "impressions",
+  "position",
+  "pv",
+  "pv_lifetime",
+  "threads_views",
+  "threads_likes",
+  "threads_replies",
+  "threads_reposts",
+  "threads_quotes",
+]);
+
+export async function getMetricFreshness(now: Date = new Date()): Promise<MetricFreshness[]> {
+  // ★直近60日の「その指標が書かれた日」を取って間隔を推定する
+  const since = new Date(now.getTime() - 60 * 86400000);
+  const [rows, recent] = await Promise.all([
+    prisma.contentMetric.groupBy({
+      by: ["metric"],
+      _count: { _all: true },
+      _max: { date: true },
+    }),
+    prisma.contentMetric.groupBy({
+      by: ["metric", "date"],
+      where: { date: { gte: since } },
+    }),
+  ]);
+
+  const datesByMetric = new Map<string, Date[]>();
+  for (const r of recent) {
+    const arr = datesByMetric.get(r.metric) ?? [];
+    arr.push(new Date(r.date));
+    datesByMetric.set(r.metric, arr);
+  }
+
+  const today = new Date(now.getTime() + JST_OFFSET_MS);
+  today.setUTCHours(0, 0, 0, 0);
+
+  const out: MetricFreshness[] = [];
+  for (const r of rows) {
+    const last = r._max.date;
+    if (!last) continue;
+    const ageDays = Math.floor((today.getTime() - new Date(last).getTime()) / 86400000);
+    const interval = medianIntervalDays(datesByMetric.get(r.metric) ?? []);
+
+    // ★間隔が推定できないうちは判定しない。「まだ分からない」であって正常ではない
+    let alert: "ok" | "warn" | "red" = "ok";
+    if (interval !== null) {
+      const limit = Math.max(interval * STALE_MULTIPLIER, STALE_MIN_DAYS);
+      alert = ageDays > limit * 2 ? "red" : ageDays > limit ? "warn" : "ok";
+    }
+
+    out.push({
+      metric: r.metric,
+      rows: r._count._all,
+      lastDate: new Date(last),
+      ageDays,
+      intervalDays: interval,
+      alert,
+      used: METRICS_IN_USE.has(r.metric),
+    });
+  }
+  return out.sort((a, b) => b.ageDays - a.ageDays || a.metric.localeCompare(b.metric));
+}

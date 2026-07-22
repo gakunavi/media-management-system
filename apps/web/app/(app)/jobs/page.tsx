@@ -1,4 +1,5 @@
 import { getJobs, getRecentRuns, type JobRow } from "@/lib/jobs";
+import { getMetricFreshness, type MetricFreshness } from "@/lib/dashboard";
 import { JobControls } from "./job-controls";
 
 // ジョブ監視（設計書 §4.2 /jobs・§4.1 段7）
@@ -23,7 +24,11 @@ function statusMark(s: string | null): string {
 }
 
 export default async function JobsPage() {
-  const [jobs, runs] = await Promise.all([getJobs(), getRecentRuns()]);
+  const [jobs, runs, freshness] = await Promise.all([
+    getJobs(),
+    getRecentRuns(),
+    getMetricFreshness(),
+  ]);
   const failing = jobs.filter((j) => j.lastStatus === "failed").length;
   const enabled = jobs.filter((j) => j.enabled).length;
 
@@ -102,6 +107,8 @@ export default async function JobsPage() {
         )}
       </section>
 
+      <MetricFreshnessPanel rows={freshness} />
+
       <p className="mt-3 text-[12px] text-[var(--faint)]">
         既存 Python 資産（GSC取得等）は
         <code className="mx-1 font-mono">kind=script</code>
@@ -109,6 +116,91 @@ export default async function JobsPage() {
         （未設定のまま有効にすると失敗が段7を埋める）。
       </p>
     </div>
+  );
+}
+
+/**
+ * 指標の鮮度。
+ *
+ * ★なぜ要るか: 2026-07-22 の点検で、全ジョブ success なのに pv が
+ *   9日間更新されていなかった。段7 は「ジョブが緑か」しか見ておらず、
+ *   「そのジョブが書くはずのデータが増えているか」を見ていなかった。
+ *   さらに weekly_* 6指標（各572行）は貯まっているのにアプリのどこからも
+ *   読まれていなかった。集めることと使うことは別で、両方を出す。
+ */
+function MetricFreshnessPanel({ rows }: { rows: MetricFreshness[] }) {
+  if (rows.length === 0) return null;
+  const stale = rows.filter((r) => r.alert !== "ok");
+  const unused = rows.filter((r) => !r.used);
+
+  return (
+    <section className="mt-6">
+      <h2 className="mb-2 text-[14px] font-semibold">指標の鮮度</h2>
+      <p className="mb-2 text-[12px] text-[var(--faint)]">
+        ジョブが成功していても、書くはずのデータが入っていないことがある。
+        ★「最終」が止まっている指標は、ジョブの緑では気づけない。
+        ★「通常間隔」は履歴から推定した更新間隔で、その3倍を超えると警告する
+        （日次なら3日、週次なら21日）。閾値を人が指標ごとに決めると、
+        知らない指標を守れない。
+      </p>
+      {(stale.length > 0 || unused.length > 0) && (
+        <p className="mb-2 rounded-md bg-[var(--warn)]/12 px-3 py-2 text-[12px] text-[#9a6a00]">
+          {stale.length > 0 && <>更新が遅れている指標 {stale.length}件</>}
+          {stale.length > 0 && unused.length > 0 && " / "}
+          {unused.length > 0 && <>使われていない指標 {unused.length}件</>}
+        </p>
+      )}
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-[var(--border)] bg-[var(--panel-2)] text-left text-[12px] text-[var(--muted)]">
+                <th className="whitespace-nowrap px-3 py-2 font-medium">指標</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">行数</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">最終</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">通常間隔</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">経過</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">利用</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.metric} className="border-b border-[var(--border)] last:border-0">
+                  <td className="px-3 py-2 font-mono text-[12px]">{r.metric}</td>
+                  <td className="tnum px-3 py-2 text-right text-[var(--muted)]">
+                    {r.rows.toLocaleString("ja-JP")}
+                  </td>
+                  <td className="tnum whitespace-nowrap px-3 py-2 text-right text-[var(--muted)]">
+                    {r.lastDate.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" })}
+                  </td>
+                  <td className="tnum px-3 py-2 text-right text-[var(--faint)]">
+                    {r.intervalDays === null ? "—" : `${r.intervalDays}日`}
+                  </td>
+                  <td
+                    className={`tnum px-3 py-2 text-right ${
+                      r.alert === "red"
+                        ? "font-medium text-[var(--bad)]"
+                        : r.alert === "warn"
+                          ? "font-medium text-[#9a6a00]"
+                          : "text-[var(--muted)]"
+                    }`}
+                  >
+                    {r.ageDays}日
+                  </td>
+                  <td className="px-3 py-2 text-[12px]">
+                    {r.used ? (
+                      <span className="text-[var(--muted)]">画面で使用</span>
+                    ) : (
+                      <span className="text-[var(--bad)]">未使用</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   );
 }
 

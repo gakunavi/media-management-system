@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { generateProposals } from "@/lib/operator";
 import { generateIdeas } from "@/lib/ideas";
-import { getJobHealth } from "@/lib/dashboard";
+import { getJobHealth, getMetricFreshness } from "@/lib/dashboard";
 import { notify } from "@/lib/notify";
 import { evaluateDueInterventions } from "@/lib/evaluate";
 import { safeEqual } from "@/lib/crypto";
@@ -42,6 +42,14 @@ async function sendHealthAlerts(): Promise<{ sent: number; alerts: string[] }> {
   if (health.insights.alert === "red" || health.insights.alert === "warn") {
     // ★投稿が出ていることと、その結果が測れていることは別の障害
     alerts.push(`Threads 計測: ${health.insights.reason}`);
+  }
+  // ★ジョブが成功していても、書くはずのデータが入っていないことがある。
+  //   実際 pv は全ジョブ緑のまま9日間止まっていた。
+  const stale = (await getMetricFreshness()).filter((m) => m.alert !== "ok");
+  for (const m of stale) {
+    alerts.push(
+      `指標 ${m.metric} が ${m.ageDays}日更新なし（通常${m.intervalDays}日間隔・最終 ${m.lastDate.toLocaleDateString("ja-JP")}）`,
+    );
   }
   for (const t of health.tools) alerts.push(t.message);
   for (const j of health.jobs) {
