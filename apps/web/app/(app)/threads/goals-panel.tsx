@@ -94,6 +94,21 @@ export function GoalsPanel({ g }: { g: ThreadsGoals }) {
                 </div>
               </dl>
 
+              {/* ★内訳。同じ「DM」でも代理店希望と見込み客では打ち手が違う */}
+              {c.breakdown && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {c.breakdown.map((b) => (
+                    <Link
+                      key={b.label}
+                      href={b.href}
+                      className="rounded-md border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--muted)] hover:bg-[var(--panel)]"
+                    >
+                      {b.label} <strong className="tnum ml-0.5">{b.value}</strong>
+                    </Link>
+                  ))}
+                </div>
+              )}
+
               <div className="mt-2">
                 <Link
                   href={c.detailHref}

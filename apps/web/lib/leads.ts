@@ -206,7 +206,10 @@ export const SOURCE_COVERAGE: Record<string, string> = {
   lp_diagnosis: "lp_form_submit_b",
   lp_agency: "agency_lp_inquiries",
   line: "lead_line",
-  threads_dm: "lead_agency",
+  // ★受け皿としての Threads DM は代理店・見込み客の両方を含む。
+  //   代理店だけの指標（lead_agency）を流用すると、集客DMしか来ていない
+  //   期間に「代理店を計測中」と出る（2026-07-23）
+  threads_dm: "lead_threads_dm",
   // ★電話とメールは手入力。仕組みで計測するものではないので常に計測済み扱い
   phone_manual: "lead_direct_inquiry",
   email: "lead_direct_inquiry",

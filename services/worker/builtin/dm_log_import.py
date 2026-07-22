@@ -93,6 +93,18 @@ LEAD_STATUS_MAP: dict[str, str] = {
     "received": "new",
 }
 
+# 反応元が集客投稿なら「見込み客」。それ以外（アングル・代理店DMリクエスト）は「代理店候補」。
+#
+# ★なぜ分けるか（2026-07-23 cowork の指摘）
+#   この取り込みは Lead.type を 'agency' に決め打ちし、AgencyLead にも無条件で
+#   起票していた。集客投稿から来たDMを同じファイルに書くと、見込み客が
+#   代理店候補として起票され、**代理店の歩留まりの分母が壊れる**。
+#   相手が何を求めて来たのかは記録の「反応元」列にしか無いので、そこで判定する。
+#
+# ★列は増やさない。dm-log.md の列順と判定4語は MMS が依存している契約で、
+#   増やすと cowork 側の記録運用も MMS 側のパーサも両方直すことになる。
+PROSPECT_PREFIX = "集客"
+
 # 「A12(相互送客の座組み) への返信」「A12相互送客」から A12 を取り出す。
 # ★\b は使えない。Python の \w は CJK を含むので "A12相互" に境界が立たず
 #   アングルを取りこぼす（実際に @lightconnect.ia を取りこぼした）
@@ -156,11 +168,15 @@ def parse_rows(text: str) -> list[dict]:
 
         angle_src = f"{cells[2]} {cells[3]}"
         angle = ANGLE_RE.search(angle_src)
+        # ★判定は「反応元」列の先頭だけを見る。本文（要約）に「集客」の語が
+        #   出ただけで見込み客に化けると、代理店の実績が静かに減る
+        is_prospect = cells[2].strip().startswith(PROSPECT_PREFIX)
         out.append(
             {
                 "handle": handle,
                 "received_at": datetime(y, mo, d, tzinfo=JST),
                 "angle": angle.group(1) if angle else None,
+                "is_prospect": is_prospect,
                 "stage": stage,
                 "summary": cells[3],
                 "answer": cells[4],
@@ -221,11 +237,18 @@ def main() -> int:
                     "source": "cowork dm-log.md",
                 }
             )
-            cur.execute(
-                'SELECT id, stage FROM "AgencyLead" WHERE "threadsUserId"=%s', (handle,)
-            )
-            row = cur.fetchone()
-            if row:
+            # ★見込み客は代理店パイプラインに入れない。入れると
+            #   「DM受信 → 有効 → 契約」の分母に代理店希望でない人が混ざる
+            if r["is_prospect"]:
+                row = None
+            else:
+                cur.execute(
+                    'SELECT id, stage FROM "AgencyLead" WHERE "threadsUserId"=%s', (handle,)
+                )
+                row = cur.fetchone()
+            if r["is_prospect"]:
+                pass
+            elif row:
                 cur.execute(
                     'UPDATE "AgencyLead" SET stage=%s, "screeningAnswers"=%s, "updatedAt"=%s '
                     "WHERE id=%s",
@@ -249,40 +272,72 @@ def main() -> int:
             # ★他の受け皿はすべて Lead に入る。Threads DM だけ入らないと
             #   /leads の受け皿一覧で永久に「未計測」になる
             lead_status = LEAD_STATUS_MAP.get(r["stage"], "new")
+            # ★受け皿は同じ Threads DM でも、相手の性質が違う。
+            #   直客の問い合わせ（direct_inquiry）と代理店（agency）を混ぜない
+            lead_type = "direct_inquiry" if r["is_prospect"] else "agency"
             cur.execute(
                 'SELECT id FROM "Lead" WHERE "sourceType"=\'threads_dm\' AND note=%s',
                 (f"Threads DM @{handle}",),
             )
             lead = cur.fetchone()
             if lead:
+                # ★type も更新する。記録側で「代理店希望 → 見込み客」と
+                #   直したのに MMS が古い区分を持ち続けると、二度と一致しない
                 cur.execute(
-                    'UPDATE "Lead" SET status=%s, "updatedAt"=%s WHERE id=%s',
-                    (lead_status, to_db(now), lead[0]),
+                    'UPDATE "Lead" SET status=%s, type=%s, "updatedAt"=%s WHERE id=%s',
+                    (lead_status, lead_type, to_db(now), lead[0]),
                 )
             else:
                 cur.execute(
                     'INSERT INTO "Lead"(id,"businessId",type,"sourceType","occurredAt",status,'
                     'note,"createdAt","updatedAt") '
-                    "VALUES (gen_random_uuid()::text,%s,'agency','threads_dm',%s,%s,%s,%s,%s)",
-                    (business_id, to_db(r["first_at"]), lead_status, f"Threads DM @{handle}", to_db(now), to_db(now)),
+                    "VALUES (gen_random_uuid()::text,%s,%s,'threads_dm',%s,%s,%s,%s,%s)",
+                    (
+                        business_id,
+                        lead_type,
+                        to_db(r["first_at"]),
+                        lead_status,
+                        f"Threads DM @{handle}",
+                        to_db(now),
+                        to_db(now),
+                    ),
                 )
 
-            log(f"  @{handle}  angle={r['angle'] or '—'}  {r['verdict']} → {r['stage']}/{lead_status}")
+            kind = "見込み客" if r["is_prospect"] else "代理店"
+            log(
+                f"  @{handle}  {kind}  angle={r['angle'] or '—'}  "
+                f"{r['verdict']} → {r['stage']}/{lead_status}"
+            )
         # ★受け皿として計測が始まっていることを記録する（§3）。
-        #   これが無いと /leads で Threads DM が「未計測」のままになる
-        cur.execute('SELECT 1 FROM "MeasurementCoverage" WHERE metric=%s', ("lead_agency",))
-        if not cur.fetchone() and latest:
+        #   これが無いと /leads で Threads DM が「未計測」のままになる。
+        #
+        # ★指標を2つに分ける（2026-07-23）。
+        #     lead_threads_dm … 受け皿「Threads DM」の計測（代理店・見込み客の両方）
+        #     lead_agency     … 代理店リードの計測（代理店パイプラインの分母）
+        #   1つにまとめると、集客DMしか来ていない期間でも「代理店を計測中」に
+        #   見えてしまう。逆も同じで、どちらが測れているのか分からなくなる。
+        def ensure_coverage(metric: str, started_at, note: str) -> None:
+            cur.execute('SELECT 1 FROM "MeasurementCoverage" WHERE metric=%s', (metric,))
+            if cur.fetchone():
+                return
             cur.execute(
                 'INSERT INTO "MeasurementCoverage"(id,metric,"startedAt",method,note,'
                 '"createdAt","updatedAt") VALUES (gen_random_uuid()::text,%s,%s,%s,%s,%s,%s)',
-                (
-                    "lead_agency",
-                    to_db(min(r["first_at"] for r in latest.values())),
-                    "cowork_dm_log",
-                    "cowork の日次監視が dm-log.md に記録したDMを取り込んで計測（§3-6）",
-                    to_db(now),
-                    to_db(now),
-                ),
+                (metric, to_db(started_at), "cowork_dm_log", note, to_db(now), to_db(now)),
+            )
+
+        if latest:
+            ensure_coverage(
+                "lead_threads_dm",
+                min(r["first_at"] for r in latest.values()),
+                "cowork の日次監視が dm-log.md に記録したDMを取り込んで計測（§3-6）",
+            )
+        agency_rows = [r for r in latest.values() if not r["is_prospect"]]
+        if agency_rows:
+            ensure_coverage(
+                "lead_agency",
+                min(r["first_at"] for r in agency_rows),
+                "dm-log.md の代理店候補DM（反応元がアングル）を取り込んで計測（§3-6）",
             )
         conn.commit()
 

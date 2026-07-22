@@ -344,6 +344,37 @@ def post_to_ingest(
         raise RuntimeError(f"ingest HTTP {e.code}: {e.read().decode()[:300]}") from e
 
 
+def fetch_article_links() -> dict[str, str]:
+    """id → article_link の対応表を action=list から作る。
+
+    ★なぜ2回叩くのか（2026-07-23）
+      インサイト（views 等）を持つのは action=top_posts だが、
+      **top_posts の応答に article_link が入っていない**。
+      一方 MMS は「投稿がどのゴールを狙ったか」をこのリンクで判定する
+      （/r/soken → メディア送客・/r/line → LINE …）。
+      top_posts だけを見ていると、リンクを貼った投稿が公開されても
+      url が空のまま入り、全部「狙い未設定」に分類されて
+      **送客の計測が始まったことに誰も気づけない**。
+      list には article_link があるので、id で突き合わせて補う。
+
+    ★取れなくても同期は続ける。リンクが欠けるのは痛いが、
+      それで投稿とインサイトの取り込みまで止める理由はない。
+    """
+    try:
+        payload = gas_fetch("list")
+    except Exception as e:  # noqa: BLE001 - 同期本体は続ける
+        log(f"★article_link の取得に失敗（リンクは空のまま続行）: {e}")
+        return {}
+
+    links: dict[str, str] = {}
+    for row in extract_rows(payload):
+        ext_id = pick(row, FIELD_ALIASES["id"])
+        link = pick(row, FIELD_ALIASES["articleLink"])
+        if ext_id and link and str(link).strip():
+            links[str(ext_id)] = str(link).strip()
+    return links
+
+
 def main() -> int:
     probe = "--probe" in sys.argv
     account_ref = os.environ.get("MMS_THREADS_ACCOUNT_REF", "setsuzei_masa").strip()
@@ -352,6 +383,10 @@ def main() -> int:
     payload = gas_fetch("top_posts")
     rows = extract_rows(payload)
     log(f"GAS から {len(rows)} 行を取得")
+
+    # ★送客リンクは list 側にしかない。id で補う（fetch_article_links の説明を参照）
+    links = fetch_article_links()
+    log(f"送客リンクを持つ行 {len(links)} 件")
 
     if not rows:
         log("★0行でした。GAS 側の action=top_posts が想定と違う可能性があります")
@@ -365,8 +400,13 @@ def main() -> int:
         return 0
 
     posts = [p for p in (to_ingest_post(r) for r in rows) if p]
+    for post in posts:
+        link = links.get(post["id"])
+        if link:
+            post["articleLink"] = link
     with_metrics = sum(1 for p in posts if p.get("metrics"))
-    log(f"送信対象 {len(posts)} 件（うちインサイトあり {with_metrics} 件）")
+    with_link = sum(1 for p in posts if p.get("articleLink"))
+    log(f"送信対象 {len(posts)} 件（うちインサイトあり {with_metrics} 件・送客リンクあり {with_link} 件）")
 
     account = gas_fetch_account()
     log(f"フォロワー数の履歴 {len(account)}日分")

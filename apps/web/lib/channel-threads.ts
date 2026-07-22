@@ -41,6 +41,12 @@ export type GoalCard = {
   rate: number | null;
   /** 1投稿あたりの成果。投稿数の違う期間・ゴールを比べるために要る */
   perPost: number | null;
+  /**
+   * 内訳（DMのみ）。代理店希望 / 見込み客。
+   * ★同じ「Threads DM」でも打ち手が違う。代理店希望は選別と取次、
+   *   見込み客は商談。混ぜると「DMが増えた」だけで中身が読めない。
+   */
+  breakdown?: { label: string; value: number; href: string }[];
   /** その成果の次（記事側／選別の先）への案内 */
   note: string;
   detailHref: string;
@@ -93,7 +99,7 @@ export async function getThreadsGoals(range: Range): Promise<ThreadsGoals> {
       //   受け皿の実績は Lead が正（/leads・ダッシュボードと数字を合わせる）
       prisma.lead.findMany({
         where: { sourceType: "threads_dm", occurredAt: win },
-        select: { occurredAt: true, status: true, closedAmount: true },
+        select: { occurredAt: true, status: true, closedAmount: true, type: true },
       }),
       prisma.lead.count({ where: { sourceType: "threads_dm", occurredAt: prevWin } }),
       // 選別の進み具合は AgencyLead（stage 遷移）が正
@@ -172,6 +178,11 @@ export async function getThreadsGoals(range: Range): Promise<ThreadsGoals> {
   const postsOf = (g: PostGoal) => postsByGoal.find((p) => p.goal === g)?.posts ?? 0;
 
   const dmCount = dmLeads.length;
+  // ★代理店希望と見込み客を分ける（2026-07-23）。dm-log.md の「反応元」列が
+  //   集客投稿なら見込み客として取り込まれる（dm_log_import.py）。
+  //   分けないと「代理店18本は多いか少ないか」を DM 実績で決められない。
+  const dmAgency = dmLeads.filter((l) => l.type === "agency").length;
+  const dmProspect = dmLeads.filter((l) => l.type === "direct_inquiry").length;
   const qualified = agencyLeads.filter((l) =>
     ["qualified", "forwarded", "contracted"].includes(l.stage),
   ).length;
@@ -209,8 +220,15 @@ export async function getThreadsGoals(range: Range): Promise<ThreadsGoals> {
       prev: prevDmLeads,
       rate: rateOf(dmCount, dmViews),
       perPost: perPostOf(dmCount, postsOf("dm")),
-      // ★集客コンテンツからのDMは記録していない（dm-log.md は代理店DMのみ）
-      note: "記録があるのは代理店募集トラックのDMのみ。集客コンテンツからのDMは未計測",
+      breakdown: [
+        { label: "代理店希望", value: dmAgency, href: "/agency" },
+        { label: "見込み客", value: dmProspect, href: "/leads" },
+      ],
+      // ★2026-07-23 から dm-log.md の「反応元」列で代理店/見込み客を分別できる
+      note:
+        dmProspect > 0
+          ? "代理店希望と見込み客を分けて記録している（dm-log.md の反応元で判定）"
+          : "いまの記録はすべて代理店希望。見込み客DMは反応元を『集客…』で書くと分別される",
       detailHref: "/agency",
     },
   ];
@@ -226,9 +244,11 @@ export async function getThreadsGoals(range: Range): Promise<ThreadsGoals> {
     },
     {
       key: "received",
-      label: "② DM受信",
-      value: dmCount,
-      hint: "Lead(threads_dm)",
+      // ★③以降は代理店の選別パイプライン（AgencyLead）。分母も代理店DMに揃える。
+      //   見込み客DMを分母に入れると「有効率」が実際より低く出る
+      label: "② 代理店DM受信",
+      value: dmAgency,
+      hint: dmProspect > 0 ? `別に見込み客DM ${dmProspect}件（/leads へ）` : "Lead(threads_dm・代理店)",
       action: "アングル・CTA文言を変える",
     },
     {
@@ -293,6 +313,11 @@ export async function getThreadsGoals(range: Range): Promise<ThreadsGoals> {
   }
 
   const notes: string[] = [];
+  if (dmProspect > 0) {
+    notes.push(
+      `DM ${dmCount}件の内訳は 代理店希望 ${dmAgency}件 / 見込み客 ${dmProspect}件。下の階段（選別 → 契約）は代理店希望の${dmAgency}件だけを分母にしています。`,
+    );
+  }
   if (inProgress > 0) {
     notes.push(
       `DM ${dmCount}件のうち ${inProgress}件は選別中です。「有効 ${qualified}件」は失敗ではなく、まだ結果が出ていない件数を含みません。`,
@@ -309,9 +334,13 @@ export async function getThreadsGoals(range: Range): Promise<ThreadsGoals> {
       "メディア送客は「0件」ではなく未計測です。リダイレクタ（/r/soken/）は動きますが、まだ一度も踏まれていません。",
     );
   }
-  notes.push(
-    "集客コンテンツから来たDMは記録していません（cowork の dm-log.md は代理店DMのみ）。DM件数を集客投稿の成果として読まないこと。",
-  );
+  if (dmProspect === 0) {
+    // ★2026-07-23 に dm-log.md の「反応元」で分別できるようにした。
+    //   それ以前は集客DMがそもそも記録されていない（未計測）
+    notes.push(
+      "見込み客DMの記録は0件です。dm-log.md の「反応元」列を『集客…』で始めると見込み客として取り込まれます（2026-07-23〜）。それ以前の集客DMは記録がありません。",
+    );
+  }
 
   return {
     days: range.days,
