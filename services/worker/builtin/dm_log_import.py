@@ -12,6 +12,14 @@
 ★このファイルは cowork 側の正本。**読み取りのみ**で書き換えない（§6）。
   運用の実体は cowork にあり、MMS が勝手に直すと二重管理になる。
 
+★AgencyLead と Lead の両方に入れる（2026-07-22 石井さんの指摘で修正）
+  Threads は送客元で、DM は受け皿の1つ。他の受け皿（LINE・LP・電話・メール）は
+  すべて Lead に入るのに、Threads DM だけ AgencyLead にしか無かった。
+  そのため /leads の受け皿一覧で Threads DM だけ永久に「未計測」になっていた。
+    AgencyLead … 代理店としての選別パイプライン（stage 遷移）
+    Lead       … 受け皿をまたいだ獲得の実績（件数・成約・金額）
+  役割が違うので両方持つ。二重計上ではない。
+
 ★判定の対応（dm-log.md → AgencyLeadStage）
     有効          → qualified
     有効候補      → answered   （まだ選別が終わっていない。qualified にしない）
@@ -45,6 +53,17 @@ STAGE_MAP: tuple[tuple[str, str], ...] = (
     ("保留", "screening_sent"),
     ("無効", "rejected"),
 )
+
+# AgencyLeadStage → LeadStatus
+# ★「有効候補」を qualified にしない（下の注記と同じ理由）。
+#   無効は lost。返信済み＝接触済みなので contacted に寄せる。
+LEAD_STATUS_MAP: dict[str, str] = {
+    "answered": "contacted",
+    "qualified": "qualified",
+    "screening_sent": "contacted",
+    "rejected": "lost",
+    "received": "new",
+}
 
 # 「A12(相互送客の座組み) への返信」「A12相互送客」から A12 を取り出す。
 # ★\b は使えない。Python の \w は CJK を含むので "A12相互" に境界が立たず
@@ -143,6 +162,7 @@ def main() -> int:
     dsn = os.environ.get("MMS_DATABASE_URL")
     if not dsn:
         raise RuntimeError("MMS_DATABASE_URL が未設定です")
+    slug = os.environ.get("MMS_DEFAULT_BUSINESS_SLUG", "tax-saving-agency")
 
     # 同じ相手が複数行に出る（初回反応 → 続き）。最後の行がいまの状態
     latest: dict[str, dict] = {}
@@ -156,6 +176,12 @@ def main() -> int:
     now = datetime.now(JST)
     created = updated = 0
     with psycopg.connect(normalize_dsn(dsn)) as conn, conn.cursor() as cur:
+        cur.execute('SELECT id FROM "Business" WHERE slug=%s', (slug,))
+        row = cur.fetchone()
+        if not row:
+            raise RuntimeError(f"Business({slug}) がありません")
+        business_id = row[0]
+
         for handle, r in latest.items():
             answers = psycopg.types.json.Json(
                 {
@@ -190,7 +216,45 @@ def main() -> int:
                     (handle, r["first_at"], r["stage"], answers, now, now),
                 )
                 created += 1
-            log(f"  @{handle}  angle={r['angle'] or '—'}  {r['verdict']} → {r['stage']}")
+            # ── 受け皿としての Lead も持つ ──
+            # ★他の受け皿はすべて Lead に入る。Threads DM だけ入らないと
+            #   /leads の受け皿一覧で永久に「未計測」になる
+            lead_status = LEAD_STATUS_MAP.get(r["stage"], "new")
+            cur.execute(
+                'SELECT id FROM "Lead" WHERE "sourceType"=\'threads_dm\' AND note=%s',
+                (f"Threads DM @{handle}",),
+            )
+            lead = cur.fetchone()
+            if lead:
+                cur.execute(
+                    'UPDATE "Lead" SET status=%s, "updatedAt"=%s WHERE id=%s',
+                    (lead_status, now, lead[0]),
+                )
+            else:
+                cur.execute(
+                    'INSERT INTO "Lead"(id,"businessId",type,"sourceType","occurredAt",status,'
+                    'note,"createdAt","updatedAt") '
+                    "VALUES (gen_random_uuid()::text,%s,'agency','threads_dm',%s,%s,%s,%s,%s)",
+                    (business_id, r["first_at"], lead_status, f"Threads DM @{handle}", now, now),
+                )
+
+            log(f"  @{handle}  angle={r['angle'] or '—'}  {r['verdict']} → {r['stage']}/{lead_status}")
+        # ★受け皿として計測が始まっていることを記録する（§3）。
+        #   これが無いと /leads で Threads DM が「未計測」のままになる
+        cur.execute('SELECT 1 FROM "MeasurementCoverage" WHERE metric=%s', ("lead_agency",))
+        if not cur.fetchone() and latest:
+            cur.execute(
+                'INSERT INTO "MeasurementCoverage"(id,metric,"startedAt",method,note,'
+                '"createdAt","updatedAt") VALUES (gen_random_uuid()::text,%s,%s,%s,%s,%s,%s)',
+                (
+                    "lead_agency",
+                    min(r["first_at"] for r in latest.values()),
+                    "cowork_dm_log",
+                    "cowork の日次監視が dm-log.md に記録したDMを取り込んで計測（§3-6）",
+                    now,
+                    now,
+                ),
+            )
         conn.commit()
 
     log(f"完了: 新規 {created}件 / 更新 {updated}件")
