@@ -123,6 +123,15 @@ const JOBS = [
     note: "ネタ供給: Threads反響（§13.4-④）とAIO未引用（§3.3.6）から自動起票",
   },
   {
+    name: "ga4-fetch-daily",
+    // 毎日 07:30。GSC取得(07:00)の直後。GA4は当日分が確定しないので前日まで取る
+    schedule: "30 7 * * *",
+    kind: "builtin",
+    config: { script: "ga4_daily.py", timeoutSeconds: 1800 },
+    enabled: true,
+    note: "GA4日次取得: 記事別PVと診断LPのファネルを一次ソースから直接（Notion経由をやめた）",
+  },
+  {
     name: "dm-log-import-daily",
     // 毎日 10:00。cowork の日次監視（DM検知・返信案作成）が終わった後に取り込む
     schedule: "0 10 * * *",

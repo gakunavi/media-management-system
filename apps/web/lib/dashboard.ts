@@ -68,7 +68,7 @@ export type FunnelRow = {
   key: string;
   label: string;
   value: number | null; // null = 未計測
-  source: "gsc" | "funnel";
+  source: "gsc" | "funnel" | "ga4";
 };
 
 /** 直近 N 日の GSC 実測合計（MetricSnapshot = サイト全体） */
@@ -92,6 +92,34 @@ async function funnelStepCount(step: string): Promise<number> {
   return prisma.funnelEvent.count({ where: { step: step as never } });
 }
 
+/**
+ * 診断LPの実測（GA4・直近28日）。
+ *
+ * ★自前タグ（FunnelEvent）ではなく GA4 を使う理由
+ *   自前タグは記事側に入っておらず FunnelEvent は0件のままだった。
+ *   一方 LP には lp_view / lp_cta_click / lp_form_submit のイベントが
+ *   既に入っていて、GA4 に実データがある。無い計測を待つより在るものを使う。
+ *
+ * ★変種（a/b/c）を合算して返す。ABC の勝敗は /experiments 側の話で、
+ *   段2 が見たいのは「LPまで何人来て何人送信したか」。
+ */
+async function ga4LpSum(prefix: string, days = 28): Promise<number | null> {
+  const latest = await prisma.metricSnapshot.findFirst({
+    where: { metric: { startsWith: prefix } },
+    orderBy: { date: "desc" },
+    select: { date: true },
+  });
+  // ★1行も無いのは 0 ではなく未計測（§3）
+  if (!latest) return null;
+  const since = new Date(latest.date);
+  since.setDate(since.getDate() - (days - 1));
+  const agg = await prisma.metricSnapshot.aggregate({
+    _sum: { value: true },
+    where: { metric: { startsWith: prefix }, date: { gte: since, lte: latest.date } },
+  });
+  return Math.round(agg._sum.value ?? 0);
+}
+
 export type FunnelView = {
   rows: FunnelRow[];
   asOf: Date | null;
@@ -110,25 +138,29 @@ export async function getFunnel(): Promise<FunnelView> {
     gscSum("clicks", 28),
   ]);
 
-  // CTA表示以降は自前計測（タグ）が動いていないと未計測
-  const [ctaView, ctaClick, lpView, formView, submit] = funnelMeasured
-    ? await Promise.all([
-        funnelStepCount("cta_view"),
-        funnelStepCount("cta_click"),
-        funnelStepCount("lp_view"),
-        funnelStepCount("form_view"),
-        funnelStepCount("submit"),
-      ])
-    : [null, null, null, null, null];
+  // 記事側のCTA表示/クリックは自前タグ（FunnelEvent）。まだ動いていない
+  const [ctaView, ctaClick] = funnelMeasured
+    ? await Promise.all([funnelStepCount("cta_view"), funnelStepCount("cta_click")])
+    : [null, null];
+
+  // LP到達・送信は GA4 の実測（lp_view_* / lp_form_submit_*）
+  const [lpView, lpCtaClick, submit] = await Promise.all([
+    ga4LpSum("lp_view_"),
+    ga4LpSum("lp_cta_click_"),
+    ga4LpSum("lp_form_submit_"),
+  ]);
+  // ★フォーム到達だけは計測イベントが無い。0 ではなく未計測として残す
+  const formView = null;
 
   const rows: FunnelRow[] = [
     { key: "impressions", label: "表示", value: impr?.value ?? null, source: "gsc" },
     { key: "clicks", label: "クリック", value: clicks?.value ?? null, source: "gsc" },
     { key: "cta_view", label: "CTA表示", value: ctaView, source: "funnel" },
     { key: "cta_click", label: "CTAクリック", value: ctaClick, source: "funnel" },
-    { key: "lp_view", label: "LP到達", value: lpView, source: "funnel" },
+    { key: "lp_view", label: "LP到達", value: lpView, source: "ga4" },
+    { key: "lp_cta_click", label: "LP内CTAクリック", value: lpCtaClick, source: "ga4" },
     { key: "form_view", label: "フォーム到達", value: formView, source: "funnel" },
-    { key: "submit", label: "送信", value: submit, source: "funnel" },
+    { key: "submit", label: "送信", value: submit, source: "ga4" },
   ];
 
   // 隣接段間の残存率と最大ドロップ地点

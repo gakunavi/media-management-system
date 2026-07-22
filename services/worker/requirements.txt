@@ -10,3 +10,7 @@ python-dotenv==1.0.1
 # ── GSC API（builtin/gsc_daily.py）──
 google-api-python-client==2.149.0
 google-auth==2.35.0
+
+# ── GA4 Data API（builtin/ga4_daily.py）──
+#   PV とLPファネルを Notion 経由でなく一次ソースから直接取る
+google-analytics-data==0.18.11

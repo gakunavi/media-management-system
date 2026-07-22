@@ -132,6 +132,10 @@ services:
       MMS_DATAFORSEO_MAX_KEYWORDS: ${MMS_DATAFORSEO_MAX_KEYWORDS:-400}
       # ラッコのエクスポート（builtin/rakko_import.py・§3-8）
       MMS_RAKKO_EXPORTS_DIR: /app/rakko-exports
+      # GA4 日次取得（builtin/ga4_daily.py）。PV と診断LPのファネル
+      GA4_PROPERTY_ID: ${GA4_PROPERTY_ID:-}
+      MMS_GA4_LOOKBACK_DAYS: ${MMS_GA4_LOOKBACK_DAYS:-30}
+      MMS_GA4_CREDENTIALS: /app/ga4-service-account.json
       # 代理店DMログ（builtin/dm_log_import.py・§3-6）。cowork の日次監視が書いている
       MMS_DM_LOG_PATH: /app/cowork-threads/sns-account-create/children/setsuzei-soken/05-sales/agency-recruitment/dm-log.md
     volumes:
@@ -147,6 +151,8 @@ services:
       # ★代理店DMログは cowork 側が正本。日次監視タスクが追記している。
       #   MMS は読むだけ（書くと運用の実体と二重管理になる・§6）
       - ${MMS_COWORK_THREADS_DIR_HOST:-./data/cowork-threads}:/app/cowork-threads:ro
+      # ★GA4 のサービスアカウント鍵。メディア事業部側が正本なので複製せず読むだけ
+      - ${MMS_GA4_CREDENTIALS_HOST:-./secrets/ga4-service-account.json}:/app/ga4-service-account.json:ro
     depends_on:
       db:
         condition: service_healthy
