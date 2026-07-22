@@ -100,6 +100,14 @@ export async function GET(
   const url = new URL(target);
   const variant = candidates.length > 1 ? variantOf(url) : null;
 
+  // ★送り元が投稿IDかどうかで UTM を変える。
+  //   以前は一律 utm_source=threads を付けていたため、サイトのフッタから
+  //   踏まれたクリックまで「Threads から来た」と記録され、
+  //   GA4 側の流入元集計が汚れていた。
+  const isPost = /^THR-\d+$/i.test(postId);
+  const source = isPost ? "threads" : "site";
+  const medium = isPost ? "social" : "owned";
+
   if (!isBot) {
     try {
       await recordClick(postId, dest.toLowerCase(), variant);
@@ -111,9 +119,9 @@ export async function GET(
   // 遷移先でも出所が分かるようにする（GA等で見る用。個人情報は載せない）
   // ★from= は既存の lp-ab-weekly-report.py が pagePath（クエリ非含有）で
   //   集計しているため、そのままでは効かない。レポート側の対応が要る。
-  url.searchParams.set("from", "threads");
-  url.searchParams.set("utm_source", "threads");
-  url.searchParams.set("utm_medium", "social");
+  url.searchParams.set("from", source);
+  url.searchParams.set("utm_source", source);
+  url.searchParams.set("utm_medium", medium);
   url.searchParams.set("utm_campaign", postId);
 
   return NextResponse.redirect(url.toString(), 302);
