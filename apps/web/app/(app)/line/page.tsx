@@ -19,20 +19,6 @@ export default async function LinePage() {
         </p>
       </div>
 
-      {ch.unresponded.count > 0 && (
-        <p className="mb-4 rounded-lg border border-[var(--bad)]/40 bg-[var(--bad)]/[0.06] px-3.5 py-2.5 text-[13px] text-[var(--bad)]">
-          ● 未対応 <strong className="tnum">{ch.unresponded.count}件</strong>
-          {ch.unresponded.oldestDays !== null && (
-            <>
-              （最長 <strong className="tnum">{ch.unresponded.oldestDays}日</strong> 経過）
-            </>
-          )}
-          <span className="ml-1 opacity-80">
-            ※設計書はSLA1時間を段1で監視するとしています
-          </span>
-        </p>
-      )}
-
       {ch.notMeasured.length > 0 && (
         <p className="mb-4 rounded-md bg-[var(--warn)]/12 px-3 py-2 text-[12px] text-[#9a6a00]">
           ★未計測の段があります: {ch.notMeasured.join(" / ")}。

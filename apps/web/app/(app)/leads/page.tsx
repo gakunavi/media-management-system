@@ -240,13 +240,6 @@ function SourcePanel({ data }: { data: SourceBreakdown }) {
       <Td className="text-right">
         <span className="tnum">{pct(r.closeRate)}</span>
       </Td>
-      <Td className="text-right">
-        {r.unresponded > 0 ? (
-          <span className="tnum font-medium text-[var(--bad)]">{r.unresponded}</span>
-        ) : (
-          <span className="text-[var(--faint)]">0</span>
-        )}
-      </Td>
     </>
   );
 
@@ -257,7 +250,8 @@ function SourcePanel({ data }: { data: SourceBreakdown }) {
         ★「直客/代理店/LINE」はゴールの種類で、経路ではない。どの経路が獲得に
         効いているかは、この並びでしか判断できない。
         <br />
-        ★未対応＝初回応答が未記録のリード。設計書はSLA1時間を段1で監視するとしている。
+        ★このシステムのゴールは<strong>問い合わせ数を増やすこと</strong>。
+        PV・クリック・到達はそのための手前の数字で、下の「送客 × 受け皿」で見る。
       </p>
       <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
         <div className="overflow-x-auto">
@@ -269,7 +263,6 @@ function SourcePanel({ data }: { data: SourceBreakdown }) {
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">成約</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">成約金額</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">成約率</th>
-                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">未対応</th>
               </tr>
             </thead>
             <tbody>

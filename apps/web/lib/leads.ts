@@ -176,8 +176,6 @@ export type SourceRow = {
   wonAmount: number;
   /** 成約率。母数0なら null（§16.5） */
   closeRate: number | null;
-  /** 未対応（初回応答が未記録）の件数。見落としの検知 */
-  unresponded: number;
   /** その経路の計測が始まっているか。false は 0 ではなく未計測（§3） */
   measured: boolean;
 };
@@ -219,12 +217,7 @@ export async function getSourceBreakdown(
 
   const [leads, coverages, lineFollowObserved, clickAgg] = await Promise.all([
     prisma.lead.findMany({
-      select: {
-        sourceType: true,
-        status: true,
-        closedAmount: true,
-        firstResponseAt: true,
-      },
+      select: { sourceType: true, status: true, closedAmount: true },
     }),
     prisma.measurementCoverage.findMany({ select: { metric: true } }),
     prisma.lineFriend.count(),
@@ -235,23 +228,22 @@ export async function getSourceBreakdown(
   ]);
 
   const covered = new Set(coverages.map((c) => c.metric));
-  const acc = new Map<string, { leads: number; won: number; amount: number; unresponded: number }>();
+  const acc = new Map<string, { leads: number; won: number; amount: number }>();
   for (const l of leads) {
     const k = l.sourceType;
-    const cur = acc.get(k) ?? { leads: 0, won: 0, amount: 0, unresponded: 0 };
+    const cur = acc.get(k) ?? { leads: 0, won: 0, amount: 0 };
     cur.leads += 1;
     if (l.status === "won") {
       cur.won += 1;
       cur.amount += l.closedAmount ? Number(l.closedAmount) : 0;
     }
-    if (!l.firstResponseAt) cur.unresponded += 1;
     acc.set(k, cur);
   }
 
   // ★旧値 lp_form の行が残っていたら末尾に出す。黙って消すと件数が合わなくなる
   const order = acc.has("lp_form") ? [...SOURCE_ORDER, "lp_form"] : SOURCE_ORDER;
   const rows: SourceRow[] = order.map((k) => {
-    const a = acc.get(k) ?? { leads: 0, won: 0, amount: 0, unresponded: 0 };
+    const a = acc.get(k) ?? { leads: 0, won: 0, amount: 0 };
     return {
       key: k,
       label: SOURCE_LABEL[k] ?? k,
@@ -259,7 +251,6 @@ export async function getSourceBreakdown(
       won: a.won,
       wonAmount: a.amount,
       closeRate: a.leads > 0 ? a.won / a.leads : null,
-      unresponded: a.unresponded,
       measured: covered.has(SOURCE_COVERAGE[k] ?? ""),
     };
   });
@@ -271,7 +262,6 @@ export async function getSourceBreakdown(
     won: rows.reduce((s, r) => s + r.won, 0),
     wonAmount: rows.reduce((s, r) => s + r.wonAmount, 0),
     closeRate: null,
-    unresponded: rows.reduce((s, r) => s + r.unresponded, 0),
     measured: rows.some((r) => r.measured),
   };
   total.closeRate = total.leads > 0 ? total.won / total.leads : null;

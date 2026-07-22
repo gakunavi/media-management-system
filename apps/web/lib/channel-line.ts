@@ -5,6 +5,9 @@
 //   落ちている段が分からないので打ち手が決まらない。
 //   経路ごとに階段を出し、**どの段で落ちているか**を明示する。
 //
+// ★このシステムのゴールは問い合わせ数を増やすこと。
+//   PV・クリック・登録はそのための手前の数字で、どこで落ちているかを見る。
+//
 // ★公式LINEの階段は5段。段ごとに打つ手が違う:
 //     ① 送客   … 投稿の型・CTA文言       （/threads の →LINE 列と同じ数字）
 //     ② 登録   … LINE登録画面・登録の動機（軽オファー）
@@ -53,12 +56,6 @@ export type LineChannel = {
   };
   /** 送客元の型別内訳（どの型がLINEに送ったか） */
   byFormat: FormatShare[];
-  /**
-   * 初動が記録されていないリード。
-   * ★期間で切らない。古い放置ほど緊急で、窓の外に隠れると一番まずいものが
-   *   見えなくなる（36日前の1件が実際に消えていた）
-   */
-  unresponded: { count: number; oldestDays: number | null };
   wonAmount: number;
   /** 計測開始が記録されていない段の説明。空なら全段計測中 */
   notMeasured: string[];
@@ -106,17 +103,10 @@ export async function getLineChannel(days = 30, now: Date = new Date()): Promise
     }),
     prisma.lead.findMany({
       where: { sourceType: "line", occurredAt: { gte: since } },
-      select: { occurredAt: true, status: true, closedAmount: true, firstResponseAt: true },
+      select: { occurredAt: true, status: true, closedAmount: true },
     }),
     prisma.measurementCoverage.findMany({ select: { metric: true, startedAt: true } }),
   ]);
-
-  // ★未対応は期間で切らない。古い放置ほど緊急で、30日窓の外に隠れると
-  //   一番まずいものが見えなくなる（実際に36日前の1件が消えていた）
-  const openAll = await prisma.lead.findMany({
-    where: { sourceType: "line", firstResponseAt: null },
-    select: { occurredAt: true },
-  });
 
   const startedOf = new Map(coverages.map((c) => [c.metric, c.startedAt]));
   const sentStart = startedOf.get("threads_link_clicks_line") ?? null;
@@ -221,11 +211,6 @@ export async function getLineChannel(days = 30, now: Date = new Date()): Promise
     .map(([format, v]) => ({ format, clicks: Math.round(v.clicks), posts: v.posts.size }))
     .sort((a, b) => b.clicks - a.clicks);
 
-  // ── 初動 ──
-  const oldestDays = openAll.length
-    ? Math.max(...openAll.map((l) => Math.floor((now.getTime() - l.occurredAt.getTime()) / DAY)))
-    : null;
-
   const notMeasured: string[] = [];
   if (!sentMeasured) notMeasured.push("① 送客（まだ1件もクリックされていない）");
   if (!lineMeasured) notMeasured.push("② 登録・③ 反応（LINE Webhook が未設置）");
@@ -242,7 +227,6 @@ export async function getLineChannel(days = 30, now: Date = new Date()): Promise
       inquired: series(inquiredByDay, days, now, since),
     },
     byFormat,
-    unresponded: { count: openAll.length, oldestDays },
     wonAmount,
     notMeasured,
   };
