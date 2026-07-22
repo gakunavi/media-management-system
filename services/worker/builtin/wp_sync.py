@@ -39,6 +39,20 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import psycopg
 
 JST = timezone(timedelta(hours=9), "JST")
+
+# ★DBセッションのタイムゾーンを UTC に固定する（2026-07-22）
+#
+#   Prisma は UTC を `timestamp without time zone` の列に書き、読むときも
+#   UTC として解釈して表示時に JST へ直す。
+#   一方 psycopg 経由の書き込みは、Postgres がセッションの TimeZone
+#   （compose で Asia/Tokyo）で naive 化するため **JST が入っていた**。
+#   SQL の now() も同じ理由でずれる。同じ列に UTC と JST が混ざり、
+#   Prisma 側で 9時間ずれた値になっていた（MeasurementCoverage.startedAt で発覚）。
+#
+#   接続直後に一度 UTC へ固定すれば、aware な日時も now() も UTC で入る。
+def use_utc(conn) -> None:
+    with conn.cursor() as c:
+        c.execute("SET TIME ZONE 'UTC'")
 now_ts = datetime.now(JST)
 PER_PAGE = 100
 
@@ -130,6 +144,7 @@ def main() -> int:
     missing_in_wp: list[str] = []
 
     with psycopg.connect(normalize_dsn(dsn)) as conn, conn.cursor() as cur:
+        use_utc(conn)
         cur.execute(
             'SELECT c.id FROM "Channel" c JOIN "Business" b ON b.id=c."businessId" '
             "WHERE b.slug=%s AND c.type='media' LIMIT 1",

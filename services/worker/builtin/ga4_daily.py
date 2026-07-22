@@ -40,6 +40,20 @@ import psycopg
 
 JST = timezone(timedelta(hours=9), "JST")
 
+# ★DBセッションのタイムゾーンを UTC に固定する（2026-07-22）
+#
+#   Prisma は UTC を `timestamp without time zone` の列に書き、読むときも
+#   UTC として解釈して表示時に JST へ直す。
+#   一方 psycopg 経由の書き込みは、Postgres がセッションの TimeZone
+#   （compose で Asia/Tokyo）で naive 化するため **JST が入っていた**。
+#   SQL の now() も同じ理由でずれる。同じ列に UTC と JST が混ざり、
+#   Prisma 側で 9時間ずれた値になっていた（MeasurementCoverage.startedAt で発覚）。
+#
+#   接続直後に一度 UTC へ固定すれば、aware な日時も now() も UTC で入る。
+def use_utc(conn) -> None:
+    with conn.cursor() as c:
+        c.execute("SET TIME ZONE 'UTC'")
+
 # 診断LP の3パターン（cowork の lp-ab-weekly-report.py と同じ定義）
 LP_VARIANTS = {
     "a": "/setsuzei-diagnosis-a/",
@@ -130,6 +144,7 @@ def main() -> int:
     log(f"対象期間 {start} 〜 {end}（{lookback}日・欠測を毎回埋め直す）")
 
     with psycopg.connect(normalize_dsn(dsn)) as conn, conn.cursor() as cur:
+        use_utc(conn)
         # ── 記事の URL → ContentItem を作る ──
         cur.execute(
             "SELECT id, url FROM \"ContentItem\" WHERE type='article' AND url IS NOT NULL"

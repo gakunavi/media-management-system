@@ -29,6 +29,20 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 JST = timezone(timedelta(hours=9), "JST")
+
+# ★DBセッションのタイムゾーンを UTC に固定する（2026-07-22）
+#
+#   Prisma は UTC を `timestamp without time zone` の列に書き、読むときも
+#   UTC として解釈して表示時に JST へ直す。
+#   一方 psycopg 経由の書き込みは、Postgres がセッションの TimeZone
+#   （compose で Asia/Tokyo）で naive 化するため **JST が入っていた**。
+#   SQL の now() も同じ理由でずれる。同じ列に UTC と JST が混ざり、
+#   Prisma 側で 9時間ずれた値になっていた（MeasurementCoverage.startedAt で発覚）。
+#
+#   接続直後に一度 UTC へ固定すれば、aware な日時も now() も UTC で入る。
+def use_utc(conn) -> None:
+    with conn.cursor() as c:
+        c.execute("SET TIME ZONE 'UTC'")
 SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
 # GSC は反映に2〜3日かかる（docs/RULES.md §3-6）。昨日までを対象に、
 # 既存日も上書きして遅れて確定した数値を取り込む。
