@@ -74,7 +74,7 @@ export function ResultPanel({ result }: { result: ResultView }) {
         </span>
         <h2 className="text-[15px] font-semibold">結果（問い合わせ）</h2>
         <Link href="/leads" className="ml-auto text-[12px] text-[var(--accent)] hover:underline">
-          リード一覧 →
+          リード統計 →
         </Link>
       </div>
 

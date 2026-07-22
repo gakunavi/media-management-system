@@ -50,7 +50,7 @@ export default async function LeadsPage({
     <div className="mx-auto max-w-6xl">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">リード</h1>
+          <h1 className="text-xl font-bold tracking-tight">リード統計</h1>
           <p className="mt-0.5 text-[13px] text-[var(--muted)]">
             問い合わせ・成約の一覧（{range.label}）。★最優先は直客（§14.0）
           </p>

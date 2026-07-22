@@ -29,7 +29,7 @@ export const NAV: NavGroup[] = [
     //   もともと cowork の media-console（A/Bテストの分析画面）の後継として
     //   作ったため「分析」にあったが、送客→受け皿の整理では中身が受け皿。
     items: [
-      { href: "/leads", label: "リード", ready: true, icon: "leads" },
+      { href: "/leads", label: "リード統計", ready: true, icon: "leads" },
       { href: "/lp", label: "LP", ready: true, icon: "lp" },
       { href: "/threads", label: "Threads", ready: true, icon: "threads" },
       { href: "/line", label: "公式LINE", ready: true, icon: "line" },
