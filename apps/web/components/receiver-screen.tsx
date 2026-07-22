@@ -30,12 +30,19 @@ export function ReceiverScreen({
   stats,
   note,
   showTrend = true,
+  showOrigin = true,
 }: {
   stats: ReceiverStats;
   /** その受け皿に固有の注意書き（計測の限界など） */
   note?: string;
   /** 独自の推移グラフを持つ画面（/line）は false */
   showTrend?: boolean;
+  /**
+   * きっかけ（送客元）を出すか。
+   * ★測定できる受け皿だけ出す。LINE は follow に経路情報が入らないため、
+   *   自己申告のきっかけを並べると「入口」の実測と食い違って混乱する。
+   */
+  showOrigin?: boolean;
 }) {
   return (
     <div className="grid gap-4">
@@ -79,6 +86,7 @@ export function ReceiverScreen({
       </section>
 
       {/* ── きっかけ ── */}
+      {showOrigin && (
       <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
         <h2 className="text-[15px] font-semibold">きっかけ（どの施策に触れて来たか）</h2>
         <p className="mb-3 mt-0.5 text-[12px] text-[var(--faint)]">
@@ -110,6 +118,7 @@ export function ReceiverScreen({
           ))}
         </div>
       </section>
+      )}
 
       {/* ── 推移 ── */}
       {showTrend && (

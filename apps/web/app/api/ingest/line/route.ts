@@ -8,10 +8,11 @@
 //   ここで解くべきは「記録すること」より **見逃さないこと**。
 //   受信した瞬間に Slack へ投げる（§5.4「石井さんへ即通知（最優先）」）。
 //
-// ★unfollow（ブロック）は扱わない（2026-07-22 石井さん判断）。
-//   扱う場合の用途は「送客を増やした直後にブロックが増えていないか」という
-//   質の信号だが、いまは友だち0人で送客もこれからなので、判断材料にならない。
-//   必要になったら LineFriend.status を blocked にする数行を足せばよい。
+// ★unfollow（ブロック）を扱う（2026-07-23 追加）。
+//   当初は「友だち0人で送客もこれからなので判断材料にならない」として
+//   扱わない判断だったが、**扱わないと設置以降の純増すら出せない**。
+//   友だち総数は webhook では取れない（設置前の友だちは event が起きない）。
+//   せめて「設置後に何人増えて何人ブロックしたか」は正しく出せるようにする。
 //
 // ★設定するURL: https://collect.asset-support.co.jp/api/ingest/line
 //   collect. は Cloudflare Access の対象外。mms. に設定すると LINE 側が
@@ -70,6 +71,7 @@ export async function POST(req: Request) {
 
   const events = Array.isArray(body.events) ? body.events : [];
   let follows = 0;
+  let blocks = 0;
   let messages = 0;
 
   const business = await prisma.business.findFirst({
@@ -109,6 +111,16 @@ export async function POST(req: Request) {
       continue;
     }
 
+    if (ev.type === "unfollow") {
+      // ★行は消さない。消すと「いつ増えていつ減ったか」が追えなくなる
+      await prisma.lineFriend.updateMany({
+        where: { lineUserId: userId },
+        data: { status: "blocked" },
+      });
+      blocks += 1;
+      continue;
+    }
+
     if (ev.type === "message") {
       // ★本文は保存しない。MMS が持つのは PDCA に使う数（件数）だけで、
       //   内容は LINE 公式アカウント側にある。持たなければ守る必要も無い（§16.2）。
@@ -129,5 +141,5 @@ export async function POST(req: Request) {
   }
 
   // ★LINE は 2xx を返さないと再送し続ける。処理できなかった種別も 200 で返す
-  return NextResponse.json({ ok: true, follows, messages });
+  return NextResponse.json({ ok: true, follows, blocks, messages });
 }

@@ -57,9 +57,24 @@ export type Entrance = {
 export type LineChannel = {
   days: number;
   entrances: Entrance[];
-  /** 友だち総数。null = 未接続（Messaging API のトークン未設定） */
-  friendsTotal: number | null;
-  friendsNote: string;
+  /**
+   * 友だちの状況。
+   * ★総数は webhook では取れない。設置前の友だちには event が起きないため。
+   *   出せるのは「設置以降の追加・ブロック」だけ。総数は別で持つ必要がある。
+   */
+  friends: {
+    /** 総数。null = 未取得（基準値も API 接続も無い） */
+    total: number | null;
+    /** 設置以降に観測した追加（期間内） */
+    added: number;
+    /**
+     * ブロック数。★画面には出さない（2026-07-23 石井さん）。
+     *   総数（API）が friends.total で取れるので、画面で見る値ではない。
+     *   ただし総数の算出（追加延べ − ブロック）には要るので保持する。
+     */
+    blocked: number;
+    note: string;
+  };
   /** ②③の計測開始日。期間の途中から測り始めた場合に画面へ出す */
   webhookStartedAt: Date | null;
   stages: Stage[];
@@ -105,7 +120,8 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
   const win = { gte: range.since, lt: range.until };
   const keys = dayKeys(range.since, range.until);
 
-  const [clickRows, friends, inbounds, leads, coverages] = await Promise.all([
+  const [clickRows, friends, inbounds, leads, coverages, lineHealth, blockedCount] =
+    await Promise.all([
     prisma.contentMetric.findMany({
       where: { metric: "threads_link_clicks_line", date: win },
       select: { value: true, date: true, contentItem: { select: { note: true, id: true } } },
@@ -123,6 +139,14 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
       select: { occurredAt: true, status: true, closedAmount: true },
     }),
     prisma.measurementCoverage.findMany({ select: { metric: true, startedAt: true } }),
+    // ★友だち総数は SnsAccountHealth（channel=line）に入れる。
+    //   webhook では取れないので、API 接続か基準値の手入力で埋める
+    prisma.snsAccountHealth.findFirst({
+      where: { channel: { type: "line" } },
+      orderBy: { date: "desc" },
+      select: { followers: true, date: true },
+    }),
+    prisma.lineFriend.count({ where: { status: "blocked" } }),
   ]);
 
   const startedOf = new Map(coverages.map((c) => [c.metric, c.startedAt]));
@@ -298,10 +322,14 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
   return {
     days: range.days,
     entrances,
-    // ★MMS が数えられるのは Webhook 観測分だけ。総数は Messaging API が要る
-    friendsTotal: null,
-    friendsNote:
-      "友だち総数は Messaging API（insight/followers）で取れますが、チャネルアクセストークンが未設定です。MMS が数えられるのは Webhook 設置後の追加ぶんだけで、それ以前の友だちは観測していません。",
+    friends: {
+      total: lineHealth?.followers ?? null,
+      added: friends.length,
+      blocked: blockedCount,
+      note: lineHealth
+        ? `総数は ${ymd(lineHealth.date)} 時点の記録`
+        : "★友だち総数は webhook では取れません（設置前の友だちには event が起きないため）。埋める方法は2つ: ①Messaging API のチャネルアクセストークンを設定して日次取得する ②LINE公式アカウント管理画面の友だち数を基準値として記録する。追加・ブロックは設置（2026-07-22）以降のみ観測しています。",
+    },
     webhookStartedAt: lineStart,
     stages,
     transitions,

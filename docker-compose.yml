@@ -142,6 +142,10 @@ services:
       MMS_AGENCY_LP_SOURCES: /app/agency-lp-sources.json
       # 代理店DMログ（builtin/dm_log_import.py・§3-6）。cowork の日次監視が書いている
       MMS_DM_LOG_PATH: /app/cowork-threads/sns-account-create/children/setsuzei-soken/05-sales/agency-recruitment/dm-log.md
+      # 公式LINE 友だち数（builtin/line_followers.py）。
+      # ★webhook では総数が取れない（設置前の友だちに event が起きない）ため、
+      #   Messaging API の insight/followers から日次で取る
+      MMS_LINE_CHANNEL_ACCESS_TOKEN: ${MMS_LINE_CHANNEL_ACCESS_TOKEN:-}
     volumes:
       # ★設計書 §6「既存 Python 資産は書き直さない」。
       #   コピーすると本体と乖離するため、元のディレクトリを **読み取り専用でマウント**する。

@@ -52,13 +52,24 @@ export default async function LinePage({
 
       {/* ── 友だち総数 ── */}
       <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-4">
-        <div className="flex flex-wrap items-baseline gap-3">
-          <span className="text-[13px] text-[var(--muted)]">友だち総数</span>
-          <span className="text-lg font-medium text-[var(--warn)]">
-            {ch.friendsTotal === null ? NOT_MEASURED : ch.friendsTotal.toLocaleString("ja-JP")}
-          </span>
+        <div className="flex flex-wrap items-center gap-6">
+          <div>
+            <div className="text-[12px] text-[var(--muted)]">友だち総数</div>
+            <div className="tnum mt-0.5 text-2xl font-bold leading-none">
+              {ch.friends.total === null ? (
+                <span className="text-base font-medium text-[var(--warn)]">{NOT_MEASURED}</span>
+              ) : (
+                ch.friends.total.toLocaleString("ja-JP")
+              )}
+            </div>
+          </div>
+          {/* ★webhook で取れるのは設置以降の増減だけ。総数と混ぜない */}
+          <div>
+            <div className="text-[12px] text-[var(--muted)]">追加（期間内・観測分）</div>
+            <div className="tnum mt-0.5 text-2xl font-bold leading-none">{ch.friends.added}</div>
+          </div>
         </div>
-        <p className="mt-1 text-[11px] leading-relaxed text-[var(--faint)]">★{ch.friendsNote}</p>
+        <p className="mt-2 text-[11px] leading-relaxed text-[var(--faint)]">{ch.friends.note}</p>
       </section>
 
       {/* ── 入口 ── */}
@@ -106,7 +117,10 @@ export default async function LinePage({
 
       {/* ── 種別・きっかけ・一覧（他の受け皿画面と同じ軸）── */}
       <div className="mb-6 mt-6">
-        <ReceiverScreen stats={stats} showTrend={false} />
+        {/* ★きっかけ（自己申告の送客元）は出さない。LINEでは follow に経路が
+            入らず測定できないので、上の「入口」が唯一の送客元の情報になる。
+            測れないものを聞いて並べると、入口の数字と食い違って混乱する */}
+        <ReceiverScreen stats={stats} showTrend={false} showOrigin={false} />
       </div>
 
       {/* ── 送客元の内訳 ── */}
