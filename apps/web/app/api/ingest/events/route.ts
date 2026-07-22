@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { prisma, type Prisma } from "@mms/db";
 import { rateLimit } from "@/lib/rate-limit";
+import { notify } from "@/lib/notify";
 import {
   isAllowedOrigin,
   isFunnelStep,
@@ -176,6 +177,7 @@ export async function POST(req: Request) {
   //   一意制約 (sessionId, step, contentItemId, occurredAt) が NULLS NOT DISTINCT で
   //   効くので、同一秒の重複は DB 側で弾かれる。skipDuplicates でまとめて入れる。
   const rows: Prisma.FunnelEventCreateManyInput[] = [];
+  const unknownPositions = new Set<string>();
   let rejected = 0;
   for (const e of events) {
     if (!isFunnelStep(e.step)) {
@@ -200,6 +202,15 @@ export async function POST(req: Request) {
           ? e.ctaId
           : null;
 
+    // ★知らない位置が来たら記録して後で鳴らす。
+    //   捨てるだけだと、セレクタ追加で語彙が増えたときに
+    //   位置別集計が黙って欠ける。README の注意書きだけでは防げない
+    //   （フォーム受口で同じ構造の穴を今日塞いだ）。
+    const rawPosition = e.ctaPosition ?? e.ctaId;
+    if (rawPosition && !position && !knownCta.has(rawPosition)) {
+      unknownPositions.add(rawPosition);
+    }
+
     const meta = position ? { ...(e.meta ?? {}), ctaPosition: position } : e.meta;
 
     rows.push({
@@ -220,7 +231,28 @@ export async function POST(req: Request) {
     ? await prisma.funnelEvent.createMany({ data: rows, skipDuplicates: true })
     : { count: 0 };
 
-  // ── 8. submit があればセッションを converted に（段1の CV に直結）──
+  // ── 8. 知らない位置ラベルを通知（黙って捨てない）──
+  //   計測タグ側でセレクタを増やしたときに新しい語彙が混ざると、
+  //   位置別集計がその分だけ静かに欠ける。捨てた事実を必ず表に出す。
+  //   同じ値につき1日1通（同じ語彙が全PVで飛ぶので抑止は必須）。
+  for (const p of unknownPositions) {
+    if (!rateLimit(`ingest:events:unknown-position:${p}`, 1, 86_400_000).allowed) continue;
+    await notify({
+      event: "ingest.unknown_cta_position",
+      title: "⚠️ 知らないCTA位置が来たので捨てました（位置別集計が欠けます）",
+      body: [
+        `値: ${p}`,
+        "",
+        `受け付ける位置: ${[...CTA_POSITIONS].join(" / ")}`,
+        "",
+        "★計測タグ側でセレクタを追加したときに語彙が増えた可能性があります。",
+        "★イベント自体は記録されていますが、この位置の分だけ内訳から漏れます。",
+      ].join("\n"),
+      meta: { value: p },
+    });
+  }
+
+  // ── 9. submit があればセッションを converted に（段1の CV に直結）──
   if (rows.some((r) => r.step === "submit")) {
     await prisma.visitorSession.update({
       where: { id: sessionId },
