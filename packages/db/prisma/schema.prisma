@@ -127,11 +127,19 @@ enum ArticleReviewOutcome {
 }
 
 /// §3 Cta.position — 記事内CTAの位置（位置別に効果を測る）
+/// 記事内CTAの位置。
+/// ★2026-07-22 に header / footer / fixed を追加した。
+///   計測タグ（mms-bridge.js）が実サイトのDOMから自動判定して送ってくる位置が
+///   7種類あり、enum が 4種類しか知らない状態は「実態を表せていない」。
+///   位置別の効き目を出すのが目的なので、語彙は実サイトに合わせる。
 enum CtaPosition {
   hero
   mid
   final
   sidebar
+  header
+  footer
+  fixed
 }
 
 /// §3 FunnelEvent.step — ファネル7段（§14.2）

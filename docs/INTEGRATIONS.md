@@ -162,6 +162,25 @@ POST /api/ingest/events
 | 冪等性 | `(sessionId, step, contentItemId, occurredAt秒)` の一意制約（§16.1-④）。再送しても増えない |
 | 堅牢性 | 存在しない `ctaId` / `lpId` / `article` は **null 化**。タグの属性ミス1つでバッチ全体を落とさない |
 | 上限 | 1リクエスト **50件**まで（§3.10.3-⑦）。超過は 413 |
+| CTAの位置 | `ctaPosition` で送る。`meta.ctaPosition` に保存される（下記 2.1.1） |
+
+#### 2.1.1 `ctaId` と `ctaPosition` は別物（2026-07-22 追加）
+
+| 項目 | 意味 | いま送るべきか |
+|---|---|---|
+| `ctaId` | `Cta` テーブルの主キー（**cuid**） | **送らない** |
+| `ctaPosition` | `hero` `mid` `final` `sidebar` `header` `footer` `fixed` | **これを送る** |
+
+`Cta` は「記事ごとの1つのCTA」を表す行で、`contentItemId` と `targetUrl` が必須。
+つまり **`"hero"` という `ctaId` は原理的に存在しない**。位置ラベルを `ctaId` に
+入れて送ると、存在しない ID として null 化され、位置が消える。
+
+★位置別の効き目（hero と final のどちらが押されているか）は
+　`Cta` レジストリが無くても出せる。162記事 × 7位置 = 1134行を先に作る必要はない。
+
+**互換**: 解決できない `ctaId` が位置ラベルと一致する場合は位置として扱う。
+既存プラグイン（`ctaId: "hero"` を送る版）はそのままで記録される。
+知らない値は捨てる（ゴミが混ざると位置別集計が信用できなくなる）。
 
 ### 2.2 タグの設置（子テーマ or 専用プラグイン）
 

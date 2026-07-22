@@ -139,6 +139,9 @@
 | `mid` | 中盤 |
 | `final` | 最終（記事末尾） |
 | `sidebar` | サイドバー |
+| `header` | ヘッダー |
+| `footer` | フッター |
+| `fixed` | 追従（スクロールしても画面に残る） |
 
 ### 2.6 `ArticleReviewKind` / `ArticleReviewOutcome` / `ReviewerType`
 

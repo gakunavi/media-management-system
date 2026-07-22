@@ -30,10 +30,37 @@ type IncomingEvent = {
   occurredAt?: string;
   /** ART-088 等。ContentItem.externalId で解決する */
   contentExternalId?: string;
+  /** Cta テーブルの主キー（cuid）。CTAレジストリを作るまでは通常空 */
   ctaId?: string;
+  /** hero / mid / final ... の位置ラベル。ctaId とは別物（下の CTA_POSITIONS 参照） */
+  ctaPosition?: string;
   lpId?: string;
   meta?: Record<string, unknown>;
 };
+
+/**
+ * ★位置ラベルは ctaId とは別物である。
+ *
+ *   Cta は「記事ごとの1つのCTA」を表す行で、主キーは cuid、contentItemId と
+ *   targetUrl が必須。つまり "hero" という id は原理的に存在しえない。
+ *   計測タグが送ってくる "hero" は **位置**であって CTA の識別子ではない。
+ *
+ *   位置別の効き目（hero と final のどちらが押されているか）は
+ *   Cta レジストリが無くても出せる。meta に位置を残せば済む。
+ *   162記事 × 7位置 = 1134行を先に作る必要はない。
+ *
+ * ★schema.prisma の CtaPosition と同じ語彙にそろえている。
+ *   知らない値は捨てる（ゴミが溜まると位置別集計が信用できなくなる）。
+ */
+const CTA_POSITIONS = new Set([
+  "hero",
+  "mid",
+  "final",
+  "sidebar",
+  "header",
+  "footer",
+  "fixed",
+]);
 
 type Payload = {
   visitorId?: string;
@@ -160,6 +187,21 @@ export async function POST(req: Request) {
       rejected += 1;
       continue;
     }
+    // ★位置を meta に残す。
+    //   計測タグは位置ラベルを ctaId フィールドに入れて送ってくる（現行のプラグイン）。
+    //   ctaPosition で明示されていればそれを使い、無ければ
+    //   「解決できなかった ctaId が位置ラベルなら位置とみなす」で拾う。
+    //   こうしないと ctaId は null 化されて位置が消え、
+    //   「どの位置のCTAが効いているか」が永久に出せなくなる。
+    const position =
+      e.ctaPosition && CTA_POSITIONS.has(e.ctaPosition)
+        ? e.ctaPosition
+        : e.ctaId && !knownCta.has(e.ctaId) && CTA_POSITIONS.has(e.ctaId)
+          ? e.ctaId
+          : null;
+
+    const meta = position ? { ...(e.meta ?? {}), ctaPosition: position } : e.meta;
+
     rows.push({
       sessionId,
       step: e.step as FunnelStep,
@@ -170,7 +212,7 @@ export async function POST(req: Request) {
       // 存在しない ctaId / lpId は null にする（FK 違反でバッチを落とさない）
       ctaId: e.ctaId && knownCta.has(e.ctaId) ? e.ctaId : null,
       lpId: e.lpId && knownLp.has(e.lpId) ? e.lpId : null,
-      meta: (e.meta as Prisma.InputJsonValue) ?? undefined,
+      meta: (meta as Prisma.InputJsonValue) ?? undefined,
     });
   }
 
