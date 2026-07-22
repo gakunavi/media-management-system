@@ -45,6 +45,20 @@ import psycopg
 
 JST = timezone(timedelta(hours=9), "JST")
 
+
+def to_db(dt: datetime) -> datetime:
+    """aware な日時を **UTC の naive** に直す。
+
+    ★2026-07-22 に発覚した不整合の対処。
+      Prisma は UTC を `timestamp without time zone` の列に書き、読むときも
+      UTC として解釈して表示時に JST へ直す。
+      一方 psycopg が aware な日時を渡すと、Postgres がセッションの
+      TimeZone（Asia/Tokyo）で naive に変換するため **JST が入る**。
+      同じ列に UTC と JST が混ざり、Prisma 側で 9時間ずれた値になる。
+      日付境界をまたぐ行では集計日が1日ずれる。
+    """
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
 # dm-log.md の判定列 → AgencyLeadStage
 # ★前方一致で見るので「有効候補」を「有効」より先に置く
 STAGE_MAP: tuple[tuple[str, str], ...] = (
@@ -200,7 +214,7 @@ def main() -> int:
                 cur.execute(
                     'UPDATE "AgencyLead" SET stage=%s, "screeningAnswers"=%s, "updatedAt"=%s '
                     "WHERE id=%s",
-                    (r["stage"], answers, now, row[0]),
+                    (r["stage"], answers, to_db(now), row[0]),
                 )
                 updated += 1
             else:
@@ -213,7 +227,7 @@ def main() -> int:
                     'INSERT INTO "AgencyLead"(id,"threadsUserId","receivedAt",'
                     'stage,"screeningAnswers","createdAt","updatedAt") '
                     "VALUES (gen_random_uuid()::text,%s,%s,%s,%s,%s,%s)",
-                    (handle, r["first_at"], r["stage"], answers, now, now),
+                    (handle, to_db(r["first_at"]), r["stage"], answers, to_db(now), to_db(now)),
                 )
                 created += 1
             # ── 受け皿としての Lead も持つ ──
@@ -228,14 +242,14 @@ def main() -> int:
             if lead:
                 cur.execute(
                     'UPDATE "Lead" SET status=%s, "updatedAt"=%s WHERE id=%s',
-                    (lead_status, now, lead[0]),
+                    (lead_status, to_db(now), lead[0]),
                 )
             else:
                 cur.execute(
                     'INSERT INTO "Lead"(id,"businessId",type,"sourceType","occurredAt",status,'
                     'note,"createdAt","updatedAt") '
                     "VALUES (gen_random_uuid()::text,%s,'agency','threads_dm',%s,%s,%s,%s,%s)",
-                    (business_id, r["first_at"], lead_status, f"Threads DM @{handle}", now, now),
+                    (business_id, to_db(r["first_at"]), lead_status, f"Threads DM @{handle}", to_db(now), to_db(now)),
                 )
 
             log(f"  @{handle}  angle={r['angle'] or '—'}  {r['verdict']} → {r['stage']}/{lead_status}")
@@ -248,11 +262,11 @@ def main() -> int:
                 '"createdAt","updatedAt") VALUES (gen_random_uuid()::text,%s,%s,%s,%s,%s,%s)',
                 (
                     "lead_agency",
-                    min(r["first_at"] for r in latest.values()),
+                    to_db(min(r["first_at"] for r in latest.values())),
                     "cowork_dm_log",
                     "cowork の日次監視が dm-log.md に記録したDMを取り込んで計測（§3-6）",
-                    now,
-                    now,
+                    to_db(now),
+                    to_db(now),
                 ),
             )
         conn.commit()

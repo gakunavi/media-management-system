@@ -31,6 +31,20 @@ import psycopg
 JST = timezone(timedelta(hours=9), "JST")
 
 
+def to_db(dt: datetime) -> datetime:
+    """aware な日時を **UTC の naive** に直す。
+
+    ★2026-07-22 に発覚した不整合の対処。
+      Prisma は UTC を `timestamp without time zone` の列に書き、読むときも
+      UTC として解釈して表示時に JST へ直す。
+      一方 psycopg が aware な日時を渡すと、Postgres がセッションの
+      TimeZone（Asia/Tokyo）で naive に変換するため **JST が入る**。
+      同じ列に UTC と JST が混ざり、Prisma 側で 9時間ずれた値になる。
+      日付境界をまたぐ行では集計日が1日ずれる。
+    """
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def log(msg: str) -> None:
     print(f"[tool_balance] {msg}", flush=True)
 
@@ -110,7 +124,7 @@ def main() -> int:
             cur.execute(
                 'UPDATE "ToolSubscription" SET "balance"=%s, "balanceCurrency"=%s, '
                 '"balanceCheckedAt"=%s, "updatedAt"=%s WHERE id=%s',
-                (balance, currency, now, now, tid),
+                (balance, currency, to_db(now), to_db(now), tid),
             )
             updated += 1
             log(f"{name}: {balance} {currency}")
