@@ -141,15 +141,29 @@ export type LeadFilter = Prisma.LeadWhereInput;
 //   どの経路が獲得に効いているかは、この並びでしか判断できない。
 
 export const SOURCE_LABEL: Record<string, string> = {
+  form: "HPの問い合わせ",
+  lp_diagnosis: "診断LP",
+  lp_agency: "代理店LP",
   line: "公式LINE",
   threads_dm: "Threads DM",
-  lp_form: "診断LP",
-  form: "問い合わせフォーム",
   phone_manual: "電話",
+  email: "info メール直接",
+  lp_form: "LP（旧・未分類）",
 };
 
-/** 表示順。上ほど注力している経路 */
-export const SOURCE_ORDER = ["form", "lp_form", "line", "threads_dm", "phone_manual"];
+/**
+ * 受け皿の表示順（2026-07-22 石井さんと整理）。
+ * ★lp_form は診断LPと代理店LPを区別できない旧値。残っている行があるときだけ出す。
+ */
+export const SOURCE_ORDER = [
+  "form",
+  "lp_diagnosis",
+  "lp_agency",
+  "line",
+  "threads_dm",
+  "phone_manual",
+  "email",
+];
 
 export type SourceRow = {
   key: string;
@@ -188,10 +202,13 @@ export type SourceBreakdown = {
 /** その経路の計測が始まっているか。MeasurementCoverage の metric 名 */
 const SOURCE_COVERAGE: Record<string, string> = {
   form: "lead_direct_inquiry",
-  lp_form: "lp_form_submit_b",
+  lp_diagnosis: "lp_form_submit_b",
+  lp_agency: "agency_lp_inquiries",
   line: "lead_line",
   threads_dm: "lead_agency",
+  // ★電話とメールは手入力。仕組みで計測するものではないので常に計測済み扱い
   phone_manual: "lead_direct_inquiry",
+  email: "lead_direct_inquiry",
 };
 
 export async function getSourceBreakdown(
@@ -231,7 +248,9 @@ export async function getSourceBreakdown(
     acc.set(k, cur);
   }
 
-  const rows: SourceRow[] = SOURCE_ORDER.map((k) => {
+  // ★旧値 lp_form の行が残っていたら末尾に出す。黙って消すと件数が合わなくなる
+  const order = acc.has("lp_form") ? [...SOURCE_ORDER, "lp_form"] : SOURCE_ORDER;
+  const rows: SourceRow[] = order.map((k) => {
     const a = acc.get(k) ?? { leads: 0, won: 0, amount: 0, unresponded: 0 };
     return {
       key: k,

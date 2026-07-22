@@ -166,13 +166,19 @@ enum LeadStatus {
 }
 
 /// §3 Lead.sourceType（§3.8.3）— phone_manual は provenance=declared として扱う
+/// 受け皿（問い合わせがどこに着地したか）。2026-07-22 に石井さんと整理:
+///   LINE / 診断LP / 代理店LP / HPの問い合わせ / 電話 / Threads DM / info メール直接
 enum LeadSourceType {
-  /// サイトの問い合わせフォーム
+  /// HPの問い合わせフォーム
   form
-  /// 診断LPのフォーム（CF7 601652）。form と分ける。
-  /// ★どちらもCF7なので form のままだと「LPが効いたのか記事が効いたのか」が
-  ///   永久に分離できない（2026-07-22 に判明）
+  /// @deprecated 診断LPと代理店LPを区別できないため lp_diagnosis / lp_agency に分割
   lp_form
+  /// 診断LP（setsuzei-diagnosis-*・CF7 601652）
+  lp_diagnosis
+  /// 代理店LP（bousai-bouhan-light.com・?ag=AG-XXXX）
+  lp_agency
+  /// info@ に直接届いたメール。電話と同じく手入力（2026-07-22 石井さん判断）
+  email
   phone_manual
   line
   threads_dm

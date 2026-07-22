@@ -6,7 +6,14 @@
 //   導線を貼るにあたり、「どの投稿が何人送ったか」を投稿単位で残す。
 //   これが無いと、生成側に返せる正解が views といいねしか無いままになる。
 //
-//   例: https://collect.asset-support.co.jp/r/line/THR-519
+//   例: https://collect.asset-support.co.jp/r/line/THR-519   （Threads投稿）
+//       https://collect.asset-support.co.jp/r/line/site-footer（サイトのフッタ）
+//
+// ★第2引数は「送り元」。投稿IDに一致すれば投稿単位で、
+//   一致しなければサイト単位の指標として記録する。
+//   2026-07-22 時点で公式LINEへの導線はサイト側（テーマの header/footer/CTA、
+//   /media/ 9箇所・/contact/ 7箇所）が主で、Threads は0本。
+//   投稿IDしか受けない作りだと、**いま動いている導線を測れない**。
 //
 // ★オープンリダイレクトにしない
 //   遷移先は環境変数で固定した3つだけ。URL を引数で受け取る作りにすると、
@@ -112,7 +119,14 @@ export async function GET(
   return NextResponse.redirect(url.toString(), 302);
 }
 
-/** 投稿単位・日次でクリックを積む（ContentMetric に threads_link_clicks_<dest>） */
+/** 送り元が投稿IDでないときの記録先（サイト単位）。英数字と - _ だけ通す */
+const SAFE_SOURCE = /^[A-Za-z0-9_-]{1,40}$/;
+
+/**
+ * クリックを日次で積む。
+ *   送り元が投稿ID     → ContentMetric（投稿単位）
+ *   それ以外（site-*）  → MetricSnapshot（サイト単位）
+ */
 async function recordClick(
   postId: string,
   dest: string,
@@ -122,8 +136,13 @@ async function recordClick(
     where: { externalId: postId, type: "post" },
     select: { id: true, channelId: true },
   });
-  // ★存在しない投稿IDは記録しない。作ってしまうと投稿数の集計が狂う
-  if (!item) return;
+
+  if (!item) {
+    // ★投稿に紐づかない送り元。捨てずにサイト単位で残す。
+    //   捨てると「サイトからは誰も来ていない」という誤った像になる
+    await recordSiteClick(postId, dest);
+    return;
+  }
 
   const metric = `threads_link_clicks_${dest}`;
   const date = jstDate(new Date());
@@ -146,17 +165,72 @@ async function recordClick(
     });
   }
 
-  // ★計測開始を1度だけ記録する（§3）。これが無いと 0 と未計測を区別できない
-  const cov = await prisma.measurementCoverage.findFirst({ where: { metric } });
-  if (!cov) {
-    await prisma.measurementCoverage.create({
-      data: {
-        metric,
-        channelId: item.channelId,
-        startedAt: new Date(),
-        method: "redirect_link",
-        note: `Threads から ${dest} への送客リンク（/r/${dest}/<投稿ID>）の初回クリックにより計測開始`,
-      },
+  await ensureCoverage(metric, item.channelId, `Threads から ${dest} への送客`);
+}
+
+/** サイト（記事のCTA・フッタ等）からの送客。MetricSnapshot に日次で積む */
+async function recordSiteClick(source: string, dest: string): Promise<void> {
+  // ★任意の文字列を指標名にしない。指標が無限に増えると鮮度チェックが壊れる
+  if (!SAFE_SOURCE.test(source)) return;
+
+  const business = await prisma.business.findFirst({
+    where: { slug: process.env.MMS_DEFAULT_BUSINESS_SLUG ?? "tax-saving-agency" },
+    select: { id: true },
+  });
+  if (!business) return;
+
+  const metric = `site_link_clicks_${dest}`;
+  const date = jstDate(new Date());
+
+  // ★MetricSnapshot は channelId NULL だと一意制約が効かない（§13 記録済）。
+  //   加算のため、既存行を読んでから入れ直す
+  const existing = await prisma.metricSnapshot.findFirst({
+    where: { businessId: business.id, metric, date, channelId: null },
+    select: { id: true, value: true },
+  });
+  if (existing) {
+    await prisma.metricSnapshot.update({
+      where: { id: existing.id },
+      data: { value: existing.value + 1 },
+    });
+  } else {
+    await prisma.metricSnapshot.create({
+      data: { businessId: business.id, metric, value: 1, date, granularity: "daily" },
     });
   }
+
+  // 送り元別の内訳も持つ（どのCTAが効いたか）
+  const detail = `${metric}__${source}`;
+  const d2 = await prisma.metricSnapshot.findFirst({
+    where: { businessId: business.id, metric: detail, date, channelId: null },
+    select: { id: true, value: true },
+  });
+  if (d2) {
+    await prisma.metricSnapshot.update({ where: { id: d2.id }, data: { value: d2.value + 1 } });
+  } else {
+    await prisma.metricSnapshot.create({
+      data: { businessId: business.id, metric: detail, value: 1, date, granularity: "daily" },
+    });
+  }
+
+  await ensureCoverage(metric, null, `サイトから ${dest} への送客`);
+}
+
+/** 計測開始を1度だけ記録する（§3）。これが無いと 0 と未計測を区別できない */
+async function ensureCoverage(
+  metric: string,
+  channelId: string | null,
+  what: string,
+): Promise<void> {
+  const cov = await prisma.measurementCoverage.findFirst({ where: { metric } });
+  if (cov) return;
+  await prisma.measurementCoverage.create({
+    data: {
+      metric,
+      channelId,
+      startedAt: new Date(),
+      method: "redirect_link",
+      note: `${what}。初回クリックにより計測開始`,
+    },
+  });
 }

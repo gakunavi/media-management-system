@@ -11,6 +11,12 @@ import {
 } from "@/lib/leads";
 import { LeadForm } from "./lead-form";
 import { TrendChart } from "@/components/chart";
+import {
+  getAcquisitionMatrix,
+  SENDERS,
+  RECEIVERS,
+  type AcquisitionMatrix,
+} from "@/lib/acquisition";
 
 // リード一覧（設計書 §4.2 /leads・§14.3）
 export const dynamic = "force-dynamic";
@@ -33,10 +39,11 @@ function statusBadge(status: string): string {
 }
 
 export default async function LeadsPage() {
-  const [leads, stats, sources] = await Promise.all([
+  const [leads, stats, sources, matrix] = await Promise.all([
     getLeads(),
     getLeadStats(),
     getSourceBreakdown(),
+    getAcquisitionMatrix(),
   ]);
 
   return (
@@ -68,6 +75,7 @@ export default async function LeadsPage() {
       </div>
 
       <SourcePanel data={sources} />
+      <MatrixPanel m={matrix} />
 
       {/* 成約サマリー */}
       {stats.won > 0 && (
@@ -299,6 +307,88 @@ function SourcePanel({ data }: { data: SourceBreakdown }) {
           <span className="text-[var(--faint)]"> クリック（直近{data.days}日・経路の近似）</span>
         </span>
       </div>
+    </section>
+  );
+}
+
+/**
+ * 送客 × 受け皿のマトリクス。
+ *
+ * ★目的は「どこが埋まっていないか」を出すこと。空欄を 0 で埋めると
+ *   「送客していない」のか「測っていない」のか分からなくなる（§3）。
+ * ★未計測（直せる）と測定不能（直せない）を分ける。混ぜると打ち手を誤る。
+ */
+function MatrixPanel({ m }: { m: AcquisitionMatrix }) {
+  const at = (sender: string, receiver: string) =>
+    m.cells.find((c) => c.sender === sender && c.receiver === receiver);
+
+  return (
+    <section className="mb-5">
+      <h2 className="mb-2 text-[14px] font-semibold">
+        送客 × 受け皿（直近{m.days}日）
+      </h2>
+      <p className="mb-2 text-[12px] text-[var(--faint)]">
+        計測できているマス <strong className="tnum">{m.coverage.measured}</strong> /{" "}
+        {m.coverage.target}（測定不能なマスは分母から除外）。
+        <br />
+        ★空欄を 0 で埋めない。「送客していない」のか「測っていない」のかが
+        分からなくなる。<strong>未計測は直せるが、測定不能は直せない</strong>ので分けて出す。
+      </p>
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-[var(--border)] bg-[var(--panel-2)] text-left text-[12px] text-[var(--muted)]">
+                <th className="whitespace-nowrap px-3 py-2 font-medium">送客 ＼ 受け皿</th>
+                {RECEIVERS.map((r) => (
+                  <th key={r.key} className="whitespace-nowrap px-3 py-2 text-right font-medium">
+                    {r.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {SENDERS.map((s) => (
+                <tr key={s.key} className="border-b border-[var(--border)]">
+                  <Td className="font-medium">{s.label}</Td>
+                  {RECEIVERS.map((r) => {
+                    const c = at(s.key, r.key);
+                    return (
+                      <Td key={r.key} className="text-right">
+                        <span title={c?.reason}>
+                          {c?.state === "measured" ? (
+                            <span className="tnum font-medium">
+                              {(c.value ?? 0).toLocaleString("ja-JP")}
+                            </span>
+                          ) : c?.state === "not_measured" ? (
+                            <span className="text-[11px] text-[var(--warn)]">未計測</span>
+                          ) : c?.state === "unmeasurable" ? (
+                            <span className="text-[11px] text-[var(--faint)]">測定不能</span>
+                          ) : (
+                            <span className="text-[11px] text-[var(--faint)]">—</span>
+                          )}
+                        </span>
+                      </Td>
+                    );
+                  })}
+                </tr>
+              ))}
+              <tr className="bg-[var(--panel-2)] font-semibold">
+                <Td>リード（実績）</Td>
+                {RECEIVERS.map((r) => (
+                  <Td key={r.key} className="text-right">
+                    <span className="tnum">{m.receiverTotals[r.key] ?? 0}</span>
+                  </Td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p className="mt-2 text-[12px] text-[var(--faint)]">
+        ★上段は「送った数（クリック・到達）」、最下段は「着地したリード数」。単位が違うので
+        縦に足し引きしないこと。マスにカーソルを合わせると、その状態の理由が出ます。
+      </p>
     </section>
   );
 }
