@@ -1,5 +1,10 @@
 // Threads 実績の集計（設計書 §4.2 /threads・§13.4-④）
 //
+// ★Threads のゴールは **DM（問い合わせ）**（2026-07-23 石井さん確定）。
+//   views・いいね・返信はその手前の数字で、単独では成果ではない。
+//   フォーマットの良し悪しも「DMに近づけたか」で見る。
+//   → 階段は lib/channel-threads.ts、ここは投稿の効きの集計。
+//
 // ★データは GAS のスプレッドシートから builtin/threads_sync.py が pull している。
 //   MMS は Threads API を叩かない（トークンは GAS 側に置いたまま）。
 //
@@ -8,6 +13,7 @@
 //   平均が下がり「跳ねていない投稿が跳ねて見える」「効いているフォーマットが
 //   効いていないように見える」の両方が起きる。未計測は件数として別に出す。
 import { prisma } from "@mms/db";
+import { jstDayKey, type Range } from "./period";
 
 const METRICS = ["views", "likes", "replies", "reposts", "quotes"] as const;
 type MetricKey = (typeof METRICS)[number];
@@ -63,7 +69,46 @@ export type ThreadsPost = {
   reposts: number | null;
   /** 代理店募集トラック。集客コンテンツとは評価軸が違う */
   isAgency: boolean;
+  /** その投稿が狙ったゴール。判定は貼ったリンク（2026-07-23 石井さん確定） */
+  goal: PostGoal;
 };
+
+/**
+ * 投稿のゴール。
+ *
+ * ★Threads のゴールは1本の階段ではなく**並列**（2026-07-23 石井さん）。
+ *     media … メディア（記事）へ送る。問い合わせは記事側で取る
+ *     dm    … Threads内で直接DMをもらう
+ *   これを1つのファネルとして縦に並べると、DM狙いの投稿が
+ *   「送客していない」と評価され、逆も起きる。別々に数える。
+ *
+ * ★判定は**貼ったリンク**。狙いを別の列で自己申告させると、
+ *   実際に貼ったものとズレたときに嘘の分類が残る。
+ *     /r/soken/ → media ／ /r/lp/ → lp ／ /r/line/ → line
+ *     リンク無し＋代理店候補 → dm
+ *     リンク無し＋集客       → unset（狙いが設定されていない）
+ */
+export type PostGoal = "media" | "lp" | "line" | "dm" | "unset";
+
+export const GOAL_LABEL: Record<PostGoal, string> = {
+  media: "メディア送客",
+  lp: "診断LP送客",
+  line: "公式LINE送客",
+  dm: "DM（問い合わせ）",
+  unset: "狙い未設定",
+};
+
+/** リンクからゴールを判定する。/r/<dest>/<postId> の dest を見る */
+export function goalOfLink(url: string | null, isAgency: boolean): PostGoal {
+  const m = url ? /\/r\/(soken|lp|line)\//i.exec(url) : null;
+  if (m) {
+    const dest = m[1].toLowerCase();
+    return dest === "soken" ? "media" : (dest as "lp" | "line");
+  }
+  // ★リンクが無くても、代理店募集はDMを取りに行く投稿。狙いは決まっている
+  if (isAgency) return "dm";
+  return "unset";
+}
 
 export type GroupStat = {
   name: string;
@@ -97,6 +142,18 @@ export type GroupStat = {
   clicksByDest: Record<string, number>;
   /** そのグループでリンクを貼った投稿数。0 なら clicks=0 は当然 */
   linkedPosts: number;
+  /**
+   * 少数グループをまとめた行か。
+   * ★型が混ざるので平均・率は出さない。畳んだ行の平均は「何の平均でもない」。
+   */
+  isOther: boolean;
+};
+
+/** 表ごとの集計結果。倍率の基準（中央値）は**その表の中**で求める */
+export type GroupTable = {
+  rows: GroupStat[];
+  /** その表の平均views の中央値。倍率の分母 */
+  median: number | null;
 };
 
 export type ThreadsSummary = {
@@ -111,16 +168,27 @@ export type ThreadsSummary = {
   medianFormatAvg: number | null;
   firstPostedAt: Date | null;
   lastPostedAt: Date | null;
+  /** 送客リンクを貼った投稿数。0 なら送客クリック0は「導線が無い」だけ */
+  linkedPosts: number;
+  /** 送客クリック合計（期間内） */
+  clicks: number;
+  days: number;
 };
 
 export type ThreadsData = {
   summary: ThreadsSummary;
-  /** 集客コンテンツのフォーマット別（★代理店トラックは含まない） */
-  byFormat: GroupStat[];
-  byTarget: GroupStat[];
-  byCore: GroupStat[];
-  /** 代理店募集トラックの angle 別。viewsでの優劣判断はしない */
-  byAgencyAngle: GroupStat[];
+  /**
+   * 集客コンテンツの集計（★代理店トラックは全表から除外する）。
+   * ★旧実装は byFormat だけ代理店を除外し、byTarget / byCore には混ぜていた。
+   *   さらに3つの表すべてが「フォーマット別の中央値」を倍率の分母に使っており、
+   *   母集団の違う数字を同じ基準で割っていた（代理店候補 ×0.1 など）。
+   *   表ごとに自分の中央値を持たせ、混入も断つ。
+   */
+  byFormat: GroupTable;
+  byTarget: GroupTable;
+  byCore: GroupTable;
+  /** 代理店募集トラックの angle 別。viewsでの優劣判断はしない（評価軸はDM） */
+  byAgencyAngle: GroupTable;
   top: ThreadsPost[];
 };
 
@@ -138,9 +206,35 @@ export const MIN_POSTS_FOR_STAT = 10;
  */
 export const MIN_ENGAGEMENTS_FOR_RATE = 10;
 
-export async function getThreadsData(): Promise<ThreadsData> {
+/**
+ * フォーマット名の正規化。
+ *
+ * ★実測で「早口 | champion」のような実験マーカー付きの型名が混ざっていた。
+ *   これを別の型として数えると、同じ型の実績が2行に割れて母数不足になり、
+ *   どちらも「母数不足」で消える。マーカーは型名ではないので落とす。
+ *
+ * ★意味での寄せ（「あるある共感」→「あるある型」など）はしない。
+ *   似た名前を機械が同一視すると、別物を混ぜた平均を「実績」として出すことになる。
+ *   表記ゆれは少数行として畳み、名寄せは人が決める。
+ */
+export function normalizeFormat(raw: string | null | undefined): string {
+  const s = (raw ?? "").trim();
+  if (!s) return "未設定";
+  return s.split("|")[0].trim() || "未設定";
+}
+
+/** これ未満の投稿数のグループは「その他」に畳む。実験名・打ち間違いが行を埋めるため */
+const FOLD_UNDER_POSTS = 5;
+
+export async function getThreadsData(range: Range): Promise<ThreadsData> {
+  // ★期間で絞る。旧実装は全期間（5/7〜・586投稿）を1つに混ぜて平均していたため、
+  //   「今月どの型が効いているか」が読めなかった。
   const items = await prisma.contentItem.findMany({
-    where: { type: "post", channel: { type: "threads" } },
+    where: {
+      type: "post",
+      channel: { type: "threads" },
+      publishedAt: { gte: range.since, lt: range.until },
+    },
     select: {
       id: true,
       externalId: true,
@@ -153,19 +247,34 @@ export async function getThreadsData(): Promise<ThreadsData> {
     },
   });
 
-  const metrics = await prisma.contentMetric.groupBy({
-    by: ["contentItemId", "metric"],
-    where: { metric: { in: METRICS.map((m) => `threads_${m}`) } },
-    _max: { value: true },
-  });
+  const ids = items.map((i) => i.id);
+  // ★views は累積値。期間末までに記録された最大値を「その期間の実績」とする。
+  //   期間で date を切らないと、過去期間を見たときに未来の値が入る。
+  const metrics = ids.length
+    ? await prisma.contentMetric.groupBy({
+        by: ["contentItemId", "metric"],
+        where: {
+          contentItemId: { in: ids },
+          metric: { in: METRICS.map((m) => `threads_${m}`) },
+          date: { lt: range.until },
+        },
+        _max: { value: true },
+      })
+    : [];
 
   // ★送客クリックは views と違って日次で積み上がる（最大値ではなく合計）。
   //   変種別（__setsuzei-diagnosis-a 等）は内訳なので二重に数えない
-  const clickRows = await prisma.contentMetric.groupBy({
-    by: ["contentItemId", "metric"],
-    where: { metric: { in: LINK_CLICK_METRICS } },
-    _sum: { value: true },
-  });
+  const clickRows = ids.length
+    ? await prisma.contentMetric.groupBy({
+        by: ["contentItemId", "metric"],
+        where: {
+          contentItemId: { in: ids },
+          metric: { in: LINK_CLICK_METRICS },
+          date: { gte: range.since, lt: range.until },
+        },
+        _sum: { value: true },
+      })
+    : [];
   const clicksByItem = new Map<string, number>();
   const destByItem = new Map<string, Record<string, number>>();
   for (const r of clickRows) {
@@ -198,7 +307,7 @@ export async function getThreadsData(): Promise<ThreadsData> {
       id: it.id,
       externalId: it.externalId,
       title: it.title,
-      format: it.note?.trim() || "unknown",
+      format: normalizeFormat(it.note),
       target: it.targetLabel,
       coreMessage: it.category,
       publishedAt: it.publishedAt,
@@ -211,10 +320,13 @@ export async function getThreadsData(): Promise<ThreadsData> {
       replies: m?.replies ?? null,
       reposts: m?.reposts ?? null,
       isAgency: (it.targetLabel ?? "").trim() === AGENCY_TARGET,
+      goal: goalOfLink(it.url, (it.targetLabel ?? "").trim() === AGENCY_TARGET),
     };
   });
 
-  // ★フォーマット比較は集客コンテンツだけで行う
+  // ★代理店募集トラックは全ての表から外す。評価軸がDM獲得で、
+  //   集客コンテンツと同じ土俵（views）で比べると有害な提案が出る（実際に出た）。
+  //   旧実装は byFormat だけ外し、ターゲット別・コアメッセージ別には混ぜていた。
   const contentPosts = posts.filter((p) => !p.isAgency);
   const agencyPosts = posts.filter((p) => p.isAgency);
 
@@ -225,11 +337,7 @@ export async function getThreadsData(): Promise<ThreadsData> {
     .filter((d): d is Date => d !== null)
     .sort((a, b) => a.getTime() - b.getTime());
 
-  const byFormat = groupBy(contentPosts, (p) => p.format);
-  const formatAvgs = byFormat
-    .filter((g) => g.measured >= MIN_POSTS_FOR_STAT && g.avgViews !== null)
-    .map((g) => g.avgViews as number)
-    .sort((a, b) => a - b);
+  const byFormat = buildTable(contentPosts, (p) => p.format);
 
   return {
     summary: {
@@ -239,17 +347,37 @@ export async function getThreadsData(): Promise<ThreadsData> {
       agencyPosts: agencyPosts.length,
       totalViews,
       avgViews: measuredPosts.length ? Math.round(totalViews / measuredPosts.length) : null,
-      medianFormatAvg: formatAvgs.length
-        ? Math.round(formatAvgs[Math.floor(formatAvgs.length / 2)])
-        : null,
+      medianFormatAvg: byFormat.median,
       firstPostedAt: dates[0] ?? null,
       lastPostedAt: dates[dates.length - 1] ?? null,
+      // ★送客リンクを貼った投稿。0 なら「効かなかった」ではなく導線が無い
+      linkedPosts: posts.filter((p) => p.linkUrl).length,
+      clicks: posts.reduce((s, p) => s + p.clicks, 0),
+      days: range.days,
     },
     byFormat,
-    byTarget: groupBy(posts, (p) => p.target?.trim() || "未設定"),
-    byCore: groupBy(posts, (p) => p.coreMessage?.trim() || "未設定"),
-    byAgencyAngle: groupBy(agencyPosts, (p) => p.format),
+    byTarget: buildTable(contentPosts, (p) => p.target?.trim() || "未設定"),
+    byCore: buildTable(contentPosts, (p) => p.coreMessage?.trim() || "未設定"),
+    byAgencyAngle: buildTable(agencyPosts, (p) => p.format),
     top: [...measuredPosts].sort((a, b) => (b.views ?? 0) - (a.views ?? 0)).slice(0, 15),
+  };
+}
+
+/**
+ * 表を1つ作る。倍率の基準（中央値）は**この表の中**で求める。
+ *
+ * ★旧実装は3つの表すべてが「フォーマット別の中央値」を分母にしていた。
+ *   母集団の違う数字を同じ基準で割ると、意味の無い倍率が並ぶ。
+ */
+function buildTable(posts: ThreadsPost[], key: (p: ThreadsPost) => string): GroupTable {
+  const rows = groupBy(posts, key);
+  const avgs = rows
+    .filter((g) => !g.isOther && g.avgViews !== null)
+    .map((g) => g.avgViews as number)
+    .sort((a, b) => a - b);
+  return {
+    rows,
+    median: avgs.length ? Math.round(avgs[Math.floor(avgs.length / 2)]) : null,
   };
 }
 
@@ -260,6 +388,19 @@ function groupBy(posts: ThreadsPost[], key: (p: ThreadsPost) => string): GroupSt
     const arr = map.get(k);
     if (arr) arr.push(p);
     else map.set(k, [p]);
+  }
+
+  // ★1〜数件しかないグループを畳む。実測では「test」「出題型クイズ」など
+  //   1〜2投稿の行が11行並び、本番の型と同列に見えていた。
+  //   捨てずに「その他」へまとめる（消すと投稿数の合計が合わなくなる）。
+  const folded: ThreadsPost[] = [];
+  let foldedGroups = 0;
+  for (const [name, arr] of [...map.entries()]) {
+    if (arr.length < FOLD_UNDER_POSTS && map.size > 1) {
+      folded.push(...arr);
+      foldedGroups += 1;
+      map.delete(name);
+    }
   }
 
   const out: GroupStat[] = [];
@@ -307,8 +448,10 @@ function groupBy(posts: ThreadsPost[], key: (p: ThreadsPost) => string): GroupSt
       clicks,
       clicksByDest,
       linkedPosts,
+      isOther: false,
     });
   }
+
   // 平均が出せるものを上に、その中で平均views降順
   out.sort((a, b) => {
     if (a.avgViews === null && b.avgViews === null) return b.posts - a.posts;
@@ -316,6 +459,34 @@ function groupBy(posts: ThreadsPost[], key: (p: ThreadsPost) => string): GroupSt
     if (b.avgViews === null) return -1;
     return b.avgViews - a.avgViews;
   });
+
+  if (folded.length > 0) {
+    const measured = folded.filter((p) => p.views !== null);
+    const clicksByDest: Record<string, number> = {};
+    for (const p of folded) {
+      for (const [k, v] of Object.entries(p.clicksByDest)) {
+        clicksByDest[k] = (clicksByDest[k] ?? 0) + v;
+      }
+    }
+    out.push({
+      name: `その他（${foldedGroups}種・各${FOLD_UNDER_POSTS}投稿未満）`,
+      posts: folded.length,
+      measured: measured.length,
+      // ★中身が別の型なので平均・率は出さない。畳んだ行の平均は何の平均でもない
+      avgViews: null,
+      avgEngagement: null,
+      totalViews: measured.reduce((s, p) => s + (p.views ?? 0), 0),
+      totalLikes: measured.reduce((s, p) => s + (p.likes ?? 0), 0),
+      totalReplies: measured.reduce((s, p) => s + (p.replies ?? 0), 0),
+      totalReposts: measured.reduce((s, p) => s + (p.reposts ?? 0), 0),
+      likeRate: null,
+      repliesPerPost: null,
+      clicks: folded.reduce((s, p) => s + p.clicks, 0),
+      clicksByDest,
+      linkedPosts: folded.filter((p) => p.linkUrl).length,
+      isOther: true,
+    });
+  }
   return out;
 }
 
@@ -340,12 +511,14 @@ export type AccountHealth = {
   /** 判定に必要な日数（UIで残り日数を出すため） */
   minDays: number;
   suspectedDays: number;
+  /** SnsAccountHealth の行数。日次記録そのものが何日ぶんあるか */
+  historyDays: number;
 };
 
 /** 基準線に要る日数。route.ts の RESTRICTION_MIN_HISTORY_DAYS と揃える */
 export const HEALTH_MIN_DAYS = 7;
 
-export async function getAccountHealth(): Promise<AccountHealth> {
+export async function getAccountHealth(now: Date = new Date()): Promise<AccountHealth> {
   const rows = await prisma.snsAccountHealth.findMany({
     where: { channel: { type: "threads" } },
     orderBy: { date: "desc" },
@@ -361,12 +534,66 @@ export async function getAccountHealth(): Promise<AccountHealth> {
     },
   });
 
-  const measured = rows.filter((r) => r.viewsPerFollower !== null).length;
+  // ★avgViews / viewsPerFollower は GAS が入れる前提だったが、実測では
+  //   全行 NULL のままで「履歴 0/7日・判定不能」が固定表示になっていた。
+  //   待っても埋まらないのに「あと7日」と読めるのは嘘に近い。
+  //   材料（その日に公開した投稿の views と followers）は MMS 側にある。
+  //   自前で埋める。GAS が値を入れてきたらそちらを優先する。
+  const oldest = rows.length ? rows[rows.length - 1].date : null;
+  const dayViews = oldest
+    ? await prisma.contentItem.findMany({
+        where: {
+          type: "post",
+          channel: { type: "threads" },
+          publishedAt: { gte: oldest },
+        },
+        select: {
+          publishedAt: true,
+          metrics: {
+            where: { metric: "threads_views" },
+            orderBy: { value: "desc" },
+            take: 1,
+            select: { value: true },
+          },
+        },
+      })
+    : [];
+
+  const byDay = new Map<string, { sum: number; n: number }>();
+  for (const p of dayViews) {
+    const v = p.metrics[0]?.value;
+    // ★未計測の投稿を 0 として平均に入れない（§3）
+    if (v === undefined || !p.publishedAt) continue;
+    const k = jstDayKey(p.publishedAt);
+    const cur = byDay.get(k) ?? { sum: 0, n: 0 };
+    cur.sum += v;
+    cur.n += 1;
+    byDay.set(k, cur);
+  }
+
+  const filled: HealthRow[] = rows.map((r) => {
+    if (r.avgViews !== null && r.viewsPerFollower !== null) return r;
+    const d = byDay.get(jstDayKey(r.date));
+    const avgViews = r.avgViews ?? (d && d.n > 0 ? Math.round(d.sum / d.n) : null);
+    return {
+      ...r,
+      avgViews,
+      viewsPerFollower:
+        r.viewsPerFollower ??
+        (avgViews !== null && r.followers > 0
+          ? Math.round((avgViews / r.followers) * 100) / 100
+          : null),
+    };
+  });
+
+  const measured = filled.filter((r) => r.viewsPerFollower !== null).length;
   return {
-    rows,
-    latest: rows[0] ?? null,
+    rows: filled,
+    latest: filled[0] ?? null,
     hasBaseline: measured >= HEALTH_MIN_DAYS,
     minDays: HEALTH_MIN_DAYS,
-    suspectedDays: rows.filter((r) => r.restrictionSuspected).length,
+    suspectedDays: filled.filter((r) => r.restrictionSuspected).length,
+    /** ★何日ぶんの記録があるか。「7日待てば埋まる」かを判断する材料 */
+    historyDays: rows.length,
   };
 }

@@ -50,7 +50,9 @@ export function Stages({
               <div className="text-[11px] text-[var(--muted)]">{s.label}</div>
               <div className="mt-1">
                 {s.value === null ? (
-                  <span className="text-xs font-medium text-[var(--warn)]">—(未計測)</span>
+                  <span className="text-xs font-medium text-[var(--warn)]">
+                    {s.pendingLabel ?? "—(未計測)"}
+                  </span>
                 ) : (
                   <span className="tnum text-lg font-bold leading-none">
                     {s.value.toLocaleString("ja-JP")}

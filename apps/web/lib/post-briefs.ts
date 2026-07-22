@@ -13,6 +13,7 @@
 //   - 空きの深刻さ           … 段7（最終投稿からの経過日数）
 import { prisma } from "@mms/db";
 import { getThreadsData, MIN_POSTS_FOR_STAT } from "./threads";
+import { resolveRange } from "./period";
 import { IDEA_SOURCE_LABEL } from "./ideas";
 
 /** 指示を出すフォーマットの上限。多すぎると選べない */
@@ -42,12 +43,19 @@ export type PostBriefs = {
   blocked: string | null;
 };
 
+/**
+ * 型の効きを見る期間。
+ * ★1か月では母数（計測済10件以上の型）が揃わない。指示の材料としては
+ *   直近90日を使う。画面の期間切替とは別（画面は実績、ここは判断材料）。
+ */
+const BRIEF_RANGE = "d90";
+
 export async function getPostBriefs(now: Date = new Date()): Promise<PostBriefs> {
-  const { summary, byFormat } = await getThreadsData();
+  const { summary, byFormat } = await getThreadsData(resolveRange({ range: BRIEF_RANGE }, now));
 
   // ── 効いているフォーマット（★母数が足りないものは使わない）──
-  const formats = byFormat
-    .filter((g) => g.avgViews !== null && g.measured >= MIN_POSTS_FOR_STAT)
+  const formats = byFormat.rows
+    .filter((g) => !g.isOther && g.avgViews !== null && g.measured >= MIN_POSTS_FOR_STAT)
     .slice(0, MAX_FORMATS);
 
   // ── テーマ（未対応のネタ）──

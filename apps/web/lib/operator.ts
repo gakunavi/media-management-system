@@ -5,6 +5,7 @@
 //   起票された Action は段5に並び、人が承認/却下する（責任は人に残す・§12.3）。
 import { prisma, type Prisma } from "@mms/db";
 import { decodeEntities } from "./content";
+import { resolveRange } from "./period";
 import { getThreadsData } from "./threads";
 
 const DAY = 86400000;
@@ -379,12 +380,15 @@ async function proposeFromSerp(): Promise<Proposal[]> {
  *   実際より悪く見え、まだ効いているものを切ってしまう（§3）。
  */
 async function proposeFromThreadsFormats(): Promise<Proposal[]> {
-  const { summary, byFormat } = await getThreadsData();
+  // ★立案は直近90日の実績で行う（1か月だと比較できる型が揃わない）
+  const { summary, byFormat } = await getThreadsData(resolveRange({ range: "d90" }));
   const median = summary.medianFormatAvg;
   if (median === null) return []; // 母数が足りず基準を作れない
 
   // 平均を出せた（＝計測済がMIN_POSTS_FOR_STAT件以上）フォーマットだけを比較する
-  const rated = byFormat.filter((g) => g.avgViews !== null);
+  // ★「その他」（少数の型を畳んだ行）は比較対象にしない。中身が別の型なので
+  //   これを最下位として提案に使うと、存在しない型を「減らせ」と言うことになる
+  const rated = byFormat.rows.filter((g) => !g.isOther && g.avgViews !== null);
   if (rated.length < 3) return []; // 比較対象が少なすぎると「偏り」を語れない
 
   const best = rated[0]; // avgViews 降順

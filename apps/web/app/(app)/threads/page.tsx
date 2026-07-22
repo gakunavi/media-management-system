@@ -1,53 +1,122 @@
+import Link from "next/link";
 import {
   getThreadsData,
   getAccountHealth,
   MIN_POSTS_FOR_STAT,
   MIN_ENGAGEMENTS_FOR_RATE,
-  type GroupStat,
+  type GroupTable,
   type AccountHealth,
 } from "@/lib/threads";
+import { getThreadsGoals } from "@/lib/channel-threads";
 import { getPostBriefs, type PostBriefs } from "@/lib/post-briefs";
 import { getQueueOverview } from "@/lib/threads-queue";
+import { resolveRange, type Range } from "@/lib/period";
+import { RangePicker } from "@/components/range-picker";
 import { QueueSection } from "./queue-section";
+import { GoalsPanel } from "./goals-panel";
 
-// Threads 実績（設計書 §4.2 /threads・§13.4-④）
+// Threads（設計書 §4.2 /threads・§13.4-④）
 //
-// ★代理店DMの状態遷移（P5.6）と viewsPerFollower 急落検知はまだ。
-//   いま出せるのは「投稿実績とフォーマット別の効き」で、これは
-//   threads_format_shift の承認判断に必要な材料。
+// ★Threads のゴールは **メディア送客 と DM の2つ**（2026-07-23 石井さん）。
+//   並列のゴールであって、1本の階段ではない。だから画面もその順で作る:
+//     タブ1「ゴール」   … 何件取れたか（＝判断する場所）
+//     タブ2「投稿の効き」… なぜそうなったか（型・ターゲット・コアメッセージ）
+//     タブ3「配信」     … 止まっていないか・次に何を書くか
+//
+// ★views は成果ではない。views の表を先頭に置くと、
+//   「よく見られた」で満足して、ゴールに繋がっているかを見なくなる。
 export const dynamic = "force-dynamic";
+
+const TABS = [
+  { key: "goals", label: "ゴール" },
+  { key: "posts", label: "投稿の効き" },
+  { key: "delivery", label: "配信" },
+] as const;
+type TabKey = (typeof TABS)[number]["key"];
 
 const jaDate = (d: Date | null) =>
   d ? d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" }) : "—";
 const num = (n: number | null) => (n === null ? "—" : n.toLocaleString("ja-JP"));
 
-export default async function ThreadsPage() {
-  const [
-    { summary, byFormat, byTarget, byCore, byAgencyAngle, top },
-    health,
-    briefs,
-    queue,
-  ] = await Promise.all([
-    getThreadsData(),
-    getAccountHealth(),
-    getPostBriefs(),
-    // ★GAS への往復が入る。落ちても他が出るよう getQueueOverview 側で握る
-    getQueueOverview(),
-  ]);
+type SearchParams = Record<string, string | string[] | undefined>;
+const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+
+export default async function ThreadsPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const sp = await searchParams;
+  const range = resolveRange(sp);
+  const tabParam = one(sp.tab);
+  const tab: TabKey = TABS.some((t) => t.key === tabParam) ? (tabParam as TabKey) : "goals";
+
+  const { summary } = await getThreadsData(range);
+
+  const tabHref = (key: string) => {
+    const p = new URLSearchParams();
+    p.set("range", range.key);
+    const from = one(sp.from);
+    const to = one(sp.to);
+    if (from) p.set("from", from);
+    if (to) p.set("to", to);
+    p.set("tab", key);
+    return `/threads?${p.toString()}`;
+  };
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="mb-5">
-        <h1 className="text-xl font-bold tracking-tight">Threads</h1>
-        <p className="mt-0.5 text-[13px] text-[var(--muted)]">
-          {jaDate(summary.firstPostedAt)} 〜 {jaDate(summary.lastPostedAt)}・{summary.posts}投稿
-          {summary.unmeasured > 0 && (
-            <span className="text-[var(--bad)]">（うち未計測 {summary.unmeasured}件）</span>
-          )}
-        </p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">Threads</h1>
+          <p className="mt-0.5 text-[13px] text-[var(--muted)]">
+            ゴールは①メディア送客と②DM。{range.label}・{summary.posts}投稿
+            {summary.unmeasured > 0 && (
+              <span className="text-[var(--bad)]">（うち未計測 {summary.unmeasured}件）</span>
+            )}
+          </p>
+        </div>
+        <RangePicker range={range} basePath="/threads" keep={{ tab }} />
       </div>
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-4">
+      <div className="mb-4 flex gap-1 border-b border-[var(--border)]">
+        {TABS.map((t) => (
+          <Link
+            key={t.key}
+            href={tabHref(t.key)}
+            className={`-mb-px border-b-2 px-3 py-2 text-[13px] font-medium transition-colors ${
+              tab === t.key
+                ? "border-[var(--accent)] text-[var(--accent)]"
+                : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]"
+            }`}
+          >
+            {t.label}
+          </Link>
+        ))}
+      </div>
+
+      {tab === "goals" && <GoalsTab range={range} />}
+      {tab === "posts" && <PostsTab range={range} />}
+      {tab === "delivery" && <DeliveryTab range={range} />}
+    </div>
+  );
+}
+
+/* ─────────────────────── タブ1: ゴール ─────────────────────── */
+
+async function GoalsTab({ range }: { range: Range }) {
+  const goals = await getThreadsGoals(range);
+  return <GoalsPanel g={goals} />;
+}
+
+/* ─────────────────────── タブ2: 投稿の効き ─────────────────── */
+
+async function PostsTab({ range }: { range: Range }) {
+  const { summary, byFormat, byTarget, byCore, byAgencyAngle, top } = await getThreadsData(range);
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-3 sm:grid-cols-4">
         <Stat label="投稿数" value={num(summary.posts)} hint="GASのキューから同期" />
         <Stat label="総views" value={num(summary.totalViews)} hint="計測できた投稿の合計" accent />
         <Stat label="平均views" value={num(summary.avgViews)} hint="★未計測は除外して算出" />
@@ -59,81 +128,117 @@ export default async function ThreadsPage() {
         />
       </div>
 
-      <BriefPanel briefs={briefs} />
-      <HealthPanel health={health} />
+      <p className="rounded-md bg-[var(--panel-2)] px-3 py-2 text-[12px] leading-relaxed text-[var(--muted)]">
+        ★ここの数字は<strong>ゴールではなく、その手前</strong>。views が多い型が
+        必ずしもDMや送客に効くとは限らない。返信は「会話が始まった」度合いで、
+        DMに最も近い先行指標。
+        <br />
+        ★代理店募集トラック（{summary.agencyPosts}投稿）は全ての表から除外している。
+        評価軸がDM獲得で、views で比べると「低調だから減らせ」という誤った結論になる。
+      </p>
 
       <Section
         title="フォーマット別"
-        note={`集客コンテンツのみ（代理店募集${summary.agencyPosts}投稿は別枠）。平均は計測済 ${MIN_POSTS_FOR_STAT}件以上のグループだけ算出する。倍率は中央値 ${num(summary.medianFormatAvg)} views 比。★views・いいね率・返信数で順位が食い違う（質問型は views 1位・いいね率11位・返信 2位）。どれを「反応が良い」と呼ぶかで採るべきフォーマットが変わるので、目的に合う列を見ること。`}
-        rows={byFormat}
-        median={summary.medianFormatAvg}
+        note={`平均は計測済 ${MIN_POSTS_FOR_STAT}件以上のグループだけ算出する。倍率はこの表の中央値 ${num(byFormat.median)} views 比。`}
+        table={byFormat}
       />
-      {byAgencyAngle.length > 0 && (
-        <p className="mb-5 rounded-md bg-[var(--panel-2)] px-3 py-2 text-[12px] text-[var(--muted)]">
-          代理店募集トラック（{summary.agencyPosts}投稿）は{" "}
-          <a className="text-[var(--accent)] underline" href="/agency">
-            代理店
-          </a>{" "}
-          にまとめました。評価軸がDM獲得で、集客コンテンツとは別物のためです。
-        </p>
-      )}
-      {/* ★配信が止まると他の指標も全部止まる。先に出す */}
-      <QueueSection data={queue} />
+      <Section title="ターゲット別" table={byTarget} />
+      <Section title="コアメッセージ別" table={byCore} />
 
-      <Section title="ターゲット別" rows={byTarget} median={summary.medianFormatAvg} />
-      <Section title="コアメッセージ別" rows={byCore} median={summary.medianFormatAvg} />
-
-      <h2 className="mb-2 mt-6 text-[14px] font-semibold">views TOP15</h2>
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="border-b border-[var(--border)] bg-[var(--panel-2)] text-left text-[12px] text-[var(--muted)]">
-                <th className="whitespace-nowrap px-3 py-2 font-medium">ID</th>
-                <th className="whitespace-nowrap px-3 py-2 font-medium">本文</th>
-                <th className="whitespace-nowrap px-3 py-2 font-medium">フォーマット</th>
-                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">views</th>
-                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">反応</th>
-                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">投稿日</th>
-              </tr>
-            </thead>
-            <tbody>
-              {top.map((p) => (
-                <tr key={p.id} className="border-b border-[var(--border)] last:border-0">
-                  <td className="whitespace-nowrap px-3 py-2 text-[var(--faint)]">
-                    {p.externalId}
-                  </td>
-                  <td className="max-w-[360px] truncate px-3 py-2">{p.title}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-[var(--muted)]">{p.format}</td>
-                  <td className="tnum px-3 py-2 text-right font-medium">{num(p.views)}</td>
-                  <td className="tnum px-3 py-2 text-right text-[var(--muted)]">
-                    {num(p.engagement)}
-                  </td>
-                  <td className="tnum whitespace-nowrap px-3 py-2 text-right text-[var(--faint)]">
-                    {jaDate(p.publishedAt)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {byAgencyAngle.rows.length > 0 && (
+        <div>
+          <h2 className="mb-1 text-[14px] font-semibold">代理店募集トラック（参考）</h2>
+          <p className="mb-2 text-[12px] text-[var(--faint)]">
+            ★このトラックの評価軸は<strong>DM獲得</strong>であって views ではない。
+            アングル別のDM実績は{" "}
+            <Link href="/agency" className="text-[var(--accent)] hover:underline">
+              代理店
+            </Link>{" "}
+            にあります。ここは配信量の確認用。
+          </p>
+          <Section title="アングル別" table={byAgencyAngle} />
         </div>
-      </div>
+      )}
 
-      <p className="mt-3 text-[12px] text-[var(--faint)]">
-        跳ねた投稿は{" "}
-        <a className="text-[var(--accent)] underline" href="/ideas">
-          ネタ
-        </a>{" "}
-        へ自動起票されます（§13.4-④）。配分の見直し提案は{" "}
-        <a className="text-[var(--accent)] underline" href="/experiments">
-          施策・PDCA
-        </a>{" "}
-        に出ます。
-        <br />
-        viewsPerFollower の急落は「投稿はできているのに配信が絞られている」サインで、
-        内容を書き直しても直りません。判定には{" "}
-        <strong>フォロワー数の履歴が最低{" "}
-        {/* HEALTH_MIN_DAYS と同じ値 */}7日分</strong> 必要です。
+      <div>
+        <h2 className="mb-2 text-[14px] font-semibold">views TOP15</h2>
+        <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-[var(--border)] bg-[var(--panel-2)] text-left text-[12px] text-[var(--muted)]">
+                  <th className="whitespace-nowrap px-3 py-2 font-medium">ID</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-medium">本文</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-medium">フォーマット</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">views</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">返信</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">送客</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">投稿日</th>
+                </tr>
+              </thead>
+              <tbody>
+                {top.map((p) => (
+                  <tr key={p.id} className="border-b border-[var(--border)] last:border-0">
+                    <td className="whitespace-nowrap px-3 py-2 text-[var(--faint)]">
+                      {p.externalId}
+                    </td>
+                    <td className="max-w-[340px] truncate px-3 py-2">{p.title}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-[var(--muted)]">{p.format}</td>
+                    <td className="tnum px-3 py-2 text-right font-medium">{num(p.views)}</td>
+                    <td className="tnum px-3 py-2 text-right text-[var(--muted)]">
+                      {num(p.replies)}
+                    </td>
+                    {/* ★リンクを貼っていない投稿の 0 は「効かなかった」ではない */}
+                    <td className="tnum px-3 py-2 text-right text-[var(--muted)]">
+                      {p.linkUrl === null ? (
+                        <span className="text-[11px] text-[var(--faint)]">導線なし</span>
+                      ) : (
+                        p.clicks
+                      )}
+                    </td>
+                    <td className="tnum whitespace-nowrap px-3 py-2 text-right text-[var(--faint)]">
+                      {jaDate(p.publishedAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p className="mt-2 text-[12px] text-[var(--faint)]">
+          跳ねた投稿は{" "}
+          <Link href="/ideas" className="text-[var(--accent)] hover:underline">
+            ネタ
+          </Link>{" "}
+          へ自動起票されます（§13.4-④）。配分の見直し提案は{" "}
+          <Link href="/experiments" className="text-[var(--accent)] hover:underline">
+            施策・PDCA
+          </Link>{" "}
+          に出ます。
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────── タブ3: 配信 ─────────────────────── */
+
+async function DeliveryTab({ range }: { range: Range }) {
+  const [health, briefs, queue] = await Promise.all([
+    getAccountHealth(),
+    getPostBriefs(),
+    // ★GAS への往復が入る。落ちても他が出るよう getQueueOverview 側で握る
+    getQueueOverview(),
+  ]);
+
+  return (
+    <div className="grid gap-4">
+      <QueueSection data={queue} />
+      <BriefPanel briefs={briefs} />
+      <HealthPanel health={health} />
+      <p className="text-[12px] text-[var(--faint)]">
+        期間の指定（{range.label}）は「ゴール」「投稿の効き」に効きます。配信の状態は
+        いまの状態なので期間に依存しません。
       </p>
     </div>
   );
@@ -147,15 +252,13 @@ function BriefPanel({ briefs }: { briefs: PostBriefs }) {
   const urgent = (briefs.gapDays ?? 0) >= 2;
 
   return (
-    <div className="mb-5">
-      <h2 className="mb-2 text-[14px] font-semibold">次に書く投稿</h2>
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
+      <h2 className="mb-2 text-[15px] font-semibold">次に書く投稿</h2>
 
       {briefs.gapDays !== null && (
         <p
           className={`mb-2 rounded-md px-3 py-2 text-[12px] ${
-            urgent
-              ? "bg-[var(--bad)]/10 text-[var(--bad)]"
-              : "bg-[var(--panel-2)] text-[var(--muted)]"
+            urgent ? "bg-[var(--bad)]/10 text-[var(--bad)]" : "bg-[var(--panel-2)] text-[var(--muted)]"
           }`}
         >
           最終投稿から <strong>{briefs.gapDays}日</strong>
@@ -164,7 +267,8 @@ function BriefPanel({ briefs }: { briefs: PostBriefs }) {
               ・実績は1日あたり約 <strong>{briefs.postsPerDay}投稿</strong>
               {briefs.needed ? (
                 <>
-                  {" "}→ 空きを埋めるには <strong>約{briefs.needed}件</strong> の補充が必要
+                  {" "}
+                  → 空きを埋めるには <strong>約{briefs.needed}件</strong> の補充が必要
                 </>
               ) : null}
             </>
@@ -173,7 +277,7 @@ function BriefPanel({ briefs }: { briefs: PostBriefs }) {
       )}
 
       {briefs.blocked ? (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-4 text-[12px] text-[var(--muted)]">
+        <div className="rounded-lg border border-[var(--border)] p-4 text-[12px] text-[var(--muted)]">
           指示を出せません: {briefs.blocked}
         </div>
       ) : (
@@ -181,8 +285,9 @@ function BriefPanel({ briefs }: { briefs: PostBriefs }) {
           <p className="mb-2 text-[12px] text-[var(--faint)]">
             ★文章は生成しません。効いている「型」と需要のある「テーマ」の組み合わせだけを出します。
             税務はYMYL領域で、実際に7件がYMYLチェックで停止しています。本文は人が書いてください。
+            型の効きは<strong>直近90日</strong>の実績で選んでいます（1か月では母数が足りないため）。
           </p>
-          <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+          <div className="overflow-hidden rounded-lg border border-[var(--border)]">
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
                 <thead>
@@ -196,7 +301,7 @@ function BriefPanel({ briefs }: { briefs: PostBriefs }) {
                   {briefs.briefs.map((b, i) => (
                     <tr
                       key={`${b.format}-${i}`}
-                      className="border-b border-[var(--border)] last:border-0 align-top"
+                      className="border-b border-[var(--border)] align-top last:border-0"
                     >
                       <td className="whitespace-nowrap px-3 py-2.5">
                         <strong>{b.format}</strong>
@@ -219,34 +324,33 @@ function BriefPanel({ briefs }: { briefs: PostBriefs }) {
           </div>
         </>
       )}
-    </div>
+    </section>
   );
 }
 
 /** 配信制限の兆候（§2454）。★履歴が足りないうちは「異常なし」と言わない */
 function HealthPanel({ health }: { health: AccountHealth }) {
-  const { latest, rows, hasBaseline, minDays, suspectedDays } = health;
+  const { latest, rows, hasBaseline, minDays, suspectedDays, historyDays } = health;
 
   if (!latest) {
     return (
-      <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-4">
-        <h2 className="text-[14px] font-semibold">アカウントの健全性</h2>
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
+        <h2 className="text-[15px] font-semibold">アカウントの健全性</h2>
         <p className="mt-1 text-[12px] text-[var(--muted)]">
-          フォロワー数の履歴がまだありません。GAS の <code>Account.gs</code> で
-          日次記録を開始し、<code>Api.gs</code> を再デプロイすると取り込まれます。
-          <br />
-          ★<strong>これは「異常なし」ではなく「まだ測っていない」状態です。</strong>
+          フォロワー数の履歴がまだありません。GAS の <code>Account.gs</code> で 日次記録を開始し、
+          <code>Api.gs</code> を再デプロイすると取り込まれます。
+          <br />★<strong>これは「異常なし」ではなく「まだ測っていない」状態です。</strong>
           followers_count は過去に遡れないため、記録を始めた日からしか履歴が作れません。
         </p>
-      </div>
+      </section>
     );
   }
 
   const measured = rows.filter((r) => r.viewsPerFollower !== null).length;
 
   return (
-    <div className="mb-4">
-      <h2 className="mb-2 text-[14px] font-semibold">アカウントの健全性</h2>
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
+      <h2 className="mb-2 text-[15px] font-semibold">アカウントの健全性</h2>
       {suspectedDays > 0 ? (
         <p className="mb-2 rounded-md bg-[var(--bad)]/10 px-3 py-2 text-[12px] text-[var(--bad)]">
           ★直近60日のうち <strong>{suspectedDays}日</strong> で viewsPerFollower の急落を検知
@@ -255,8 +359,11 @@ function HealthPanel({ health }: { health: AccountHealth }) {
         </p>
       ) : !hasBaseline ? (
         <p className="mb-2 rounded-md bg-[var(--warn)]/12 px-3 py-2 text-[12px] text-[#9a6a00]">
-          判定に必要な履歴が足りません（計測済 {measured}日 / 必要 {minDays}日）。
+          判定できません。日次記録は <strong>{historyDays}日</strong>ぶん（必要 {minDays}日）、
+          そのうち平均viewsを算出できたのは <strong>{measured}日</strong>です
+          {measured < historyDays && "（その日の投稿の Insights がまだ回収されていないため）"}。
           ★<strong>「異常なし」ではなく「まだ判定できない」</strong>状態です。
+          日次記録が毎日続けば、最短で残り {Math.max(0, minDays - historyDays)}日で判定できます。
         </p>
       ) : null}
 
@@ -268,7 +375,9 @@ function HealthPanel({ health }: { health: AccountHealth }) {
         />
         <Stat
           label="平均views"
-          value={latest.avgViews === null ? "—" : Math.round(latest.avgViews).toLocaleString("ja-JP")}
+          value={
+            latest.avgViews === null ? "—" : Math.round(latest.avgViews).toLocaleString("ja-JP")
+          }
           hint="その日に公開した投稿の平均"
         />
         <Stat
@@ -284,53 +393,55 @@ function HealthPanel({ health }: { health: AccountHealth }) {
           bad={suspectedDays > 0}
         />
       </div>
-    </div>
+      <p className="mt-2 text-[12px] text-[var(--faint)]">
+        viewsPerFollower の急落は「投稿はできているのに配信が絞られている」サインで、
+        内容を書き直しても直りません。平均views は GAS が入れていなければ MMS が
+        （その日に公開した投稿の views から）自前で算出します。
+      </p>
+    </section>
   );
 }
 
-function Section({
-  title,
-  note,
-  rows,
-  median,
-}: {
-  title: string;
-  note?: string;
-  rows: GroupStat[];
-  median: number | null;
-}) {
+/* ─────────────────────── 共通 ─────────────────────── */
+
+function Section({ title, note, table }: { title: string; note?: string; table: GroupTable }) {
   return (
-    <div className="mb-5">
-      <h2 className="mb-2 mt-5 text-[14px] font-semibold">{title}</h2>
+    <div>
+      <h2 className="mb-1 text-[14px] font-semibold">{title}</h2>
       {note && <p className="mb-2 text-[12px] text-[var(--faint)]">{note}</p>}
       <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-[var(--border)] bg-[var(--panel-2)] text-left text-[12px] text-[var(--muted)]">
-                <th className="whitespace-nowrap px-3 py-2 font-medium">
-                  {title.replace("別", "")}
-                </th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">{title.replace("別", "")}</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">投稿数</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">計測済</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">返信/投稿</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">平均views</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">いいね率</th>
-                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">返信/投稿</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">いいね</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">返信</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">送客計</th>
-                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">→LINE</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">→記事</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">→LP</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">→LINE</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">総views</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((g) => {
-                const ratio = g.avgViews !== null && median ? g.avgViews / median : null;
+              {table.rows.map((g) => {
+                const ratio = g.avgViews !== null && table.median ? g.avgViews / table.median : null;
                 return (
-                  <tr key={g.name} className="border-b border-[var(--border)] last:border-0">
-                    <td className="max-w-[220px] truncate px-3 py-2">{g.name}</td>
+                  <tr
+                    key={g.name}
+                    className={`border-b border-[var(--border)] last:border-0 ${
+                      g.isOther ? "bg-[var(--panel-2)] text-[var(--muted)]" : ""
+                    }`}
+                  >
+                    <td className="max-w-[220px] truncate px-3 py-2" title={g.name}>
+                      {g.name}
+                    </td>
                     <td className="tnum px-3 py-2 text-right">{g.posts}</td>
                     <td className="tnum px-3 py-2 text-right text-[var(--muted)]">
                       {g.measured}
@@ -338,13 +449,25 @@ function Section({
                         <span className="text-[var(--bad)]"> /{g.posts - g.measured}未</span>
                       )}
                     </td>
+                    {/* ★返信は「会話が始まった」度合い。DMに最も近い先行指標なので前に置く */}
                     <td className="tnum px-3 py-2 text-right font-medium">
+                      {g.repliesPerPost === null ? (
+                        <span className="text-[11px] text-[var(--faint)]">—</span>
+                      ) : (
+                        g.repliesPerPost.toFixed(2)
+                      )}
+                    </td>
+                    <td className="tnum px-3 py-2 text-right">
                       {g.avgViews === null ? (
                         <span
                           className="text-[11px] text-[var(--faint)]"
-                          title={`計測済 ${g.measured}件 < ${MIN_POSTS_FOR_STAT}件のため平均を出さない`}
+                          title={
+                            g.isOther
+                              ? "型が混ざるため平均は出さない"
+                              : `計測済 ${g.measured}件 < ${MIN_POSTS_FOR_STAT}件のため平均を出さない`
+                          }
                         >
-                          母数不足
+                          {g.isOther ? "混在" : "母数不足"}
                         </span>
                       ) : (
                         <>
@@ -365,8 +488,7 @@ function Section({
                         </>
                       )}
                     </td>
-                    {/* ★いいね率と返信は views と順位が食い違う。並べて出す */}
-                    <td className="tnum px-3 py-2 text-right font-medium">
+                    <td className="tnum px-3 py-2 text-right">
                       {g.likeRate === null ? (
                         <span
                           className="text-[11px] text-[var(--faint)]"
@@ -378,26 +500,17 @@ function Section({
                         `${g.likeRate.toFixed(2)}%`
                       )}
                     </td>
-                    <td className="tnum px-3 py-2 text-right font-medium">
-                      {g.repliesPerPost === null ? "—" : g.repliesPerPost.toFixed(2)}
-                    </td>
-                    <td className="tnum px-3 py-2 text-right text-[var(--muted)]">
-                      {g.totalLikes}
-                    </td>
+                    <td className="tnum px-3 py-2 text-right text-[var(--muted)]">{g.totalLikes}</td>
                     <td className="tnum px-3 py-2 text-right text-[var(--muted)]">
                       {g.totalReplies}
                     </td>
-                    {/* ★送客は4つの目的のうち2つに直接対応する唯一の実測値。
-                        リンクを貼っていないグループの 0 は「効かなかった」ではなく
-                        「導線が無い」。区別して出す。
-                        ★遷移先を分ける。LINE登録は follow イベントに経路が
-                        入らないため、投稿別の貢献はこのクリック数でしか近似できない */}
+                    {/* ★リンクを貼っていないグループの 0 は「効かなかった」ではなく導線が無い */}
                     <td className="tnum px-3 py-2 text-right font-medium">
-                      {/* ★クリックが記録されているのに「導線なし」で隠さない。
-                          シートに article_link が無いままリンクが踏まれている
-                          （＝別経路で貼られている）ことに気づけなくなる */}
                       {g.linkedPosts === 0 && g.clicks === 0 ? (
-                        <span className="text-[11px] text-[var(--faint)]" title="この群にリンク付き投稿が1本も無く、クリックも無い">
+                        <span
+                          className="text-[11px] text-[var(--faint)]"
+                          title="この群にリンク付き投稿が1本も無く、クリックも無い"
+                        >
                           導線なし
                         </span>
                       ) : (
@@ -409,7 +522,7 @@ function Section({
                         </>
                       )}
                     </td>
-                    {(["line", "soken", "lp"] as const).map((d) => (
+                    {(["soken", "lp", "line"] as const).map((d) => (
                       <td key={d} className="tnum px-3 py-2 text-right text-[var(--muted)]">
                         {g.linkedPosts === 0 && g.clicks === 0 ? "—" : (g.clicksByDest[d] ?? 0)}
                       </td>
