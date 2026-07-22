@@ -148,7 +148,10 @@ MMS の受口 `/api/ingest/form` は稼働中。WordPress から呼ぶ。HMAC-SH
 
 ## その他の依頼 — ✅ すべて対応済み
 
-### 3. 代理店LP の `sessionStorage` → `localStorage` + Cookie（30〜90日）
+### 3. 商品LP（防災防犯ライト）の `sessionStorage` → `localStorage` + Cookie（30〜90日）
+
+★2026-07-23 訂正: これは「代理店LP（代理店を募集するLP）」ではなく、
+**既存代理店が顧客に配る商品LP**。`?ag=AG-XXXX` はどの代理店が送客したかの印。
 
 LP訪問189のうち152（80%）がコード無しで、どの代理店の貢献か識別できていない。
 配布済みコードのうち6件が7日以上流入なし。
@@ -242,4 +245,4 @@ utm・?from・LP振り分けは MMS が自動付与。書かない
 | intervention の二重管理 | MMS を正とし、記録の入口も `/experiments` に移した |
 | 代理店LPのデータ | MMS が export.php を直接取得（PIIは保存しない） |
 | 診断LPの成約接続 | `/lp` を 記事PV→到達→送信→問い合わせ→成約 の5段に |
-| 代理店の画面分散 | `/agency` に統合（DM ／ 代理店LP の2階段） |
+| 代理店の画面分散 | ~~`/agency` に統合~~ → **2026-07-23 に `/agency` は廃止**。選別は `/leads`（代理店見込みタブ）、アングル別は `/threads`、配布コードは `/lp/[slug]`（§9-D23） |

@@ -8,7 +8,7 @@ import { ReceiverScreen } from "@/components/receiver-screen";
 import { resolveRange } from "@/lib/period";
 import { LeadForm } from "../leads/lead-form";
 
-// 公式LINE（設計書 §4.1 段1③）
+// 公式LINE（設計書 §4.2）。受け皿の1つで、ゴールは問い合わせ（§9-D21）
 //
 // ★/leads は「どの経路が何件取れたか」の総合。ここは経路の中身で、
 //   どの段で落ちているかを見る画面。落ちている段が分かれば打ち手が決まる。
