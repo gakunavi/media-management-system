@@ -106,7 +106,30 @@ async function reject(status: number, reason: string, hint: string) {
   return bad(status, reason);
 }
 
+/**
+ * ★想定外の例外でも必ず鳴らす。
+ *
+ *   実際に起きた事故（2026-07-22）:
+ *     Lead.sessionId の FK 違反で 500 になり、問い合わせが1件消えた。
+ *     bad() を通らない例外だったので拒否通知も鳴らず、
+ *     気づけたのは受口のログを直接見ていたからだった。
+ *
+ *   「拒否は鳴る」だけでは不十分で、「落ちても鳴る」必要がある。
+ */
 export async function POST(req: Request) {
+  try {
+    return await handle(req);
+  } catch (e) {
+    return await reject(
+      500,
+      "受信処理で想定外のエラー",
+      `${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}\n\n` +
+        "★この問い合わせは MMS に入っていません。WP側の管理画面かメールから拾ってください。",
+    );
+  }
+}
+
+async function handle(req: Request) {
   // ── 1. 生ボディを取得（署名は生の文字列に対して検証する）──
   const rawBody = await req.text();
 
@@ -189,6 +212,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, leadId, duplicate: true });
   }
 
+  // ★存在しないセッションは null 化する（/api/ingest/events と同じ方針）。
+  //
+  //   Lead.sessionId は VisitorSession への外部キー。WPのフォームは
+  //   hidden の mms-sid をそのまま送ってくるが、そのセッションが MMS に
+  //   まだ無いことがある（計測タグがイベントを1件も送る前に
+  //   フォームを送信した場合など）。
+  //   検証せずに渡すと FK 違反で 500 になり、**問い合わせが丸ごと消える**。
+  //   セッションの紐づけは「あると嬉しい」情報であって、
+  //   問い合わせ本体を落としてまで守るものではない。
+  const sessionId =
+    body.sessionId &&
+    (await prisma.visitorSession.findUnique({
+      where: { id: body.sessionId },
+      select: { id: true },
+    }))
+      ? body.sessionId
+      : null;
+
   const lead = await prisma.lead.create({
     data: {
       id: leadId,
@@ -205,7 +246,7 @@ export async function POST(req: Request) {
       interestProduct: body.interestProduct ?? [],
       firstTouchContentId: firstTouch?.id ?? null,
       lastTouchContentId: firstTouch?.id ?? null,
-      sessionId: body.sessionId ?? null,
+      sessionId,
     },
   });
 
