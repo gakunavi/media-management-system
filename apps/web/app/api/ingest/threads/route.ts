@@ -168,6 +168,10 @@ export async function POST(req: Request) {
         targetLabel: p.target ?? null,
         category: p.coreMessage ?? null,
         note: p.notes ?? null,
+        // ★投稿に貼った送客リンク。空文字は null に寄せる。
+        //   これが無いと「リンク有りの投稿とリンク無しの投稿でリーチが
+        //   どれだけ違うか」を後から比べられない（貼る比率を勘で決めることになる）
+        url: p.articleLink?.trim() || null,
       },
       create: {
         channelId: channel.id,
@@ -180,8 +184,9 @@ export async function POST(req: Request) {
         targetLabel: p.target ?? null,
         category: p.coreMessage ?? null,
         note: p.notes ?? null,
-        // Threads 投稿の URL は postId から一意に組めないため保持しない
-        url: null,
+        // ★Threads 投稿自身の URL は postId から一意に組めない。
+        //   ここには「投稿に貼った送客リンク」を入れる（リンク有無の比較用）
+        url: p.articleLink?.trim() || null,
       },
       select: { id: true },
     });
