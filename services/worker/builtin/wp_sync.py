@@ -56,6 +56,14 @@ def use_utc(conn) -> None:
 now_ts = datetime.now(JST)
 PER_PAGE = 100
 
+# ★ニュース記事のカテゴリ（blog_category）。新規記事の AIO Tier を Hot にする。
+#   21626 税制改正ニュース / 11 税制改正・時事ニュース
+#   カテゴリを増やしたらここに足す。合っているかは
+#   /wp-json/wp/v2/blog_category?per_page=100 で確認できる。
+NEWS_CATEGORY_IDS = {
+    int(x) for x in (os.environ.get("MMS_WP_NEWS_CATEGORY_IDS") or "21626,11").split(",") if x.strip()
+}
+
 
 def log(msg: str) -> None:
     print(f"[wp_sync] {msg}", flush=True)
@@ -89,7 +97,14 @@ def fetch_wp_posts() -> list[dict]:
         raise RuntimeError("MMS_WP_BASE_URL / MMS_WP_USER / MMS_WP_APP_PASSWORD が未設定です")
 
     auth = base64.b64encode(f"{user}:{pw}".encode()).decode()
-    fields = "id,slug,link,status,modified,title,categories,tags,featured_media"
+    # ★カテゴリのフィールド名は投稿タイプで変わる。
+    #   このサイトの `blog` は独自タクソノミー `blog_category` を使っており、
+    #   標準の `categories` は空で返る（今まで取っていたが中身が無かった）。
+    #   ニュース記事の判定に使うので両方要求する。
+    fields = (
+        "id,slug,link,status,modified,title,"
+        "categories,blog_category,tags,featured_media"
+    )
     posts: list[dict] = []
     page = 1
     while True:
@@ -184,21 +199,54 @@ def main() -> int:
                 # ★WPにあってMMSに無い＝新規記事。取りこぼすと計測対象から漏れる
                 ext = f"ART-{next_num:03d}"
                 next_num += 1
+                # ★AIO の初期値は Warm / 計測対象（2026-07-23・Notion廃止に伴い移設）
+                #
+                #   これまでは記事公開のたびに人が notion-sync.py を実行して
+                #   Notion 側に Warm を入れていた（wp-publish-gate.md「スキップ禁止」）。
+                #   Notion を廃止するにあたり、その既定値付与をここへ移した。
+                #
+                #   ★公開手順から同期ステップを消せるのが本質。
+                #     手で実行する必須ステップは、忘れれば計測から漏れ、
+                #     外部サービスが落ちれば記事公開そのものが止まる。
+                #     WP に記事があれば翌日の同期で必ず拾われる形にする。
+                #
+                #   Warm = 60日の baseline 期間。その後データを見て Hot/Cold へ
+                #   昇降格する（Pillar は手動で Hot）。
+                #
+                # ★ニュース記事だけは Hot。
+                #   news-factory の pipeline.py が `--aio-tier Hot` を強制していた。
+                #   時事ネタは鮮度が命で、計測間隔を空けると意味が無い。
+                #   この仕様を持ってこないと、移行を境にニュース記事の
+                #   計測頻度が黙って下がる。
+                cats = set(p.get("blog_category") or []) | set(p.get("categories") or [])
+                is_news = bool(cats & NEWS_CATEGORY_IDS)
+                tier = "hot" if is_news else "warm"
+                aio_note = (
+                    f"[wp_sync {now_ts:%Y-%m-%d}] 新規記事のため "
+                    + (
+                        "Hot 初期投入（ニュースカテゴリ）"
+                        if is_news
+                        else "Warm 初期投入（60日 baseline 期間）"
+                    )
+                )
                 cur.execute(
                     """
                     INSERT INTO "ContentItem"
                       ("id","channelId","externalId","type","title","url","status","wpPostId",
-                       "articleType","isPillar","aioTier","aioTracked","budgetTier",
+                       "articleType","isPillar","aioTier","aioTracked",
+                       "aioTierUpdatedAt","aioNote","budgetTier",
                        "productFit","audience","impacts","tagIds","seoCheckPassed",
                        "reviewState","note","createdAt","updatedAt")
                     VALUES (%s,%s,%s,'article',%s,%s,%s,%s,
-                            NULL,false,'none',false,'unknown',
+                            NULL,false,%s::"AioTier",true,
+                            %s,%s,'unknown',
                             '{}','{}','{}','{}',false,
                             'fresh',%s,%s,%s)
                     ON CONFLICT ("channelId","externalId") DO NOTHING
                     """,
                     (
                         nid("ci"), channel_id, ext, title, link, status, wp_id,
+                        tier, now_ts, aio_note,
                         f"wp_sync: WP から新規検出（metaHash={h}）", now_ts, now_ts,
                     ),
                 )
