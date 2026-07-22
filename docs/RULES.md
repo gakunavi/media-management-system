@@ -393,6 +393,22 @@ nextReviewDue = lastReviewedAt + FreshnessRule.intervalDays
 
 ## 12. セキュリティ
 
+### 12.0 ★認可は `lib/session.ts` の `currentUser()` / `isOwner()` を通す（2026-07-23）
+
+`auth()` を Server Action から直接呼ばない。
+
+- 本番は `AUTH_URL` が https のため、Auth.js は Cookie 名を
+  `__Secure-authjs.session-token` として読む
+- localhost の自動ログイン（`/api/dev-login`）は http なので、ブラウザが
+  `__Secure-` 付き Cookie を受け付けず、素の名前で発行している
+- 結果 **localhost では `auth()` が常に null を返し、owner 限定の Server Action が
+  全て「権限がありません」で落ちる**（リード手動登録・LP台帳登録・ジョブ実行）。
+  画面は開けてしまうため、誰も気づかないまま「登録できない」だけが残る
+
+`currentUser()` は auth() を試したうえで、**localhost かつ自動ログインが有効なときだけ**
+素の Cookie を Session テーブルに突き合わせる（/api/dev-login と同じ三重ガード）。
+本番の Cookie 設定（Secure 属性）は変えない。
+
 > 由来: §8
 
 | # | 規約 |

@@ -3,7 +3,7 @@
 // 段5「次の一手」の承認/却下/差戻し ＋ 立案の実行（設計書 §5.2 / §5.3 / §5.6）
 import { revalidatePath } from "next/cache";
 import { prisma, type Prisma } from "@mms/db";
-import { auth } from "@/auth";
+import { currentUser } from "@/lib/session";
 import { generateProposals, JUDGE_DAYS } from "@/lib/operator";
 
 const DAY = 86400000;
@@ -11,11 +11,13 @@ const DAY = 86400000;
 type Result = { ok: true; message: string } | { ok: false; error: string };
 
 async function requireOwner(): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "owner") {
+  // ★auth() を直接使わない。localhost の自動ログインでは Cookie 名が違い、
+  //   auth() が常に null を返して owner 限定の操作が全部落ちる（lib/session.ts）
+  const user = await currentUser();
+  if (user?.role !== "owner") {
     return { ok: false, error: "権限がありません（owner のみ）" };
   }
-  return { ok: true, id: session.user.id };
+  return { ok: true, id: user.id };
 }
 
 /** 立案を実行（§5.1 週次。手動トリガーとしても使える） */

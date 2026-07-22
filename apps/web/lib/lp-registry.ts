@@ -26,7 +26,7 @@ export const LP_STATUS_LABEL: Record<string, string> = {
   draft: "下書き",
   live: "公開中",
   paused: "停止",
-  archived: "終了",
+  retired: "終了",
 };
 
 export type LpRow = {
@@ -52,6 +52,18 @@ export type LpRow = {
   lastDataAt: Date | null;
   /** 数字が出せない理由。空なら問題なし */
   note: string;
+  /** 台帳の生値（編集フォームの初期値） */
+  registry: {
+    slug: string;
+    name: string;
+    url: string;
+    lpType: string;
+    offer: string;
+    status: string;
+    variantKeys: string[];
+    metricPrefix: string | null;
+    hasAgencyCodes: boolean;
+  };
 };
 
 /** LP と Lead.sourceType の対応。台帳の slug から引く */
@@ -192,6 +204,17 @@ export async function getLpList(range: Range): Promise<LpRow[]> {
         hasAgencyCodes: p.hasAgencyCodes,
         lastDataAt,
         note,
+        registry: {
+          slug: p.slug,
+          name: p.name,
+          url: p.url,
+          lpType: p.lpType,
+          offer: p.offer,
+          status: p.status,
+          variantKeys: p.variantKeys,
+          metricPrefix: p.metricPrefix,
+          hasAgencyCodes: p.hasAgencyCodes,
+        },
       };
     }),
   );

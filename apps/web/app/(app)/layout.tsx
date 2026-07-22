@@ -1,6 +1,7 @@
 // 認証済み画面の共通シェル（サイドバー + トップバー）
 // signin 系は route group の外なのでこのシェルは付かない。
-import { auth, signOut } from "@/auth";
+import { signOut } from "@/auth";
+import { currentUser } from "@/lib/session";
 import { Sidebar } from "@/components/sidebar";
 
 export default async function AppLayout({
@@ -8,7 +9,8 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth();
+  // ★localhost の自動ログインでも role が出るように currentUser を使う
+  const user = await currentUser();
 
   return (
     <div className="min-h-screen">
@@ -29,10 +31,10 @@ export default async function AppLayout({
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden text-[13px] text-[var(--muted)] sm:inline">
-              {session?.user?.email}
+              {user?.email}
             </span>
             <span className="rounded-full bg-[var(--accent-weak)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent)]">
-              {session?.user?.role ?? "—"}
+              {user?.role ?? "—"}
             </span>
             <form
               action={async () => {

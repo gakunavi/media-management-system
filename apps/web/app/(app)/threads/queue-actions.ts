@@ -2,14 +2,15 @@
 
 // 投稿キュー補充の承認・却下（設計書 §12.3）
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
+import { isOwner } from "@/lib/session";
 import { approveDrafts, rejectDraft } from "@/lib/threads-queue";
 
 type Result = { ok: true; message: string } | { ok: false; error: string };
 
 async function requireOwner(): Promise<Result | null> {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "owner") {
+  // ★auth() を直接使わない。localhost の自動ログインでは Cookie 名が違い、
+  //   auth() が常に null を返して owner 限定の操作が全部落ちる（lib/session.ts）
+  if (!(await isOwner())) {
     return { ok: false, error: "権限がありません（owner のみ）" };
   }
   return null;

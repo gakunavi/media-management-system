@@ -6,15 +6,16 @@
 //   「手で回したら履歴が残らない」を作らない（§12.4 の反省）。
 import { revalidatePath } from "next/cache";
 import { prisma, type Prisma } from "@mms/db";
-import { auth } from "@/auth";
+import { isOwner } from "@/lib/session";
 import { generateProposals } from "@/lib/operator";
 import { evaluateDueInterventions } from "@/lib/evaluate";
 
 type Result = { ok: true; message: string } | { ok: false; error: string };
 
 async function requireOwner(): Promise<Result | null> {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "owner") {
+  // ★auth() を直接使わない。localhost の自動ログインでは Cookie 名が違い、
+  //   auth() が常に null を返して owner 限定の操作が全部落ちる（lib/session.ts）
+  if (!(await isOwner())) {
     return { ok: false, error: "権限がありません（owner のみ）" };
   }
   return null;

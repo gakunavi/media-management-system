@@ -6,7 +6,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@mms/db";
-import { auth } from "@/auth";
+import { isOwner } from "@/lib/session";
 import { encryptPii, isPiiKeyReady } from "@/lib/crypto";
 
 const schema = z.object({
@@ -64,8 +64,9 @@ function splitList(v: string | undefined): string[] {
 
 export async function createLead(formData: FormData): Promise<CreateLeadResult> {
   // 認可: owner のみ手動登録できる（§8 Role）
-  const session = await auth();
-  if (!session?.user || session.user.role !== "owner") {
+  // ★auth() を直接使わない。localhost の自動ログインでは Cookie 名が違い、
+  //   auth() が常に null を返して owner 限定の操作が全部落ちる（lib/session.ts）
+  if (!(await isOwner())) {
     return { ok: false, error: "権限がありません（owner のみ）" };
   }
 

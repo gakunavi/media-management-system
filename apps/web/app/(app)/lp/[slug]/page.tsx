@@ -12,6 +12,7 @@ import { resolveRange } from "@/lib/period";
 import { RangePicker } from "@/components/range-picker";
 import { Stages } from "@/components/stages";
 import { TrendChart } from "@/components/chart";
+import { LpForm } from "../lp-form";
 
 // LP個別（設計書 §3.8.6）
 //
@@ -61,7 +62,10 @@ export default async function LpDetailPage({
             </a>
           </p>
         </div>
-        <RangePicker range={range} basePath={`/lp/${slug}`} />
+        <div className="flex flex-wrap items-center gap-3">
+          <RangePicker range={range} basePath={`/lp/${slug}`} />
+          <LpForm initial={d.row.registry} />
+        </div>
       </div>
 
       {d.row.note && (

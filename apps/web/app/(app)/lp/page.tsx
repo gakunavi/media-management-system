@@ -3,6 +3,7 @@ import { NOT_MEASURED } from "@mms/shared";
 import { getLpList, LP_TYPE_LABEL, LP_STATUS_LABEL, type LpRow } from "@/lib/lp-registry";
 import { resolveRange } from "@/lib/period";
 import { RangePicker } from "@/components/range-picker";
+import { LpForm } from "./lp-form";
 
 // LP台帳（設計書 §3.8.6・PRJ-034）
 //
@@ -38,7 +39,10 @@ export default async function LpPage({
             {range.label}・LPは全て「問い合わせを取る受け皿」。種別が違っても読み方は同じ
           </p>
         </div>
-        <RangePicker range={range} basePath="/lp" />
+        <div className="flex flex-wrap items-center gap-3">
+          <RangePicker range={range} basePath="/lp" />
+          <LpForm />
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
@@ -47,6 +51,7 @@ export default async function LpPage({
             <thead>
               <tr className="border-b border-[var(--border)] bg-[var(--panel-2)] text-left text-[12px] text-[var(--muted)]">
                 <Th>LP</Th>
+                <Th>URL</Th>
                 <Th>種別</Th>
                 <Th>状態</Th>
                 <Th right>到達</Th>
@@ -77,6 +82,19 @@ export default async function LpPage({
                     {r.note && (
                       <div className="mt-0.5 text-[11px] text-[var(--warn)]">★{r.note}</div>
                     )}
+                  </Td>
+                  {/* ★URLは一覧から直接開けるようにする。
+                      「どのLPだっけ？」を毎回確認しに行かなくて済む */}
+                  <Td>
+                    <a
+                      href={r.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={r.url}
+                      className="text-[12px] text-[var(--accent)] hover:underline"
+                    >
+                      {r.url.replace(/^https?:\/\//, "").replace(/\/$/, "")} ↗
+                    </a>
                   </Td>
                   <Td className="text-[var(--muted)]">{LP_TYPE_LABEL[r.lpType] ?? r.lpType}</Td>
                   <Td className="text-[var(--muted)]">{LP_STATUS_LABEL[r.status] ?? r.status}</Td>

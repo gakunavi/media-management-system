@@ -2,14 +2,15 @@
 
 // ネタ収集の手動実行（設計書 §4.2 /ideas）。通常は週次ジョブが回す。
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
+import { isOwner } from "@/lib/session";
 import { generateIdeas } from "@/lib/ideas";
 
 type Result = { ok: true; message: string } | { ok: false; error: string };
 
 export async function runIdeaCollection(): Promise<Result> {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "owner") {
+  // ★auth() を直接使わない。localhost の自動ログインでは Cookie 名が違い、
+  //   auth() が常に null を返して owner 限定の操作が全部落ちる（lib/session.ts）
+  if (!(await isOwner())) {
     return { ok: false, error: "権限がありません（owner のみ）" };
   }
   const { created, scanned } = await generateIdeas();
