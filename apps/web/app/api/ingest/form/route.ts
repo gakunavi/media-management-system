@@ -70,6 +70,42 @@ function bad(status: number, reason: string) {
   return NextResponse.json({ ok: false, reason }, { status });
 }
 
+/**
+ * ★署名検証を通過した後の拒否は「攻撃」ではなく「自分たちのバグ」である。
+ *
+ *   実際に起きうる事故:
+ *     WP側のフォームが email のフィールド名を変えた
+ *     → プラグインが値を拾えない → ここで 400
+ *     → MMS の問い合わせ件数は 0 のまま増えない
+ *     → 石井さんには「LPが効いていない」に見える
+ *
+ *   これは §3 が禁じている「壊れた計測が実測ゼロに化ける」状態そのもので、
+ *   しかも起きる場所がゴール指標（問い合わせ数）の直上なので最も害が大きい。
+ *   WPプラグインは debug.log にしか書かないので、MMS 側から鳴らすしかない。
+ *
+ * ★通知は理由ごとに1時間1通に絞る。壊れたフォームが鳴り続けると
+ *   通知そのものが無視されるようになり、結局見落とす。
+ */
+async function reject(status: number, reason: string, hint: string) {
+  if (rateLimit(`ingest:form:reject:${reason}`, 1, 3_600_000).allowed) {
+    await notify({
+      event: "ingest.rejected",
+      title: "⚠️ WPフォームの受信を拒否しました（問い合わせが取りこぼされています）",
+      body: [
+        `理由: ${reason}`,
+        `HTTP: ${status}`,
+        "",
+        hint,
+        "",
+        "★署名は正しいので送信元は自社のWordPressです。設定ミスの可能性が高い。",
+        "★直すまでの間、この経路の問い合わせは MMS に入りません。",
+      ].join("\n"),
+      meta: { status, reason },
+    });
+  }
+  return bad(status, reason);
+}
+
 export async function POST(req: Request) {
   // ── 1. 生ボディを取得（署名は生の文字列に対して検証する）──
   const rawBody = await req.text();
@@ -80,9 +116,10 @@ export async function POST(req: Request) {
 
   // ── 3. 個人情報を平文で保存しないための fail-closed（§16.2）──
   if (!isPiiKeyReady()) {
-    return bad(
+    return await reject(
       503,
       "MMS_PII_KEY が未設定です。個人情報を暗号化できないため受信を拒否しました",
+      "MMS 側の環境変数が落ちています。この状態では問い合わせが1件も入りません。",
     );
   }
 
@@ -90,7 +127,11 @@ export async function POST(req: Request) {
   try {
     body = JSON.parse(rawBody) as FormPayload;
   } catch {
-    return bad(400, "JSON として解釈できません");
+    return await reject(
+      400,
+      "JSON として解釈できません",
+      "プラグインが送っているボディが JSON になっていません。",
+    );
   }
 
   // ── 4. レート制限（§3.10.4 サーバー側の歯止め）──
@@ -103,13 +144,22 @@ export async function POST(req: Request) {
   }
 
   if (!body.email && !body.phone) {
-    return bad(400, "email か phone のどちらかは必須です");
+    return await reject(
+      400,
+      "email か phone のどちらかは必須です",
+      "WP側のフォームで email/tel のフィールド名が変わった可能性があります。" +
+        "プラグイン（mms-connector）の候補リストにそのフィールド名を足してください。",
+    );
   }
 
   // ── 5. 事業とチャネルを解決 ──
   const business = await prisma.business.findUnique({ where: { slug: BUSINESS_SLUG } });
   if (!business) {
-    return bad(500, `Business(slug=${BUSINESS_SLUG}) がありません。npm run db:seed を実行してください`);
+    return await reject(
+      500,
+      `Business(slug=${BUSINESS_SLUG}) がありません`,
+      "npm run db:seed を実行してください。この状態では問い合わせが1件も入りません。",
+    );
   }
 
   // ── 6. 経路の自動判定（§5.4）──
@@ -122,7 +172,13 @@ export async function POST(req: Request) {
     : null;
 
   const occurredAt = body.occurredAt ? new Date(body.occurredAt) : new Date();
-  if (Number.isNaN(occurredAt.getTime())) return bad(400, "occurredAt が不正です");
+  if (Number.isNaN(occurredAt.getTime())) {
+    return await reject(
+      400,
+      "occurredAt が不正です",
+      "プラグインが送っている日時の形式を確認してください（ISO8601）。",
+    );
+  }
 
   // ── 7. Lead 起票（冪等）──
   const leadId = deriveLeadId(business.id, body);

@@ -30,16 +30,24 @@ export type RateLimitResult = {
 };
 
 /**
- * @param key   識別子（sessionId があればそれ、無ければ IP）
- * @param limit 1分あたりの上限
+ * @param key      識別子（sessionId があればそれ、無ければ IP）
+ * @param limit    窓あたりの上限
+ * @param windowMs 窓の長さ。既定1分。
+ *                 ★通知の重複抑止にも使う（同じ理由の警告を1時間1通に絞る）。
+ *                 用途は違うが「同じキーが窓内に何回来たか」という判定は同一なので、
+ *                 別実装を増やさない。
  */
-export function rateLimit(key: string, limit: number): RateLimitResult {
+export function rateLimit(
+  key: string,
+  limit: number,
+  windowMs: number = WINDOW_MS,
+): RateLimitResult {
   const now = Date.now();
   sweep(now);
 
   const bucket = buckets.get(key);
   if (!bucket || bucket.resetAt <= now) {
-    buckets.set(key, { count: 1, resetAt: now + WINDOW_MS });
+    buckets.set(key, { count: 1, resetAt: now + windowMs });
     return { allowed: true, remaining: limit - 1, retryAfterSeconds: 0 };
   }
 
