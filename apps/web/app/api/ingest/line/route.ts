@@ -8,6 +8,11 @@
 //   ここで解くべきは「記録すること」より **見逃さないこと**。
 //   受信した瞬間に Slack へ投げる（§5.4「石井さんへ即通知（最優先）」）。
 //
+// ★unfollow（ブロック）は扱わない（2026-07-22 石井さん判断）。
+//   扱う場合の用途は「送客を増やした直後にブロックが増えていないか」という
+//   質の信号だが、いまは友だち0人で送客もこれからなので、判断材料にならない。
+//   必要になったら LineFriend.status を blocked にする数行を足せばよい。
+//
 // ★設定するURL: https://collect.asset-support.co.jp/api/ingest/line
 //   collect. は Cloudflare Access の対象外。mms. に設定すると LINE 側が
 //   Access のログイン画面を受け取り、Webhook が全部失敗する。
@@ -77,7 +82,6 @@ export async function POST(req: Request) {
 
   const events = Array.isArray(body.events) ? body.events : [];
   let follows = 0;
-  let unfollows = 0;
   let messages = 0;
 
   const business = await prisma.business.findFirst({
@@ -111,15 +115,6 @@ export async function POST(req: Request) {
       continue;
     }
 
-    if (ev.type === "unfollow") {
-      await prisma.lineFriend.updateMany({
-        where: { lineUserId: userId },
-        data: { status: "blocked" },
-      });
-      unfollows += 1;
-      continue;
-    }
-
     if (ev.type === "message") {
       const kind = ev.message?.type ?? "unknown";
       const text = ev.message?.text;
@@ -147,5 +142,5 @@ export async function POST(req: Request) {
   }
 
   // ★LINE は 2xx を返さないと再送し続ける。処理できなかった種別も 200 で返す
-  return NextResponse.json({ ok: true, follows, unfollows, messages });
+  return NextResponse.json({ ok: true, follows, messages });
 }
