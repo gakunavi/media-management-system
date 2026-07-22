@@ -43,9 +43,13 @@ export default async function LpPage() {
         />
         <Stat
           label="問い合わせ"
-          value={diagnosis.totalSubmits.toLocaleString("ja-JP")}
-          hint={diagnosis.totalSubmits === 0 ? "★イベント未発火の可能性も確認" : "lp_form_submit"}
-          bad={diagnosis.totalSubmits === 0}
+          value={diagnosis.submits === null ? "—（未計測）" : diagnosis.submits.toLocaleString("ja-JP")}
+          hint={
+            diagnosis.submits === null
+              ? "★CF7 6.x でイベント名が変わり計測が壊れている"
+              : "lp_form_submit"
+          }
+          bad={diagnosis.submits !== null && diagnosis.submits === 0}
         />
       </div>
 
@@ -159,8 +163,13 @@ export default async function LpPage() {
                 </tbody>
               </table>
               <p className="mt-2 text-[11px] leading-relaxed text-[var(--faint)]">
-                ★「コード無し」が大半なら、配布URLが使われずLPに直接来ている。
-                どの代理店の貢献か分からない状態で、代理店評価ができない。
+                ★「コード無し」は代理店経由でない訪問（検索・直打ち・OGP共有など）も
+                含む。LP側が全訪問にビーコンを送っているため、189は総訪問数で、
+                そのうち代理店経由と識別できるのが37。
+                <br />
+                ★コードは sessionStorage 保持のためタブを閉じると消える。
+                LINE/メールで受け取り、後日あらためて開いて問い合わせると
+                コードが失われる（要 localStorage + Cookie 化）。
               </p>
             </Panel>
           </div>

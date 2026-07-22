@@ -219,11 +219,17 @@ def main() -> int:
         log(f"診断LPファネル: {len(counts)}行を保存")
 
         # ── 計測開始の記録（§3: 0 と未計測を区別する）──
-        for metric in (
-            ["pv"]
-            + [f"{e}_{v}" for e in LP_EVENTS for v in LP_VARIANTS]
-            + [f"lp_users_{v}" for v in LP_VARIANTS]
-        ):
+        #
+        # ★実際に1行でも入った指標にだけ付ける。
+        #   最初は取得対象を全部登録していたが、それは「測れている」という
+        #   誤った主張になる。2026-07-22 に判明した通り、診断LPの
+        #   lp_form_submit は CF7 6.x でイベント名が変わっており
+        #   （wpcf7mailsent は dispatch されない）1件も発火していなかった。
+        #   計測開始を記録してしまうと、この 0 が「実測ゼロ」に化けて
+        #   「LPが悪い」という誤った結論を導く。
+        measured_metrics = {"pv"} if pv_rows else set()
+        measured_metrics |= {m for (_, m) in counts}
+        for metric in sorted(measured_metrics):
             cur.execute('SELECT 1 FROM "MeasurementCoverage" WHERE metric=%s', (metric,))
             if cur.fetchone():
                 continue

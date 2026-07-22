@@ -29,7 +29,14 @@ export type DiagnosisLp = {
   variants: DiagnosisVariant[];
   totalUsers: number;
   totalViews: number;
-  totalSubmits: number;
+  /**
+   * 問い合わせ。null は未計測。
+   * ★2026-07-22 判明: 診断LPの送信計測は CF7 6.x でイベント名が変わって
+   *   壊れていた（LP側は wpcf7mailsent を待つが 6.x は dispatch しない）。
+   *   0 を実測として出すと「LPが悪い」という誤った結論になる。
+   *   MeasurementCoverage に行が無い間は未計測として扱う（§3）。
+   */
+  submits: number | null;
   /** 記事PVの合計（同期間）。LP到達率の分母 */
   mediaPv: number;
   daily: DailyPoint[];
@@ -120,16 +127,22 @@ export async function getLpData(days = 30, now: Date = new Date()): Promise<LpDa
   });
 
   const totalUsers = variants.reduce((s, v) => s + v.users, 0);
-  const totalSubmits = variants.reduce((s, v) => s + v.submits, 0);
+  const submitMeasured = await prisma.measurementCoverage.findFirst({
+    where: { metric: { startsWith: "lp_form_submit_" } },
+    select: { id: true },
+  });
+  const submits = submitMeasured ? variants.reduce((s, v) => s + v.submits, 0) : null;
 
   // ★「まだ足りない」ではなく「この母数では終わらない」ことを言う（§16.5）
   const short = variants.filter((v) => v.users < MIN_USERS_PER_VARIANT);
   const perDay = totalUsers / days;
   const needed = MIN_USERS_PER_VARIANT * variants.length - totalUsers;
   const verdict =
-    totalUsers === 0
+    submits === null
+      ? "★送信の計測が動いていません。到達数だけでは判定できません（0件は実測ではありません）"
+      : totalUsers === 0
       ? "直近期間にLPへの到達がありません"
-      : short.length === 0 && totalSubmits >= MIN_SUBMITS_PER_VARIANT * variants.length
+      : short.length === 0 && submits >= MIN_SUBMITS_PER_VARIANT * variants.length
         ? "判定に必要な母数に到達しています"
         : perDay > 0
           ? `判定には各パターン ${MIN_USERS_PER_VARIANT}人・送信${MIN_SUBMITS_PER_VARIANT}件が必要。` +
@@ -181,7 +194,7 @@ export async function getLpData(days = 30, now: Date = new Date()): Promise<LpDa
       variants,
       totalUsers,
       totalViews: variants.reduce((s, v) => s + v.views, 0),
-      totalSubmits,
+      submits,
       mediaPv: Math.round(pvAgg._sum.value ?? 0),
       daily: toSeries(dailyUsers),
       days,
