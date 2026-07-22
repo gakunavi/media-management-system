@@ -1,4 +1,5 @@
-import { getLpData, type DailyPoint } from "@/lib/lp";
+import { getLpData } from "@/lib/lp";
+import { TrendChart } from "@/components/chart";
 
 // LP（診断LP・代理店LP）— 設計書 §3.8.6 / PRJ-034
 //
@@ -54,7 +55,10 @@ export default async function LpPage() {
 
       <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_360px]">
         <Panel title={`LP到達（実人数）の推移・${days}日`}>
-          <BarChart data={diagnosis.daily} />
+          <TrendChart
+            series={[{ label: "LP到達（実人数）", color: "var(--accent)", points: diagnosis.daily }]}
+            height={160}
+          />
         </Panel>
         <Panel title="パターン別">
           <table className="w-full text-[13px]">
@@ -115,7 +119,10 @@ export default async function LpPage() {
 
           <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_360px]">
             <Panel title={`訪問の推移・${days}日`}>
-              <BarChart data={agency.daily} />
+              <TrendChart
+              series={[{ label: "訪問", color: "var(--accent)", points: agency.daily }]}
+              height={160}
+            />
             </Panel>
             <Panel title="コード別">
               <table className="w-full text-[13px]">
@@ -168,78 +175,6 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
     <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3.5">
       <div className="mb-2 text-[12px] font-medium text-[var(--muted)]">{title}</div>
       {children}
-    </div>
-  );
-}
-
-/**
- * 日次の棒グラフ。
- * ★外部ライブラリを入れない（§2.1「バージョン依存で壊れない」）。
- *   日次の量が見えれば足りるので、インラインSVGで描く。
- */
-function BarChart({ data }: { data: DailyPoint[] }) {
-  const max = Math.max(1, ...data.map((d) => d.value));
-  const W = 640;
-  const H = 140;
-  const pad = 18;
-  const bw = (W - pad * 2) / data.length;
-
-  return (
-    <div className="overflow-x-auto">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="日次推移">
-        {/* 目盛り */}
-        {[0, 0.5, 1].map((r) => (
-          <g key={r}>
-            <line
-              x1={pad}
-              x2={W - pad}
-              y1={H - pad - (H - pad * 2) * r}
-              y2={H - pad - (H - pad * 2) * r}
-              stroke="currentColor"
-              strokeWidth={0.5}
-              className="text-[var(--border)]"
-            />
-            <text
-              x={2}
-              y={H - pad - (H - pad * 2) * r + 3}
-              fontSize={9}
-              fill="currentColor"
-              className="text-[var(--faint)]"
-            >
-              {Math.round(max * r)}
-            </text>
-          </g>
-        ))}
-        {data.map((d, i) => {
-          const h = (d.value / max) * (H - pad * 2);
-          return (
-            <rect
-              key={d.date}
-              x={pad + i * bw + bw * 0.15}
-              y={H - pad - h}
-              width={bw * 0.7}
-              height={h}
-              rx={1}
-              className="fill-[var(--accent)]"
-            >
-              <title>{`${d.date}: ${d.value}`}</title>
-            </rect>
-          );
-        })}
-        <text x={pad} y={H - 5} fontSize={9} fill="currentColor" className="text-[var(--faint)]">
-          {data[0]?.date.slice(5)}
-        </text>
-        <text
-          x={W - pad}
-          y={H - 5}
-          fontSize={9}
-          textAnchor="end"
-          fill="currentColor"
-          className="text-[var(--faint)]"
-        >
-          {data[data.length - 1]?.date.slice(5)}
-        </text>
-      </svg>
     </div>
   );
 }

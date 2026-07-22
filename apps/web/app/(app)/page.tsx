@@ -6,8 +6,11 @@ import {
   getFunnel,
   getBuyerQuality,
   getJobHealth,
+  getSiteTrend,
   type GoalRow,
+  type SiteTrend,
 } from "@/lib/dashboard";
+import { TrendChart } from "@/components/chart";
 import { getActionStats, type ActionStats } from "@/lib/actions-repo";
 
 // ★石井さんが毎日見る画面（設計書 §4.1 段1〜段3・段7）。
@@ -31,12 +34,13 @@ const jaDateTime = (d: Date | null) =>
 
 export default async function Dashboard() {
   const period = currentPeriod();
-  const [goals, funnel, buyer, health, actionStats] = await Promise.all([
+  const [goals, funnel, buyer, health, actionStats, trend] = await Promise.all([
     getGoals(period),
     getFunnel(),
     getBuyerQuality(),
     getJobHealth(),
     getActionStats(),
+    getSiteTrend(),
   ]);
 
   return (
@@ -73,6 +77,8 @@ export default async function Dashboard() {
       <div className="grid gap-4">
         <GoalsPanel goals={goals} />
         <FunnelPanel funnel={funnel} />
+        {/* ★その時点の値だけだと増減が読めない。推移を並べる */}
+        <TrendPanel trend={trend} />
         <NextActionsPanel stats={actionStats} />
         <div className="grid gap-4 lg:grid-cols-2">
           <BuyerPanel buyer={buyer} />
@@ -180,6 +186,48 @@ function GoalsPanel({ goals }: { goals: GoalRow[] }) {
         計測開始前は 0 ではなく <Unmeasured small /> と表示（§3 規約）。WPフォーム接続で計測が始まる。
       </p>
     </Panel>
+  );
+}
+
+/**
+ * 日次推移。
+ * ★桁が違う系列を1本の軸に載せない。表示4,556 とクリック154 を同じ軸に
+ *   置くとクリックが底に張り付いて増減が読めない。軸を左右に分ける。
+ * ★掲載順位は別パネル。小さいほど良いので上下を反転して描く。
+ */
+function TrendPanel({ trend }: { trend: SiteTrend }) {
+  const missing = trend.clicks.filter((p) => p.value === null).length;
+  return (
+    <section className="mb-5">
+      <h2 className="mb-2 text-[14px] font-semibold">日次推移（{trend.days}日）</h2>
+      {missing > 0 && (
+        <p className="mb-2 text-[12px] text-[var(--faint)]">
+          ★{missing}日は未計測。0 として繋がず線を切っている（落ち込みと区別するため）
+        </p>
+      )}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3.5">
+          <div className="mb-1 text-[12px] font-medium text-[var(--muted)]">
+            検索（GSC）とPV
+          </div>
+          <TrendChart
+            series={[
+              { label: "表示", color: "#8aa0b8", points: trend.impressions },
+              { label: "クリック", color: "var(--accent)", points: trend.clicks, axis: "right" },
+              { label: "PV（GA4）", color: "#1a7a2e", points: trend.pv, axis: "right" },
+            ]}
+          />
+        </div>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3.5">
+          <div className="mb-1 text-[12px] font-medium text-[var(--muted)]">平均掲載順位</div>
+          <TrendChart
+            series={[
+              { label: "平均掲載順位", color: "#b8860b", points: trend.position, invert: true },
+            ]}
+          />
+        </div>
+      </div>
+    </section>
   );
 }
 

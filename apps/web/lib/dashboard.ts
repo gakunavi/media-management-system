@@ -571,3 +571,64 @@ export async function getMetricFreshness(now: Date = new Date()): Promise<Metric
   }
   return out.sort((a, b) => b.ageDays - a.ageDays || a.metric.localeCompare(b.metric));
 }
+
+// ── 日次推移（元 media-console の「サイト全体 日次推移」「PV 日次推移」）──
+//
+// ★なぜ MMS に要るか
+//   数字が段1〜段7 に「その時点の値」としてしか出ておらず、
+//   増えているのか減っているのかが読めなかった。元のコンソールには
+//   折れ線があり、そちらの方が状況を掴みやすいという指摘を受けた。
+//
+// ★null は 0 として繋がない。欠測日を 0 で描くと「落ち込んだ」に見える（§3）。
+
+export type TrendPoint = { date: string; value: number | null };
+export type SiteTrend = {
+  clicks: TrendPoint[];
+  impressions: TrendPoint[];
+  position: TrendPoint[];
+  pv: TrendPoint[];
+  days: number;
+};
+
+export async function getSiteTrend(days = 30, now: Date = new Date()): Promise<SiteTrend> {
+  const since = new Date(now.getTime() - days * 86400000);
+  const [snaps, pv] = await Promise.all([
+    prisma.metricSnapshot.findMany({
+      where: { metric: { in: ["clicks", "impressions", "position"] }, date: { gte: since } },
+      select: { metric: true, value: true, date: true },
+    }),
+    prisma.contentMetric.groupBy({
+      by: ["date"],
+      where: { metric: "pv", date: { gte: since } },
+      _sum: { value: true },
+    }),
+  ]);
+
+  const key = (d: Date) => new Date(d.getTime() + JST_OFFSET_MS).toISOString().slice(0, 10);
+  const maps: Record<string, Map<string, number>> = {
+    clicks: new Map(),
+    impressions: new Map(),
+    position: new Map(),
+    pv: new Map(),
+  };
+  for (const s of snaps) maps[s.metric]?.set(key(s.date), s.value);
+  for (const r of pv) maps.pv.set(key(r.date), r._sum.value ?? 0);
+
+  const series = (name: string): TrendPoint[] => {
+    const out: TrendPoint[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const k = key(new Date(now.getTime() - i * 86400000));
+      const v = maps[name].get(k);
+      out.push({ date: k, value: v === undefined ? null : Math.round(v * 100) / 100 });
+    }
+    return out;
+  };
+
+  return {
+    clicks: series("clicks"),
+    impressions: series("impressions"),
+    position: series("position"),
+    pv: series("pv"),
+    days,
+  };
+}
