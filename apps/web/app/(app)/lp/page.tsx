@@ -1,16 +1,25 @@
-import { getLpData } from "@/lib/lp";
-import { TrendChart } from "@/components/chart";
-import { Stages } from "@/components/stages";
-import { RangePicker } from "@/components/range-picker";
+import Link from "next/link";
+import { NOT_MEASURED } from "@mms/shared";
+import { getLpList, LP_TYPE_LABEL, LP_STATUS_LABEL, type LpRow } from "@/lib/lp-registry";
 import { resolveRange } from "@/lib/period";
+import { RangePicker } from "@/components/range-picker";
 
-// LP（診断LP・代理店LP）— 設計書 §3.8.6 / PRJ-034
+// LP台帳（設計書 §3.8.6・PRJ-034）
 //
-// ★元は cowork の media-console が持っていた画面。データ源を MMS に移したので
-//   画面もこちらへ。判断する場所と数字がある場所を1つにする。
+// ★LPは今後増える（商材別・総合窓口・代理店募集…）。旧実装は「診断LP」と
+//   「代理店LP」を画面に直書きしていたため、3本目で破綻する作りだった。
+//   台帳（LandingPage）から引き、どのLPも同じ読み方にする。
+//
+// ★LPは獲得の受け皿。だからメニューは「獲得」に置く。管理メニューに分けると
+//   「LPの数字」と「獲得の数字」が別の場所になり、判断が2箇所に割れる。
 export const dynamic = "force-dynamic";
 
-const jaDate = (d: Date) => d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" });
+const jaDate = (d: Date | null) =>
+  d
+    ? d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric" })
+    : "—";
+const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toFixed(1)}%`);
+const yen = (v: number) => (v > 0 ? `¥${v.toLocaleString("ja-JP")}` : "—");
 
 export default async function LpPage({
   searchParams,
@@ -18,104 +27,107 @@ export default async function LpPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const range = resolveRange(await searchParams);
-  const { diagnosis, agency, days } = await getLpData(range);
-
-  // LP到達率（記事PV基準）。cowork の診断ロジックと同じ 0.5% を目安にする
-  const reachRate = diagnosis.mediaPv > 0 ? diagnosis.totalUsers / diagnosis.mediaPv : null;
+  const rows = await getLpList(range);
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight">LP</h1>
           <p className="mt-0.5 text-[13px] text-[var(--muted)]">
-            {range.label}・診断LP（自社）と代理店LP（外部ドメイン）は評価軸が違うので分けて出す
+            {range.label}・LPは全て「問い合わせを取る受け皿」。種別が違っても読み方は同じ
           </p>
         </div>
         <RangePicker range={range} basePath="/lp" />
       </div>
 
-      {/* ── 診断LP ───────────────────────────────── */}
-      <h2 className="mb-2 text-[14px] font-semibold">診断LP（記事 → LP → 問い合わせ）</h2>
-
-      <Stages
-        stages={diagnosis.stages}
-        transitions={diagnosis.transitions}
-        biggestDropIndex={diagnosis.biggestDropIndex}
-        comparableSegments={diagnosis.comparableSegments}
-      />
-
-      <div className="my-3 flex flex-wrap gap-x-6 gap-y-1 text-[12px] text-[var(--muted)]">
-        <span>
-          LP到達率{" "}
-          <strong className="tnum">
-            {reachRate === null ? "—" : `${(reachRate * 100).toFixed(2)}%`}
-          </strong>
-          <span className="text-[var(--faint)]"> ／ 目安 0.5%（下回ると記事側ボタンの問題）</span>
-        </span>
-        <span>
-          到達イベント <strong className="tnum">{diagnosis.totalViews}</strong>
-          <span className="text-[var(--faint)]">（再訪を含む。実人数と別）</span>
-        </span>
-        <span>
-          成約金額{" "}
-          <strong className="tnum">
-            {diagnosis.wonAmount > 0 ? `¥${diagnosis.wonAmount.toLocaleString("ja-JP")}` : "—"}
-          </strong>
-        </span>
-      </div>
-
-      <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_360px]">
-        <Panel title={`LP到達（実人数）の推移・${days}日`}>
-          <TrendChart
-            series={[{ label: "LP到達（実人数）", color: "var(--accent)", points: diagnosis.daily }]}
-            height={160}
-          />
-        </Panel>
-        <Panel title="パターン別">
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+        <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
-              <tr className="border-b border-[var(--border)] text-left text-[12px] text-[var(--muted)]">
-                <th className="py-1.5 font-medium">パターン</th>
-                <th className="py-1.5 text-right font-medium">実人数</th>
-                <th className="py-1.5 text-right font-medium">到達</th>
-                <th className="py-1.5 text-right font-medium">問合せ</th>
+              <tr className="border-b border-[var(--border)] bg-[var(--panel-2)] text-left text-[12px] text-[var(--muted)]">
+                <Th>LP</Th>
+                <Th>種別</Th>
+                <Th>状態</Th>
+                <Th right>到達</Th>
+                <Th right>問い合わせ</Th>
+                <Th right>CVR</Th>
+                <Th right>リード</Th>
+                <Th right>成約</Th>
+                <Th right>金額</Th>
+                <Th>A/B</Th>
+                <Th right>最終データ</Th>
               </tr>
             </thead>
             <tbody>
-              {diagnosis.variants.map((v) => (
-                <tr key={v.key} className="border-b border-[var(--border)] last:border-0">
-                  <td className="py-1.5">{v.label}</td>
-                  <td className="tnum py-1.5 text-right font-medium">{v.users}</td>
-                  <td className="tnum py-1.5 text-right text-[var(--muted)]">{v.views}</td>
-                  <td className="tnum py-1.5 text-right text-[var(--muted)]">{v.submits}</td>
+              {rows.map((r) => (
+                <tr key={r.slug} className="border-b border-[var(--border)] last:border-0">
+                  <Td>
+                    <Link
+                      href={`/lp/${r.slug}`}
+                      className="font-medium text-[var(--accent)] hover:underline"
+                    >
+                      {r.name}
+                    </Link>
+                    {r.hasAgencyCodes && (
+                      <span className="ml-1 rounded bg-[var(--panel-2)] px-1 py-0.5 text-[10px] text-[var(--faint)]">
+                        代理店コード
+                      </span>
+                    )}
+                    {r.note && (
+                      <div className="mt-0.5 text-[11px] text-[var(--warn)]">★{r.note}</div>
+                    )}
+                  </Td>
+                  <Td className="text-[var(--muted)]">{LP_TYPE_LABEL[r.lpType] ?? r.lpType}</Td>
+                  <Td className="text-[var(--muted)]">{LP_STATUS_LABEL[r.status] ?? r.status}</Td>
+                  <Num v={r.reach} />
+                  <Num v={r.inquiries} />
+                  <Td className="tnum text-right">{pct(r.cvr)}</Td>
+                  <Td className="tnum text-right">{r.leads || "—"}</Td>
+                  <Td className="tnum text-right">{r.won || "—"}</Td>
+                  <Td className="tnum text-right">{yen(r.wonAmount)}</Td>
+                  <Td className="text-[var(--muted)]">
+                    {r.variantCount > 0 ? `${r.variantCount}パターン` : "—"}
+                  </Td>
+                  <Td className="tnum text-right text-[var(--faint)]">{jaDate(r.lastDataAt)}</Td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <p className="mt-2 text-[11px] leading-relaxed text-[var(--faint)]">
-            ★実人数と到達（イベント数）は別物。同じ人が再訪すると到達だけ増える。
-            パターンの優劣は<strong>実人数</strong>で見ること。
-          </p>
-        </Panel>
+        </div>
       </div>
 
-      <p className="mt-6 rounded-md bg-[var(--panel-2)] px-3 py-2 text-[12px] text-[var(--muted)]">
-        代理店LP（防災防犯ライト）は{" "}
-        <a className="text-[var(--accent)] underline" href="/agency">
-          代理店
-        </a>{" "}
-        にまとめました。自社の診断LPとは目的も母数の単位も違うためです。
+      <p className="mt-3 text-[12px] text-[var(--faint)]">
+        ★「—(未計測)」は 0件ではなく<strong>記録される仕組みが無い</strong>状態（§3）。
+        CVRは到達・問い合わせの<strong>両方が実測のときだけ</strong>出します（片方が未計測のまま
+        率を出すと、壊れた計測が「成果ゼロ」に化けるため）。
+        <br />
+        LPを追加するときは台帳（LandingPage）に登録します。種別は{" "}
+        {Object.values(LP_TYPE_LABEL).join(" / ")} から選び、代理店コードを配るLPは
+        「代理店コード」を有効にすると、配布コード別の稼働が個別画面に出ます。
       </p>
     </div>
   );
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Th({ children, right }: { children: React.ReactNode; right?: boolean }) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3.5">
-      <div className="mb-2 text-[12px] font-medium text-[var(--muted)]">{title}</div>
+    <th className={`whitespace-nowrap px-3 py-2 font-medium ${right ? "text-right" : ""}`}>
       {children}
-    </div>
+    </th>
+  );
+}
+function Td({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return <td className={`px-3 py-2.5 ${className}`}>{children}</td>;
+}
+function Num({ v }: { v: LpRow["reach"] }) {
+  return (
+    <Td className="tnum text-right font-medium">
+      {v === null ? (
+        <span className="text-[11px] font-medium text-[var(--warn)]">{NOT_MEASURED}</span>
+      ) : (
+        v.toLocaleString("ja-JP")
+      )}
+    </Td>
   );
 }

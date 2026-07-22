@@ -2729,6 +2729,16 @@ model LandingPage {
   /// どの記事から送客されるか（記事群 → LP の設計を管理する）
   sourceContentIds String[]
 
+  // ── 計測とA/B（2026-07-23 石井さん・LPは今後増える前提で台帳にする）──
+  /// A/Bのバリアント記号（例 ["a","b","c"]）。空ならA/Bしていない。
+  /// ★別URLでも「1つのLPをA/Bしている」が実態。LPを3件に割ると判定できない
+  variantKeys    String[]
+  /// 実測を引く指標の接頭辞（例 "lp" → lp_view_a / lp_users_a / lp_form_submit_a）。
+  /// null は自動計測が無いLP（数字を別ソースから取る）
+  metricPrefix   String?
+  /// 代理店コード（?ag=AG-XXXX）を紐づけるLPか。true のとき配布コード別の稼働を出す
+  hasAgencyCodes Boolean @default(false)
+
   business Business @relation(fields: [businessId], references: [id])
 
   versions    LpVersion[]   @relation("LpVersions")

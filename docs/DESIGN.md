@@ -123,7 +123,7 @@ media-management-system/
 ### 2.3 データフロー
 
 ```
-[実行層]  WP / Threads GAS / AIOバッチ / LPフォーム / 代理店LP / ML営業システム
+[実行層]  WP / Threads GAS / AIOバッチ / LPフォーム / 商品LP（代理店経由） / ML営業システム
     │                                        │
     │ ① Webhook（即時・HMAC署名）             │ ② バッチ（日次/週次）
     ▼                                        ▼
@@ -1311,6 +1311,9 @@ model LandingPage {
   status           // draft | live | paused | retired
   publishedAt, currentVersionId
   sourceContentIds String[]                  // どの記事から送客されるか
+  variantKeys    String[]                    // A/Bのバリアント（2026-07-23）
+  metricPrefix   String?                     // 実測を引く接頭辞（lp → lp_view_a …）
+  hasAgencyCodes Boolean                     // ?ag=AG-XXXX を配るLPか
   versions LpVersion[]  funnels FunnelEvent[]
 }
 model LpVersion {
@@ -1320,7 +1323,16 @@ model LpVersion {
 
 - **LPもコンテンツと同じくバージョン管理**（§16.3 と同じ理由。ロールバックできないと改善が怖くてできない）
 - `sourceContentIds` により「どの記事群からどのLPへ送るか」の設計が管理できる
-- PRJ-029（診断LP）・PRJ-034（代理店LP）を初期データとして投入
+- PRJ-029（診断LP）・PRJ-034（商品LP）を初期データとして投入
+
+**2026-07-23 実装（石井さん）**: `/lp` を台帳ベースに作り直した。旧実装は
+「診断LP」「代理店LP」を画面に直書きしており、3本目のLPで破綻する作りだった。
+
+- `/lp` … 台帳一覧（種別・状態・到達・問い合わせ・CVR・リード・成約・A/B・最終データ）
+- `/lp/[slug]` … 階段（到達→CTA→問い合わせ→リード→成約）・A/B・配布コード別・推移
+- **配布コード（AG-XXXX）の稼働はLPの属性**なのでLP個別画面に置く（代理店の画面ではない）
+- LPは獲得の受け皿なのでメニューは「獲得」。管理メニューに分けると
+  「LPの数字」と「獲得の数字」が別の場所になり判断が割れる
 
 #### 3.8.7 ロードマップ追加
 
