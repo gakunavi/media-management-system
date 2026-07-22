@@ -289,6 +289,22 @@ model LineMessage {
   id, kind, sentAt, targetTags String[]
   delivered, opened, clicked, blocked
 }
+// ★2026-07-22 追加。LineMessage は「配信＝送信側」で、受信を持つ器が無かった。
+//   購入検討中の方から2件の問い合わせが来ていたのに誰も気づいていなかったのが契機。
+//   本文は保存しない（内容は LINE 公式アカウント側にある。持たなければ守る必要も無い）。
+model LineInbound {
+  id, lineUserId, receivedAt, kind      // text | image | sticker …
+  handledAt?, note                      // handledAt=null が未対応
+}
+
+// ★2026-07-22 追加。代理店LP（外部ドメイン）の配布コード別の流入。
+//   代理店募集は獲得3ゴールの②だが、MMS が持っていたのは DM だけで
+//   「配ったコードが動いているか」がどこにも無かった。
+//   ★PII は持たない。取得元CSVには氏名・メールが含まれるが、必要なのは件数だけ。
+model AgencyLpDaily {
+  id, lp, date, agencyCode              // agencyCode="direct" はコード無し
+  visits, inquiries
+}
 
 // ══ 8. KW・ネタ ════════════════════════════════
 model Keyword {
@@ -477,6 +493,19 @@ model Decision { id, title, decision, rationale, alternatives, decidedAt }
 // ══ 10. ジョブ ═════════════════════════════════
 model Job    { id, name, schedule, kind, config Json, enabled, runs JobRun[] }
 model JobRun { id, jobId, startedAt, finishedAt, status, log, metrics Json }
+
+// ══ 11. ツールのコスト ══════════════════════════
+// ★2026-07-21 追加。どのツールをどの目的で・いくらで・どの状態で使っているかが
+//   どこにも記録されておらず、DataForSEO の残高が $0.137 まで枯渇して
+//   週次SERP取得が途中で止まる状態を誰も見ていなかった。
+//   ★state=stopped の行を消さない。「やめた理由」を残さないと、
+//     同じツールを再検討するたびに同じ調査を繰り返すことになる。
+model ToolSubscription {
+  id, businessId, name, purpose, vendorKey?      // vendorKey があれば残高を自動取得
+  billingType, monthlyCost?, currency
+  state, startedAt, endedAt?, note
+  balance?, balanceCurrency?, balanceCheckedAt?  // ★取得失敗時は前回値を残す（0で上書きしない）
+}
 ```
 
 ### 3.1 設計上の要点

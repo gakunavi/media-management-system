@@ -296,15 +296,24 @@
 | `won` | 成約 |
 | `lost` | 失注 |
 
-### 4.3 `LeadSourceType` — 流入経路の種別
+### 4.3 `LeadSourceType` — 受け皿（問い合わせがどこに着地したか）
+
+> ★2026-07-22 に石井さんと構造を整理した（`docs/PHASES.md` §8 U60）。
+> **送客**（HP／メディア／記事／Threads）と **受け皿**（この enum）は層が違う。
+> 以前は「直客／代理店／LINE」（＝`LeadType`＝ゴールの種類）しか画面に出しておらず、
+> 経路が見えていなかった。
 
 <!-- enum: LeadSourceType -->
 | 値 | 意味 | provenance |
 |---|---|---|
-| `form` | WPフォーム送信（Webhook） | `measured` |
+| `form` | **HPの問い合わせ**フォーム送信（Webhook） | `measured` |
+| `lp_form` | **@deprecated**。診断LPと代理店LPを区別できないため下2つに分割 | `measured` |
+| `lp_diagnosis` | **診断LP**（`setsuzei-diagnosis-*`・CF7 601652） | `measured` |
+| `lp_agency` | **代理店LP**（`bousai-bouhan-light.com`・`?ag=AG-XXXX`） | `measured` |
+| `email` | **info@ に直接届いたメール**。電話と同じく手入力 | **`declared`** |
 | `phone_manual` | **電話受電時の手動登録**（§3.8.3・入力は3項目のみ） | **`declared`** |
-| `line` | LINE経由 | `measured` |
-| `threads_dm` | Threads DM経由 | `measured` |
+| `line` | 公式LINE（Messaging API Webhook） | `measured` |
+| `threads_dm` | Threads DM（cowork の `dm-log.md` から取り込み） | `measured` |
 
 > ★電話受電時は**「何を見てお電話いただきましたか」を必ず聞く**（これが唯一の経路情報）。
 > コールトラッキング（月数千円）は**件数が月10件を超えたら再検討**。
@@ -340,11 +349,16 @@
 ### 5.1 `ActionType` — 打ち手タイプ・効く指標・判定期間（§5.2）
 
 > ★設計書は「打ち手8タイプ」と記すが表の行は9値（`cta_move` / `cta_variant` が同一行）。**9値を採用**（`docs/PHASES.md` §8 U24）
+> ★2026-07-22 に `rewrite` / `merge` を追加して11値（§8 U61）。人が主導した施策
+> （改正対応リライト・記事統合＋301）が既存の9値では表せず、`/experiments` の
+> 手動記録が作れなかったため。timeseries.db の実績9件の大半が `rewrite` だった。
 > **判定期間 = `Intervention.evaluateAt` − `appliedAt`**
 
 <!-- enum: ActionType -->
 | 値 | 効く指標 | 判定期間 | 自動実行の範囲 |
 |---|---|---|---|
+| `rewrite` | clicks / position | **28日** | 提案のみ |
+| `merge` | clicks / position | **56日** | 提案のみ |
 | `title_meta_rewrite` | CTR / clicks | **28日** | draft生成 |
 | `cta_move` | cta_click率 | **14日** | 実装まで |
 | `cta_variant` | cta_click率 | **14日** | 実装まで |
@@ -718,6 +732,37 @@
 | `owner` | 全機能（石井さん） |
 | `partner` | 一部のみ閲覧（将来パートナーに見せる場合） |
 | `readonly` | 閲覧のみ（**新規ユーザーの既定値**） |
+
+---
+
+## 12.5 ツールのコスト管理（`/costs`）
+
+> ★2026-07-21 追加（`docs/PHASES.md` §8 U62）。設計書 §3 には無いモデルだが、
+> 「どのツールをどの目的で・いくらで・どの状態で使っているか」が
+> どこにも記録されておらず、DataForSEO の残高が $0.137 まで枯渇して
+> 週次SERP取得が途中で止まる状態を誰も見ていなかったため追加した。
+
+### 12.5.1 `ToolBillingType` — 課金形態
+
+<!-- enum: ToolBillingType -->
+| 値 | 意味 |
+|---|---|
+| `monthly` | 月額課金 |
+| `prepaid` | **前払い（残高を消費）**。枯渇すると無言でジョブが止まる |
+| `free` | 無料プラン |
+
+### 12.5.2 `ToolState` — 利用状態
+
+> ★`stopped` を残すのは「やめた理由」を残すため。行ごと消すと
+> 同じツールを再検討するたびに同じ調査を繰り返すことになる。
+
+<!-- enum: ToolState -->
+| 値 | 意味 |
+|---|---|
+| `considering` | 検討中（まだ契約していない） |
+| `trial` | トライアル中 |
+| `active` | 稼働中 |
+| `stopped` | 停止・解約済み |
 
 ---
 
