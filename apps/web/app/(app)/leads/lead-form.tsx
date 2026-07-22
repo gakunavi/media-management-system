@@ -11,7 +11,15 @@ const field =
   "w-full rounded-md border border-[var(--border-strong)] bg-[var(--panel)] px-2.5 py-1.5 text-[13px] outline-none focus:border-[var(--accent)]";
 const label = "mb-1 block text-[12px] font-medium text-[var(--muted)]";
 
-export function LeadForm() {
+export function LeadForm({
+  defaultSourceType,
+  label: buttonLabel,
+}: {
+  /** 受け皿を固定して開く（HP・電話の個別画面から使う） */
+  defaultSourceType?: string;
+  /** ボタンの文言 */
+  label?: string;
+} = {}) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +43,7 @@ export function LeadForm() {
         onClick={() => setOpen(true)}
         className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-[13px] font-medium text-white transition-opacity hover:opacity-90"
       >
-        ＋ リードを手動登録
+        {buttonLabel ?? "＋ リードを手動登録"}
       </button>
     );
   }
@@ -68,10 +76,14 @@ export function LeadForm() {
             <div>
               {/* ★受け皿は7つ。info メールや診断LPが選べないと手入力できない */}
               <label className={label}>受け皿（どこで受けたか）</label>
-              <select name="sourceType" className={field} defaultValue="phone_manual">
+              <select
+                name="sourceType"
+                className={field}
+                defaultValue={defaultSourceType ?? "phone_manual"}
+              >
                 <option value="phone_manual">電話</option>
-                <option value="email">info メール直接</option>
-                <option value="form">HPの問い合わせ</option>
+                {/* ★info メールは HPの問い合わせと同一（2026-07-23）。選択肢は1つ */}
+                <option value="form">HPの問い合わせ（info メール）</option>
                 <option value="lp_diagnosis">診断LP</option>
                 <option value="lp_agency">商品LP（代理店経由）</option>
                 <option value="line">公式LINE</option>

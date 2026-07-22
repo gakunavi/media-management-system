@@ -212,7 +212,8 @@ enum LeadSourceType {
   lp_diagnosis
   /// 代理店LP（bousai-bouhan-light.com・?ag=AG-XXXX）
   lp_agency
-  /// info@ に直接届いたメール。電話と同じく手入力（2026-07-22 石井さん判断）
+  /// @deprecated 2026-07-23 訂正: info メールは HPの問い合わせフォームの届き先で、
+  /// 別経路ではない。受け皿は form に一本化。既存行のために値だけ残す
   email
   phone_manual
   line

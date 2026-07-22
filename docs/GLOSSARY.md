@@ -309,11 +309,11 @@
 <!-- enum: LeadSourceType -->
 | 値 | 意味 | provenance |
 |---|---|---|
-| `form` | **HPの問い合わせ**フォーム送信（Webhook） | `measured` |
+| `form` | **HPの問い合わせ**フォーム送信（Webhook）。★送信は info@ に届く。「info メール」は同じものを指す（2026-07-23 石井さん訂正） | `measured` |
 | `lp_form` | **@deprecated**。診断LPと代理店LPを区別できないため下2つに分割 | `measured` |
 | `lp_diagnosis` | **診断LP**（`setsuzei-diagnosis-*`・CF7 601652） | `measured` |
 | `lp_agency` | **商品LP（代理店経由）**（`bousai-bouhan-light.com`・`?ag=AG-XXXX`）。★代理店を募集するLPではなく、既存代理店が顧客に配る**商品LP**。`?ag=` はどの代理店が送客したかの印（2026-07-23 訂正） | `measured` |
-| `email` | **info@ に直接届いたメール**。電話と同じく手入力 | **`declared`** |
+| `email` | **@deprecated（2026-07-23 訂正）**。info メールは HPの問い合わせフォームの届き先であって別経路ではない。受け皿は `form` に一本化した。既存行が残る場合に備えて値は残す | **`declared`** |
 | `phone_manual` | **電話受電時の手動登録**（§3.8.3・入力は3項目のみ） | **`declared`** |
 | `line` | 公式LINE（Messaging API Webhook） | `measured` |
 | `threads_dm` | Threads DM（cowork の `dm-log.md` から取り込み） | `measured` |

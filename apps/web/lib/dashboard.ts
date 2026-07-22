@@ -117,10 +117,11 @@ export async function getResult(range: Range): Promise<ResultView> {
   const curBySource = bySource(cur as LeadSlim[]);
   const prevBySource = bySource(prev as LeadSlim[]);
 
-  // ★旧値 lp_form の行が残っていたら末尾に出す。黙って落とすと合計が合わない
-  const order = curBySource.has("lp_form") || prevBySource.has("lp_form")
-    ? [...SOURCE_ORDER, "lp_form"]
-    : SOURCE_ORDER;
+  // ★旧値（lp_form / email）の行が残っていたら末尾に出す。黙って落とすと合計が合わない
+  const order = [
+    ...SOURCE_ORDER,
+    ...["lp_form", "email"].filter((k) => curBySource.has(k) || prevBySource.has(k)),
+  ];
 
   const receivers: ReceiverRow[] = order.map((k) => {
     const measured = covered.has(SOURCE_COVERAGE[k] ?? "");

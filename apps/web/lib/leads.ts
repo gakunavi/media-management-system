@@ -243,7 +243,9 @@ export async function getOriginBreakdown(
 //   どの経路が獲得に効いているかは、この並びでしか判断できない。
 
 export const SOURCE_LABEL: Record<string, string> = {
-  form: "HPの問い合わせ",
+  // ★HPの問い合わせフォームと info メールは同一（2026-07-23 石井さん訂正）。
+  //   フォーム送信が info@ に届くだけで別経路ではない
+  form: "HPの問い合わせ（info メール）",
   lp_diagnosis: "診断LP",
   // ★bousai-bouhan-light.com は代理店募集LPではなく**商品LP**。
   //   既存代理店が顧客に配るURLで、?ag=AG-XXXX はどの代理店が送客したかの印。
@@ -252,7 +254,7 @@ export const SOURCE_LABEL: Record<string, string> = {
   line: "公式LINE",
   threads_dm: "Threads DM",
   phone_manual: "電話",
-  email: "info メール直接",
+  email: "info メール（旧・HPの問い合わせに統合）",
   lp_form: "LP（旧・未分類）",
 };
 
@@ -267,7 +269,6 @@ export const SOURCE_ORDER = [
   "line",
   "threads_dm",
   "phone_manual",
-  "email",
 ];
 
 export type SourceRow = {
@@ -312,7 +313,7 @@ export const SOURCE_COVERAGE: Record<string, string> = {
   //   代理店だけの指標（lead_agency）を流用すると、集客DMしか来ていない
   //   期間に「代理店を計測中」と出る（2026-07-23）
   threads_dm: "lead_threads_dm",
-  // ★電話とメールは手入力。仕組みで計測するものではないので常に計測済み扱い
+  // ★電話は手入力。仕組みで計測するものではないので常に計測済み扱い
   phone_manual: "lead_direct_inquiry",
   email: "lead_direct_inquiry",
 };
@@ -352,7 +353,8 @@ export async function getSourceBreakdown(
   }
 
   // ★旧値 lp_form の行が残っていたら末尾に出す。黙って消すと件数が合わなくなる
-  const order = acc.has("lp_form") ? [...SOURCE_ORDER, "lp_form"] : SOURCE_ORDER;
+  // ★旧値（lp_form / email）の行が残っていたら末尾に出す。黙って消すと件数が合わない
+  const order = [...SOURCE_ORDER, ...["lp_form", "email"].filter((k) => acc.has(k))];
   const rows: SourceRow[] = order.map((k) => {
     const a = acc.get(k) ?? { leads: 0, won: 0, amount: 0 };
     return {

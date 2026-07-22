@@ -31,10 +31,9 @@ export const RECEIVERS = [
   { key: "line", label: "公式LINE" },
   { key: "lp_diagnosis", label: "診断LP" },
   { key: "lp_agency", label: "商品LP（代理店経由）" },
-  { key: "form", label: "HPの問い合わせ" },
+  { key: "form", label: "HPの問い合わせ（info メール）" },
   { key: "threads_dm", label: "Threads DM" },
   { key: "phone_manual", label: "電話" },
-  { key: "email", label: "info メール" },
 ] as const;
 
 export type CellState =
