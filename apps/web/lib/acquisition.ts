@@ -16,8 +16,7 @@
 //   それは「未計測」ではなく「測定不能」として区別する。
 //   未計測は直せるが、測定不能は直せない。混ぜると打ち手を誤る。
 import { prisma } from "@mms/db";
-
-const DAY = 86400000;
+import type { Range } from "./period";
 
 /** 送客元（人を送り出す側） */
 export const SENDERS = [
@@ -119,31 +118,32 @@ const SENDER_METRIC: Record<string, Record<string, string>> = {
   },
 };
 
-export async function getAcquisitionMatrix(
-  days = 30,
-  now: Date = new Date(),
-): Promise<AcquisitionMatrix> {
-  const since = new Date(now.getTime() - days * DAY);
+export async function getAcquisitionMatrix(range: Range): Promise<AcquisitionMatrix> {
+  const win = { gte: range.since, lt: range.until };
 
-  const [clickAgg, lpViews, dmLeads, leads] = await Promise.all([
+  const [clickAgg, lpViews, dmLeads, leads, coverages] = await Promise.all([
     prisma.contentMetric.groupBy({
       by: ["metric"],
-      where: { metric: { startsWith: "threads_link_clicks_" }, date: { gte: since } },
+      where: { metric: { startsWith: "threads_link_clicks_" }, date: win },
       _sum: { value: true },
     }),
     prisma.metricSnapshot.aggregate({
       _sum: { value: true },
-      where: { metric: { startsWith: "lp_users_" }, date: { gte: since } },
+      where: { metric: { startsWith: "lp_users_" }, date: win },
     }),
-    prisma.agencyLead.count({ where: { receivedAt: { gte: since } } }),
+    prisma.agencyLead.count({ where: { receivedAt: win } }),
     prisma.lead.groupBy({
       by: ["sourceType"],
-      where: { occurredAt: { gte: since } },
+      where: { occurredAt: win },
       _count: { _all: true },
     }),
+    // ★「まだ1度も計測していない」と「計測しているが期間内0件」を分けるための材料。
+    //   リダイレクタ（/r/）は初回クリックで MeasurementCoverage を作る（§3）
+    prisma.measurementCoverage.findMany({ select: { metric: true } }),
   ]);
 
   const clicks = new Map(clickAgg.map((r) => [r.metric, Math.round(r._sum.value ?? 0)]));
+  const covered = new Set(coverages.map((c) => c.metric));
 
   const cells: Cell[] = [];
   let measured = 0;
@@ -156,29 +156,37 @@ export async function getAcquisitionMatrix(
         reason: "未定義",
       };
       let value: number | null = null;
+      let state = rule.state;
+      let reason = rule.reason;
 
-      if (rule.state === "measured") {
+      if (state === "measured") {
         if (s.key === "threads") {
           if (r.key === "threads_dm") value = dmLeads;
           else {
             const m = SENDER_METRIC.threads[r.key];
-            value = m ? (clicks.get(m) ?? 0) : null;
+            // ★計測開始が記録されていない経路に 0 を出さない（§3）。
+            //   0 と書くと「送ったが誰も踏まなかった」に見えるが、実際は
+            //   リダイレクタを一度も通っていない＝測っていない状態。
+            if (m && covered.has(m)) value = clicks.get(m) ?? 0;
+            else {
+              state = "not_measured";
+              reason = `${m} の計測がまだ始まっていない（/r/ 経由のリンクが未使用）`;
+            }
           }
         } else if (s.key === "media" && r.key === "lp_diagnosis") {
           value = Math.round(lpViews._sum.value ?? 0);
         }
       }
 
-      // ★measured と宣言していても実データが無ければ 0 を出す（未計測ではない）
-      if (rule.state === "measured") measured += 1;
-      if (rule.state === "measured" || rule.state === "not_measured") target += 1;
+      if (state === "measured") measured += 1;
+      if (state === "measured" || state === "not_measured") target += 1;
 
-      cells.push({ sender: s.key, receiver: r.key, state: rule.state, value, reason: rule.reason });
+      cells.push({ sender: s.key, receiver: r.key, state, value, reason });
     }
   }
 
   const receiverTotals: Record<string, number> = {};
   for (const l of leads) receiverTotals[l.sourceType] = l._count._all;
 
-  return { days, cells, receiverTotals, coverage: { measured, target } };
+  return { days: range.days, cells, receiverTotals, coverage: { measured, target } };
 }

@@ -6,24 +6,21 @@
 // ★段間の転換率は、両端が実測のときだけ出す。
 //   片方が未計測のまま率を出すと、壊れた計測が「成果ゼロ」に化ける（§3・§16.5）。
 
-export type StageItem = {
-  key: string;
-  label: string;
-  /** null = 未計測。0 とは意味が違う */
-  value: number | null;
-  hint: string;
-  /** その段が落ちていたときに打つ手 */
-  action: string;
-};
+import type { Stage } from "@/lib/stages";
+
+export type StageItem = Stage;
 
 export function Stages({
   stages,
   transitions,
   biggestDropIndex,
+  comparableSegments,
 }: {
   stages: StageItem[];
   transitions: (number | null)[];
   biggestDropIndex: number | null;
+  /** 転換率を出せた区間の数。1以下なら「落ち込み」は比較できない */
+  comparableSegments?: number;
 }) {
   return (
     <>
@@ -73,7 +70,10 @@ export function Stages({
         </p>
       ) : (
         <p className="rounded-md bg-[var(--panel-2)] px-3 py-2 text-[12px] text-[var(--muted)]">
-          転換率を出せる段がまだありません（未計測か母数0）。落ち込みの判定はできません。
+          {comparableSegments === 1
+            ? // ★区間が1つだけのとき、その区間は必ず「最大」になる。名指ししても意味がない
+              "転換率を出せた区間が1つだけです。比較対象が無いので、どこが落ちているかは判定しません（他の段を計測すると判定できます）。"
+            : "転換率を出せる段がまだありません（未計測か母数0）。落ち込みの判定はできません。"}
         </p>
       )}
     </>

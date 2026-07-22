@@ -1,214 +1,221 @@
+// ダッシュボード（設計書 §4.1）
+//
+// ★構成の考え方
+//   このシステムのゴールは**問い合わせ数を増やすこと**。
+//   だから一番上は問い合わせ件数で、PV・クリック・表示はその手前の数字。
+//   構造は 2026-07-22 に整理した「送客 → 受け皿 → リード → 成約」に合わせる。
+//
+// ★タブは3つ。毎日見るもの（結果）と、週に一度でよいもの（経路の計装状況）、
+//   壊れていないかの確認（健全性）を同じ密度で並べると、毎日見る数字が埋もれる。
+//
+// ★期間は画面右上で切り替える。全ての集計に同じ since/until を渡す
+//   （旧実装は GSC と GA4 が別々の28日間を合計していた）。
 import Link from "next/link";
 import { NOT_MEASURED } from "@mms/shared";
 import {
-  currentPeriod,
-  getGoals,
+  getResult,
   getFunnel,
   getBuyerQuality,
   getJobHealth,
   getSiteTrend,
-  type GoalRow,
+  getSenderVolumes,
+  getMetricFreshness,
   type SiteTrend,
+  type FunnelView,
 } from "@/lib/dashboard";
+import { getAcquisitionMatrix } from "@/lib/acquisition";
+import { resolveRange } from "@/lib/period";
 import { TrendChart } from "@/components/chart";
+import { Stages } from "@/components/stages";
+import { RangePicker } from "@/components/range-picker";
+import { Tabs, resolveTab } from "@/components/dashboard/tabs";
+import { ResultPanel } from "@/components/dashboard/result-panel";
+import { HealthPanel, healthAlerts } from "@/components/dashboard/health-panel";
+import { RoutesPanel } from "@/components/dashboard/routes-panel";
 import { getActionStats, type ActionStats } from "@/lib/actions-repo";
 
-// ★石井さんが毎日見る画面（設計書 §4.1 段1〜段3・段7）。
-//   段4/段5/段6 は operator（P4）で追加する。
 export const dynamic = "force-dynamic";
 
 const jaDate = (d: Date | null) =>
   d
     ? d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric" })
     : "—";
-const jaDateTime = (d: Date | null) =>
-  d
-    ? d.toLocaleString("ja-JP", {
-        timeZone: "Asia/Tokyo",
-        month: "numeric",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "未実行";
 
-export default async function Dashboard() {
-  const period = currentPeriod();
-  const [goals, funnel, buyer, health, actionStats, trend] = await Promise.all([
-    getGoals(period),
-    getFunnel(),
-    getBuyerQuality(),
-    getJobHealth(),
-    getActionStats(),
-    getSiteTrend(),
-  ]);
+type SearchParams = Record<string, string | string[] | undefined>;
+
+export default async function Dashboard({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const sp = await searchParams;
+  const range = resolveRange(sp);
+  const tab = resolveTab(sp.tab);
+  // ★期間の指定（プリセット / 任意区間）はタブを移動しても保つ
+  const rangeQuery = { range: range.key, from: one(sp.from), to: one(sp.to) };
+  const healthHref = `/?${new URLSearchParams(
+    Object.entries({ ...rangeQuery, tab: "health" }).filter(([, v]) => v) as [string, string][],
+  ).toString()}`;
+
+  // 健全性は「いま」の状態なので期間に依存しない。全タブで警告だけは出す。
+  const [health, freshness] = await Promise.all([getJobHealth(), getMetricFreshness()]);
+  const alerts = healthAlerts(health, freshness);
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="mb-5 flex items-baseline justify-between">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight">ダッシュボード</h1>
           <p className="mt-0.5 text-[13px] text-[var(--muted)]">
-            獲得3ゴールの結果と、そこに至るファネルを1画面で
+            ゴールは問い合わせ数。{range.label}
+            {range.period ? "" : "・暦月と一致しないため月次目標とは比較しない"}
           </p>
         </div>
-        {health.tools.some((t) => t.kind === "balance") && (
-          <span className="rounded-md bg-[var(--bad)]/10 px-2 py-1 text-[12px] font-medium text-[var(--bad)]">
-            ● ツールの残高不足（段7）
-          </span>
-        )}
-        {health.threads.alert === "red" && (
-          <span className="rounded-md bg-[var(--bad)]/10 px-2 py-1 text-[12px] font-medium text-[var(--bad)]">
-            {/* ★止まってからだけでなく「切れそう」でも赤にする */}
-            ● Threads{" "}
-            {health.threads.gapDays !== null && health.threads.gapDays >= 2
-              ? `投稿が ${health.threads.gapDays}日 停止`
-              : `投稿キュー残り${health.threads.queuePending}本`}
-            （段7）
-          </span>
-        )}
-        {health.gsc.alert === "red" && (
-          <span className="rounded-full bg-[var(--bad)]/10 px-3 py-1 text-[12px] font-medium text-[var(--bad)]">
-            ● 計測に問題あり（段7）
-          </span>
-        )}
+        <RangePicker range={range} basePath="/" keep={{ tab }} />
       </div>
 
-      <div className="grid gap-4">
-        <GoalsPanel goals={goals} />
-        <FunnelPanel funnel={funnel} />
-        {/* ★その時点の値だけだと増減が読めない。推移を並べる */}
-        <TrendPanel trend={trend} />
-        <NextActionsPanel stats={actionStats} />
-        <div className="grid gap-4 lg:grid-cols-2">
-          <BuyerPanel buyer={buyer} />
-          <HealthPanel health={health} />
+      {/* ★警告はタブに関係なく常に出す。別タブを開いている間に止まっても気づけるように */}
+      {alerts.length > 0 && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {alerts.map((a, i) => (
+            <Link
+              key={i}
+              href={healthHref}
+              className="rounded-md bg-[var(--bad)]/10 px-2 py-1 text-[12px] font-medium text-[var(--bad)] hover:bg-[var(--bad)]/[0.16]"
+            >
+              ● {a}
+            </Link>
+          ))}
         </div>
-      </div>
+      )}
 
-      <p className="mt-6 text-center text-[12px] text-[var(--faint)]">
-        段4「今週の変化」・段6「施策の生死」は P4/P8 で追加。
-        すべての値は <Unmeasured small /> と実測ゼロを区別しています（§3 規約）。
-      </p>
+      <Tabs active={tab} query={rangeQuery} />
+
+      {tab === "overview" && <OverviewTab range={range} />}
+      {tab === "routes" && <RoutesTab range={range} />}
+      {tab === "health" && <HealthPanel health={health} freshness={freshness} />}
     </div>
   );
 }
 
-/* ─────────────────────────── 共通 ─────────────────────────── */
+const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
-function Panel({
-  n,
-  title,
-  hint,
-  children,
-}: {
-  n: number;
-  title: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
+/* ─────────────────────────── 結果タブ ─────────────────────────── */
+
+async function OverviewTab({ range }: { range: ReturnType<typeof resolveRange> }) {
+  const [result, funnel, trend, buyer, actionStats] = await Promise.all([
+    getResult(range),
+    getFunnel(range),
+    getSiteTrend(range),
+    getBuyerQuality(),
+    getActionStats(),
+  ]);
+
   return (
-    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-      <div className="mb-4 flex items-baseline gap-2.5">
+    <div className="grid gap-4">
+      <ResultPanel result={result} />
+      <FunnelPanel funnel={funnel} />
+      <TrendPanel trend={trend} />
+      <NextActionsPanel stats={actionStats} />
+      <BuyerPanel buyer={buyer} />
+    </div>
+  );
+}
+
+/* ─────────────────────────── 経路タブ ─────────────────────────── */
+
+async function RoutesTab({ range }: { range: ReturnType<typeof resolveRange> }) {
+  const [volumes, matrix, result] = await Promise.all([
+    getSenderVolumes(range),
+    getAcquisitionMatrix(range),
+    getResult(range),
+  ]);
+  return (
+    <RoutesPanel volumes={volumes} matrix={matrix} result={result} rangeLabel={range.label} />
+  );
+}
+
+/* ─────────────────────────── 段2 ─────────────────────────── */
+
+/**
+ * 記事 → 診断LP の階段。
+ *
+ * ★各段のデータ源で反映日が違う（GSCは2〜3日遅れ、GA4は翌日）。
+ *   どこまでの実測かを書かずに並べると、遅れが「落ち込み」に見える。
+ */
+function FunnelPanel({ funnel }: { funnel: FunnelView }) {
+  return (
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
+      <div className="mb-3 flex flex-wrap items-baseline gap-2.5">
         <span className="inline-flex h-5 items-center rounded-md bg-[var(--ink)] px-1.5 text-[11px] font-semibold text-white">
-          段{n}
+          段2
         </span>
-        <h2 className="text-[15px] font-semibold">{title}</h2>
-        {hint && <span className="ml-auto text-[11px] text-[var(--faint)]">{hint}</span>}
+        <h2 className="text-[15px] font-semibold">記事 → 診断LP の階段</h2>
+        <span className="ml-auto text-[11px] text-[var(--faint)]">
+          GSC 〜{jaDate(funnel.asOf.gsc)} ／ GA4 〜{jaDate(funnel.asOf.ga4)} の実測
+        </span>
       </div>
-      {children}
+      <Stages
+        stages={funnel.stages}
+        transitions={funnel.transitions}
+        biggestDropIndex={funnel.biggestDropIndex}
+        comparableSegments={funnel.comparableSegments}
+      />
+      {funnel.unmeasured > 0 && (
+        <p className="mt-2 text-[12px] text-[var(--faint)]">
+          ★{funnel.unmeasured}段が未計測。記事内のCTA計測タグ（P2.5）が本番未設置のため、
+          「記事を読んだ人のうち何人がCTAを見たか」が取れていない。
+          他の経路の階段は <Link href="/line" className="text-[var(--accent)] hover:underline">公式LINE</Link>{" "}
+          / <Link href="/lp" className="text-[var(--accent)] hover:underline">LP</Link> にあります。
+        </p>
+      )}
     </section>
   );
 }
 
-function Unmeasured({ small }: { small?: boolean }) {
-  return (
-    <span className={`font-medium text-[var(--warn)] ${small ? "text-xs" : ""}`}>
-      {NOT_MEASURED}
-    </span>
-  );
-}
-
-/* ─────────────────────────── 段1 ─────────────────────────── */
-
-function GoalsPanel({ goals }: { goals: GoalRow[] }) {
-  return (
-    <Panel n={1} title="結果（獲得3ゴール）" hint="最優先＝直客">
-      <div className="grid gap-3 sm:grid-cols-3">
-        {goals.map((g) => {
-          const pct =
-            g.actual !== null && g.target
-              ? Math.min(100, Math.round((g.actual / g.target) * 100))
-              : null;
-          const dot =
-            g.actual === null
-              ? "bg-[var(--warn)]"
-              : pct !== null && pct >= 100
-                ? "bg-[var(--ok)]"
-                : pct !== null && pct >= 50
-                  ? "bg-[var(--warn)]"
-                  : "bg-[var(--bad)]";
-          return (
-            <div
-              key={g.key}
-              className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-4"
-            >
-              <div className="flex items-center gap-2 text-[13px] text-[var(--muted)]">
-                <span className={`h-2 w-2 rounded-full ${dot}`} />
-                {g.label}
-              </div>
-              <div className="mt-2 flex items-baseline gap-1.5">
-                {g.actual === null ? (
-                  <Unmeasured />
-                ) : (
-                  <span className="tnum text-3xl font-bold leading-none">{g.actual}</span>
-                )}
-                <span className="tnum text-[13px] text-[var(--faint)]">
-                  {g.target !== null ? `/ ${g.target}件` : ""}
-                </span>
-              </div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--border)]">
-                {pct !== null && (
-                  <div
-                    className="h-full rounded-full bg-[var(--accent)]"
-                    style={{ width: `${pct}%` }}
-                  />
-                )}
-              </div>
-              <div className="mt-1.5 text-right text-[11px] text-[var(--faint)]">
-                {g.target === null ? "目標未設定" : pct !== null ? `${pct}%` : ""}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <p className="mt-3 text-[12px] text-[var(--faint)]">
-        計測開始前は 0 ではなく <Unmeasured small /> と表示（§3 規約）。WPフォーム接続で計測が始まる。
-      </p>
-    </Panel>
-  );
-}
+/* ─────────────────────────── 推移 ─────────────────────────── */
 
 /**
  * 日次推移。
- * ★桁が違う系列を1本の軸に載せない。表示4,556 とクリック154 を同じ軸に
- *   置くとクリックが底に張り付いて増減が読めない。軸を左右に分ける。
+ * ★桁が違う系列を1本の軸に載せない（表示4,556 とクリック154 を同じ軸に置くと
+ *   クリックが底に張り付いて増減が読めない）。軸を左右に分ける。
  * ★掲載順位は別パネル。小さいほど良いので上下を反転して描く。
+ * ★反映待ち（GSCの2〜3日遅れ）と欠測を分けて書く。毎日「未計測」と出すと、
+ *   本物の欠測が埋もれる。
  */
 function TrendPanel({ trend }: { trend: SiteTrend }) {
-  const missing = trend.clicks.filter((p) => p.value === null).length;
   return (
-    <section className="mb-5">
-      <h2 className="mb-2 text-[14px] font-semibold">日次推移（{trend.days}日）</h2>
-      {missing > 0 && (
-        <p className="mb-2 text-[12px] text-[var(--faint)]">
-          ★{missing}日は未計測。0 として繋がず線を切っている（落ち込みと区別するため）
-        </p>
-      )}
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
+      <h2 className="text-[15px] font-semibold">推移（{trend.days}日）</h2>
+      <p className="mb-3 mt-0.5 text-[12px] text-[var(--faint)]">
+        {trend.pendingDays > 0 && `末尾${trend.pendingDays}日はデータ反映待ち（GSCは2〜3日遅れが正常）。`}
+        {trend.missingDays > 0
+          ? `★${trend.missingDays}日は欠測。0として繋がず線を切っている（落ち込みと区別するため）`
+          : "欠測なし"}
+      </p>
+
       <div className="grid gap-3 lg:grid-cols-2">
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3.5">
+        <div className="rounded-lg border border-[var(--border)] p-3.5">
           <div className="mb-1 text-[12px] font-medium text-[var(--muted)]">
-            検索（GSC）とPV
+            問い合わせ（ゴール）
+          </div>
+          <TrendChart
+            series={[{ label: "問い合わせ", color: "var(--accent)", points: trend.inquiries }]}
+            height={140}
+          />
+        </div>
+        <div className="rounded-lg border border-[var(--border)] p-3.5">
+          <div className="mb-1 text-[12px] font-medium text-[var(--muted)]">平均掲載順位</div>
+          <TrendChart
+            series={[
+              { label: "平均掲載順位", color: "#b8860b", points: trend.position, invert: true },
+            ]}
+            height={140}
+          />
+        </div>
+        <div className="rounded-lg border border-[var(--border)] p-3.5 lg:col-span-2">
+          <div className="mb-1 text-[12px] font-medium text-[var(--muted)]">
+            送客の量（検索の表示・クリックとPV）
           </div>
           <TrendChart
             series={[
@@ -218,89 +225,8 @@ function TrendPanel({ trend }: { trend: SiteTrend }) {
             ]}
           />
         </div>
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3.5">
-          <div className="mb-1 text-[12px] font-medium text-[var(--muted)]">平均掲載順位</div>
-          <TrendChart
-            series={[
-              { label: "平均掲載順位", color: "#b8860b", points: trend.position, invert: true },
-            ]}
-          />
-        </div>
       </div>
     </section>
-  );
-}
-
-/* ─────────────────────────── 段2 ─────────────────────────── */
-
-function FunnelPanel({ funnel }: { funnel: Awaited<ReturnType<typeof getFunnel>> }) {
-  const measured = funnel.rows.map((r) => r.value).filter((v): v is number => v !== null);
-  const max = measured.length ? Math.max(...measured) : 0;
-
-  return (
-    <Panel
-      n={2}
-      title="ファネル（どこで落ちているか）"
-      hint={funnel.asOf ? `表示・クリックは GSC実測 〜${jaDate(funnel.asOf)}` : undefined}
-    >
-      <div className="flex items-stretch gap-1.5 overflow-x-auto pb-1">
-        {funnel.rows.map((r, i) => {
-          const isDrop = i === funnel.biggestDropIndex;
-          const w = r.value !== null && max > 0 ? Math.max(8, (r.value / max) * 100) : 8;
-          return (
-            <div key={r.key} className="flex items-stretch gap-1.5">
-              <div
-                className={`flex min-w-[92px] flex-col rounded-lg border px-3 py-2.5 ${
-                  isDrop
-                    ? "border-[var(--bad)]/40 bg-[var(--bad)]/[0.05]"
-                    : "border-[var(--border)] bg-[var(--panel-2)]"
-                }`}
-              >
-                <div className="text-[11px] text-[var(--muted)]">{r.label}</div>
-                <div className="mt-1">
-                  {r.value === null ? (
-                    <Unmeasured small />
-                  ) : (
-                    <span className="tnum text-lg font-bold leading-none">
-                      {r.value.toLocaleString("ja-JP")}
-                    </span>
-                  )}
-                </div>
-                <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--border)]">
-                  <div
-                    className={`h-full rounded-full ${isDrop ? "bg-[var(--bad)]" : "bg-[var(--accent)]"}`}
-                    style={{ width: `${w}%` }}
-                  />
-                </div>
-              </div>
-              {i < funnel.rows.length - 1 && (
-                <div className="flex flex-col items-center justify-center px-0.5 text-[var(--faint)]">
-                  <span>→</span>
-                  {funnel.retention[i + 1] !== null && (
-                    <span className="tnum text-[10px]">
-                      {Math.round((funnel.retention[i + 1] as number) * 100)}%
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {funnel.biggestDropIndex !== null && (
-        <p className="mt-3 text-[12px]">
-          <span className="font-medium text-[var(--bad)]">最大ドロップ</span>
-          <span className="text-[var(--muted)]">
-            {" "}
-            {funnel.rows[funnel.biggestDropIndex - 1]?.label} →{" "}
-            {funnel.rows[funnel.biggestDropIndex]?.label}
-          </span>
-        </p>
-      )}
-      <p className="mt-1 text-[12px] text-[var(--faint)]">
-        CTA表示以降は計測タグ（P2.5）を本番設置し計測開始を記録すると表示される。
-      </p>
-    </Panel>
   );
 }
 
@@ -308,8 +234,8 @@ function FunnelPanel({ funnel }: { funnel: Awaited<ReturnType<typeof getFunnel>>
 
 function NextActionsPanel({ stats }: { stats: ActionStats }) {
   return (
-    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-      <div className="mb-4 flex items-baseline gap-2.5">
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
+      <div className="mb-3 flex items-baseline gap-2.5">
         <span className="inline-flex h-5 items-center rounded-md bg-[var(--ink)] px-1.5 text-[11px] font-semibold text-white">
           段5
         </span>
@@ -322,7 +248,7 @@ function NextActionsPanel({ stats }: { stats: ActionStats }) {
         </Link>
       </div>
       {stats.proposed > 0 ? (
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <div>
             <span className="tnum text-3xl font-bold text-[var(--accent)]">{stats.proposed}</span>
             <span className="ml-1.5 text-[13px] text-[var(--muted)]">件の承認待ち</span>
@@ -355,7 +281,13 @@ function NextActionsPanel({ stats }: { stats: ActionStats }) {
 function BuyerPanel({ buyer }: { buyer: Awaited<ReturnType<typeof getBuyerQuality>> }) {
   const tagged = buyer.taggedContentRatio;
   return (
-    <Panel n={3} title="買い手の質">
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
+      <div className="mb-2 flex items-baseline gap-2.5">
+        <span className="inline-flex h-5 items-center rounded-md bg-[var(--ink)] px-1.5 text-[11px] font-semibold text-white">
+          段3
+        </span>
+        <h2 className="text-[15px] font-semibold">買い手の質</h2>
+      </div>
       {tagged && tagged.tagged > 0 ? (
         <p className="text-sm">
           買い手軸タグ付け済み{" "}
@@ -366,112 +298,10 @@ function BuyerPanel({ buyer }: { buyer: Awaited<ReturnType<typeof getBuyerQualit
         </p>
       ) : (
         <div>
-          <Unmeasured />
-          <p className="mt-2 text-[12px] leading-relaxed text-[var(--faint)]">{buyer.note}</p>
+          <span className="font-medium text-[var(--warn)]">{NOT_MEASURED}</span>
+          <p className="mt-1 text-[12px] leading-relaxed text-[var(--faint)]">{buyer.note}</p>
         </div>
       )}
-    </Panel>
-  );
-}
-
-/* ─────────────────────────── 段7 ─────────────────────────── */
-
-function HealthPanel({ health }: { health: Awaited<ReturnType<typeof getJobHealth>> }) {
-  const style =
-    health.gsc.alert === "red"
-      ? "border-[var(--bad)]/40 bg-[var(--bad)]/[0.06] text-[var(--bad)]"
-      : health.gsc.alert === "warn"
-        ? "border-[var(--warn)]/40 bg-[var(--warn)]/[0.08] text-[#9a6a00]"
-        : "border-[var(--ok)]/40 bg-[var(--ok)]/[0.08] text-[#1a7a2e]";
-
-  const threadsStyle =
-    health.threads.alert === "red"
-      ? "border-[var(--bad)]/40 bg-[var(--bad)]/[0.06] text-[var(--bad)]"
-      : health.threads.alert === "warn"
-        ? "border-[var(--warn)]/40 bg-[var(--warn)]/[0.08] text-[#9a6a00]"
-        : health.threads.alert === "unknown"
-          ? "border-[var(--border)] bg-[var(--panel-2)] text-[var(--muted)]"
-          : "border-[var(--ok)]/40 bg-[var(--ok)]/[0.08] text-[#1a7a2e]";
-
-  return (
-    <Panel n={7} title="ジョブ健全性・配信・欠測">
-      <div className={`rounded-lg border px-3 py-2.5 text-[13px] leading-snug ${style}`}>
-        {health.gsc.latestDate === null ? (
-          "GSC 実測データがありません"
-        ) : health.gsc.alert === "red" ? (
-          <>
-            GSC 日次が <strong className="tnum">{health.gsc.gapDays}日欠測</strong>
-            <span className="opacity-70">（最終 {jaDate(health.gsc.latestDate)}）</span>
-            <br />
-            日次ジョブが止まっている。取得ジョブの登録が必要。
-          </>
-        ) : health.gsc.alert === "warn" ? (
-          <>GSC 反映がやや遅れ（最終 {jaDate(health.gsc.latestDate)}）</>
-        ) : (
-          <>GSC 日次は最新（{jaDate(health.gsc.latestDate)}）</>
-        )}
-      </div>
-
-      {/* ツールの残高・判定期日（/costs）。実際に残高が枯渇しかけた */}
-      {health.tools.length > 0 && (
-        <div className="mt-2 rounded-lg border border-[var(--bad)]/40 bg-[var(--bad)]/[0.06] px-3 py-2.5 text-[13px] leading-snug text-[var(--bad)]">
-          {health.tools.map((t, i) => (
-            <div key={i}>{t.message}</div>
-          ))}
-          <a href="/costs" className="mt-1 inline-block text-[12px] underline opacity-80">
-            コスト画面で確認
-          </a>
-        </div>
-      )}
-
-      {/* ★配信停止の検知。ジョブの失敗と違い「動いていないこと」はエラーに残らない */}
-      <div className={`mt-2 rounded-lg border px-3 py-2.5 text-[13px] leading-snug ${threadsStyle}`}>
-        {health.threads.alert === "unknown" ? (
-          <>Threads 投稿: {health.threads.reason}</>
-        ) : health.threads.alert === "ok" ? (
-          <>Threads 投稿は継続中（{health.threads.reason}）</>
-        ) : (
-          <>
-            {health.threads.gapDays !== null && health.threads.gapDays >= 2 ? (
-              <>
-                Threads 投稿が{" "}
-                <strong className="tnum">{health.threads.gapDays}日 止まっています</strong>
-              </>
-            ) : (
-              // ★まだ配信は続いているが在庫が細っている状態
-              <>
-                Threads の投稿キューが{" "}
-                <strong className="tnum">残り{health.threads.queuePending}本</strong>
-              </>
-            )}
-            <span className="opacity-70">（最終 {jaDate(health.threads.lastPostedAt)}）</span>
-            <br />
-            {health.threads.reason}
-          </>
-        )}
-      </div>
-
-      <div className="mt-3">
-        {health.jobs.length === 0 ? (
-          <p className="text-[12px] text-[var(--faint)]">
-            登録ジョブなし。worker は稼働中だが定期ジョブは未登録。
-          </p>
-        ) : (
-          <ul className="grid gap-1.5">
-            {health.jobs.map((j) => (
-              <li key={j.name} className="flex items-center gap-2 text-[13px]">
-                <span aria-hidden>
-                  {j.lastStatus === "success" ? "🟢" : j.lastStatus === "failed" ? "🔴" : "⏳"}
-                </span>
-                <span className="font-mono text-[12px]">{j.name}</span>
-                <span className="ml-auto text-[12px] text-[var(--faint)]">
-                  {jaDateTime(j.lastRunAt)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </Panel>
+    </section>
   );
 }

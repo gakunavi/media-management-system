@@ -5,14 +5,11 @@
 //   この集計関数は「未計測」を null で返し、UI が "—(未計測)" と表示する。
 import { prisma } from "@mms/db";
 import { getToolAlerts } from "./tools";
+import { SOURCE_COVERAGE, SOURCE_LABEL, SOURCE_ORDER } from "./leads";
+import { buildFlow, type Stage, type StageFlow } from "./stages";
+import { jstDayKey, dayKeys, type Range } from "./period";
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
-
-/** 現在の対象月（"YYYY-MM"・JST基準） */
-export function currentPeriod(now: Date = new Date()): string {
-  const jst = new Date(now.getTime() + JST_OFFSET_MS);
-  return `${jst.getUTCFullYear()}-${String(jst.getUTCMonth() + 1).padStart(2, "0")}`;
-}
 
 /** その指標が「計測中」か（MeasurementCoverage に期間があるか・§3 規約） */
 async function measuredMetrics(): Promise<Set<string>> {
@@ -20,168 +17,296 @@ async function measuredMetrics(): Promise<Set<string>> {
   return new Set(rows.map((r) => r.metric));
 }
 
-// ── 段1: 獲得3ゴールの結果 ──────────────────────────────────────
-export type GoalRow = {
-  key: "direct_inquiry" | "agency" | "line_friend";
+// ── 段1: 結果（問い合わせ = このシステムのゴール）────────────────
+//
+// ★何を「結果」と呼ぶかを、送客×受け皿の整理（2026-07-22）に合わせて直した。
+//   旧実装は Lead.type（直客/代理店/LINE）の3ゴールだけを出していて、
+//   受け皿（診断LP・代理店LP・HPフォーム・電話・info メール…）が
+//   ひとつも見えなかった。増やしたいのは問い合わせの数で、
+//   打ち手は受け皿ごとに違う。だから受け皿別に出す。
+//
+// ★LINE登録は「問い合わせ」ではない。登録は受け皿への到達であって、
+//   まだ相談ではない。合算するとゴールの数字が水増しされるので分けて出す。
+//
+// ★計測が始まっていない受け皿は 0 ではなく未計測（§3）。
+//   「問い合わせが来ていない」のと「来ても記録されない」は別の問題で、
+//   打ち手も別（前者は集客、後者は計装）。
+
+export type ReceiverRow = {
+  key: string;
   label: string;
-  coverageMetric: string;
-  /** null = 未計測。数値 = 実測 */
-  actual: number | null;
+  /**
+   * 問い合わせ件数。null = その受け皿の計測が始まっていない（§3）。
+   * ★LINE登録は含めない。同じ公式LINEでも「登録した人」と
+   *   「相談してきた人」は別の数字で、後者だけがゴールに効く。
+   */
+  inquiries: number | null;
+  /** 前期間の問い合わせ件数。増減の比較用。未計測なら null */
+  prevInquiries: number | null;
+  /** 登録（LINE友だち追加）。登録という概念が無い受け皿は null */
+  registrations: number | null;
+  won: number;
+  wonAmount: number;
+  measured: boolean;
+};
+
+export type TypeRow = {
+  key: string;
+  label: string;
+  value: number;
   target: number | null;
 };
 
-export async function getGoals(period = currentPeriod()): Promise<GoalRow[]> {
-  const measured = await measuredMetrics();
-
-  const [leadCounts, targets] = await Promise.all([
-    prisma.lead.groupBy({
-      by: ["type"],
-      _count: { _all: true },
-      where: {
-        occurredAt: {
-          gte: new Date(`${period}-01T00:00:00+09:00`),
-        },
-      },
-    }),
-    prisma.target.findMany({ where: { period } }),
-  ]);
-
-  const countByType = new Map(leadCounts.map((r) => [r.type, r._count._all]));
-  const targetByMetric = new Map(targets.map((t) => [t.metric, t.targetValue]));
-
-  const defs: Omit<GoalRow, "actual" | "target">[] = [
-    { key: "direct_inquiry", label: "① 直客の問い合わせ", coverageMetric: "lead_direct_inquiry" },
-    { key: "agency", label: "② 代理店（有効DM）", coverageMetric: "lead_agency" },
-    { key: "line_friend", label: "③ LINE登録", coverageMetric: "lead_line" },
-  ];
-
-  return defs.map((d) => ({
-    ...d,
-    // ★計測開始を記録していない指標は「未計測」（0 ではない）
-    actual: measured.has(d.coverageMetric) ? (countByType.get(d.key) ?? 0) : null,
-    target: targetByMetric.get(d.key) ?? null,
-  }));
-}
-
-// ── 段2: ファネル ──────────────────────────────────────────────
-export type FunnelRow = {
-  key: string;
-  label: string;
-  value: number | null; // null = 未計測
-  source: "gsc" | "funnel" | "ga4";
+export type ResultView = {
+  /** 問い合わせ（LINE登録を除く）。ゴールそのもの */
+  inquiries: { value: number; prev: number; target: number | null };
+  /** LINE登録。問い合わせの手前の受け皿到達 */
+  registrations: { value: number | null; prev: number | null };
+  won: { count: number; amount: number; prevCount: number };
+  receivers: ReceiverRow[];
+  /** 直客 / 代理店（旧 Lead.type。月次目標がこの粒度で入っている） */
+  byType: TypeRow[];
+  /** 目標と比べられる期間か（暦月と一致するか） */
+  targetComparable: boolean;
 };
 
-/** 直近 N 日の GSC 実測合計（MetricSnapshot = サイト全体） */
-async function gscSum(metric: string, days: number): Promise<{ value: number; asOf: Date } | null> {
-  const latest = await prisma.metricSnapshot.findFirst({
-    where: { metric },
-    orderBy: { date: "desc" },
-    select: { date: true },
+type LeadSlim = {
+  type: string;
+  sourceType: string;
+  status: string;
+  closedAmount: unknown;
+};
+
+const amountOf = (v: unknown) => (v ? Number(v) : 0);
+
+export async function getResult(range: Range): Promise<ResultView> {
+  const [cur, prev, targets, coverages] = await Promise.all([
+    prisma.lead.findMany({
+      where: { occurredAt: { gte: range.since, lt: range.until } },
+      select: { type: true, sourceType: true, status: true, closedAmount: true },
+    }),
+    prisma.lead.findMany({
+      where: { occurredAt: { gte: range.prev.since, lt: range.prev.until } },
+      select: { type: true, sourceType: true, status: true, closedAmount: true },
+    }),
+    range.period
+      ? prisma.target.findMany({ where: { period: range.period } })
+      : Promise.resolve([]),
+    prisma.measurementCoverage.findMany({ select: { metric: true } }),
+  ]);
+
+  const covered = new Set(coverages.map((c) => c.metric));
+  const targetOf = (metric: string) => targets.find((t) => t.metric === metric)?.targetValue ?? null;
+
+  const bySource = (rows: LeadSlim[]) => {
+    const m = new Map<string, { inquiries: number; registrations: number; won: number; amount: number }>();
+    for (const r of rows) {
+      const a = m.get(r.sourceType) ?? { inquiries: 0, registrations: 0, won: 0, amount: 0 };
+      // ★登録（line_friend）と問い合わせを混ぜない
+      if (r.type === "line_friend") a.registrations += 1;
+      else a.inquiries += 1;
+      if (r.status === "won") {
+        a.won += 1;
+        a.amount += amountOf(r.closedAmount);
+      }
+      m.set(r.sourceType, a);
+    }
+    return m;
+  };
+
+  const curBySource = bySource(cur as LeadSlim[]);
+  const prevBySource = bySource(prev as LeadSlim[]);
+
+  // ★旧値 lp_form の行が残っていたら末尾に出す。黙って落とすと合計が合わない
+  const order = curBySource.has("lp_form") || prevBySource.has("lp_form")
+    ? [...SOURCE_ORDER, "lp_form"]
+    : SOURCE_ORDER;
+
+  const receivers: ReceiverRow[] = order.map((k) => {
+    const measured = covered.has(SOURCE_COVERAGE[k] ?? "");
+    const c = curBySource.get(k);
+    const p = prevBySource.get(k);
+    return {
+      key: k,
+      label: SOURCE_LABEL[k] ?? k,
+      inquiries: measured ? (c?.inquiries ?? 0) : null,
+      prevInquiries: measured ? (p?.inquiries ?? 0) : null,
+      // ★登録という概念があるのは公式LINEだけ
+      registrations: k === "line" ? (measured ? (c?.registrations ?? 0) : null) : null,
+      won: c?.won ?? 0,
+      wonAmount: c?.amount ?? 0,
+      measured,
+    };
   });
+
+  const inquiryRows = (cur as LeadSlim[]).filter((r) => r.type !== "line_friend");
+  const prevInquiryRows = (prev as LeadSlim[]).filter((r) => r.type !== "line_friend");
+  const lineMeasured = covered.has("lead_line");
+
+  const countType = (rows: LeadSlim[], type: string) => rows.filter((r) => r.type === type).length;
+
+  return {
+    inquiries: {
+      value: inquiryRows.length,
+      prev: prevInquiryRows.length,
+      // ★総数の目標は inquiries_total。旧 direct_inquiry/agency は種別の目標として下に出す
+      target: targetOf("inquiries_total"),
+    },
+    registrations: {
+      value: lineMeasured ? countType(cur as LeadSlim[], "line_friend") : null,
+      prev: lineMeasured ? countType(prev as LeadSlim[], "line_friend") : null,
+    },
+    won: {
+      count: inquiryRows.filter((r) => r.status === "won").length,
+      amount: inquiryRows
+        .filter((r) => r.status === "won")
+        .reduce((s, r) => s + amountOf(r.closedAmount), 0),
+      prevCount: prevInquiryRows.filter((r) => r.status === "won").length,
+    },
+    receivers,
+    byType: [
+      {
+        key: "direct_inquiry",
+        label: "直客",
+        value: countType(cur as LeadSlim[], "direct_inquiry"),
+        target: targetOf("direct_inquiry"),
+      },
+      {
+        key: "agency",
+        label: "代理店",
+        value: countType(cur as LeadSlim[], "agency"),
+        target: targetOf("agency"),
+      },
+    ],
+    targetComparable: range.period !== null,
+  };
+}
+
+// ── 段2: 経路の階段（記事 → 診断LP → 問い合わせ）──────────────────
+//
+// ★旧実装の誤り: GSC は「GSCの最終日から28日」、GA4 は「GA4の最終日から28日」を
+//   合計して1本のファネルに並べていた。GSCは7/20まで、GA4のLPは7/11までしか
+//   入っていないので、**別々の28日間**の数字が同じ階段に並んでいた。
+//   期間は resolveRange() で1つに決め、全段に同じ since/until を渡す。
+//
+// ★データの到達遅延は「欠測」ではない。GSCは2〜3日遅れて入るのが正常なので、
+//   各ソースの最終取得日を持って返し、画面に「〜7/20 の実測」と明示する。
+
+/** 期間内の GSC/GA4 実測合計（MetricSnapshot = サイト全体） */
+async function snapshotSum(
+  where: { metric: string } | { metric: { startsWith: string } },
+  range: Range,
+): Promise<{ value: number; asOf: Date } | null> {
+  const [agg, latest] = await Promise.all([
+    prisma.metricSnapshot.aggregate({
+      _sum: { value: true },
+      _count: { _all: true },
+      where: { ...where, date: { gte: range.since, lt: range.until } },
+    }),
+    prisma.metricSnapshot.findFirst({
+      where,
+      orderBy: { date: "desc" },
+      select: { date: true },
+    }),
+  ]);
+  // ★その指標の行が1つも無いのは 0 ではなく未計測（§3）
   if (!latest) return null;
-  const since = new Date(latest.date);
-  since.setDate(since.getDate() - (days - 1));
-  const agg = await prisma.metricSnapshot.aggregate({
-    _sum: { value: true },
-    where: { metric, date: { gte: since, lte: latest.date } },
-  });
+  // 期間内に1行も無い場合も「0件」ではなく実測ゼロとして返す（計測自体は生きている）
   return { value: Math.round(agg._sum.value ?? 0), asOf: latest.date };
 }
 
-async function funnelStepCount(step: string): Promise<number> {
-  return prisma.funnelEvent.count({ where: { step: step as never } });
+async function funnelStepCount(step: string, range: Range): Promise<number> {
+  return prisma.funnelEvent.count({
+    where: { step: step as never, occurredAt: { gte: range.since, lt: range.until } },
+  });
 }
 
-/**
- * 診断LPの実測（GA4・直近28日）。
- *
- * ★自前タグ（FunnelEvent）ではなく GA4 を使う理由
- *   自前タグは記事側に入っておらず FunnelEvent は0件のままだった。
- *   一方 LP には lp_view / lp_cta_click / lp_form_submit のイベントが
- *   既に入っていて、GA4 に実データがある。無い計測を待つより在るものを使う。
- *
- * ★変種（a/b/c）を合算して返す。ABC の勝敗は /experiments 側の話で、
- *   段2 が見たいのは「LPまで何人来て何人送信したか」。
- */
-async function ga4LpSum(prefix: string, days = 28): Promise<number | null> {
-  const latest = await prisma.metricSnapshot.findFirst({
-    where: { metric: { startsWith: prefix } },
-    orderBy: { date: "desc" },
-    select: { date: true },
-  });
-  // ★1行も無いのは 0 ではなく未計測（§3）
-  if (!latest) return null;
-  const since = new Date(latest.date);
-  since.setDate(since.getDate() - (days - 1));
-  const agg = await prisma.metricSnapshot.aggregate({
-    _sum: { value: true },
-    where: { metric: { startsWith: prefix }, date: { gte: since, lte: latest.date } },
-  });
-  return Math.round(agg._sum.value ?? 0);
-}
-
-export type FunnelView = {
-  rows: FunnelRow[];
-  asOf: Date | null;
-  /** 隣接段間の残存率（前段=100%基準）。null は未計測を含む区間 */
-  retention: (number | null)[];
-  /** 最大ドロップ地点の row index（§4.1「最大ドロップを明示」）。null=判定不可 */
-  biggestDropIndex: number | null;
+export type FunnelView = StageFlow & {
+  /** 各ソースの最終取得日。反映遅れを画面に出すために持つ */
+  asOf: { gsc: Date | null; ga4: Date | null };
+  /** 未計測のまま残っている段の数 */
+  unmeasured: number;
 };
 
-export async function getFunnel(): Promise<FunnelView> {
+export async function getFunnel(range: Range): Promise<FunnelView> {
   const measured = await measuredMetrics();
   const funnelMeasured = measured.has("funnel");
 
-  const [impr, clicks] = await Promise.all([
-    gscSum("impressions", 28),
-    gscSum("clicks", 28),
+  const [impr, clicks, lpView, lpCtaClick, submit] = await Promise.all([
+    snapshotSum({ metric: "impressions" }, range),
+    snapshotSum({ metric: "clicks" }, range),
+    // ★LPの変種（a/b/c）は合算。ABCの勝敗は /experiments の話で、
+    //   ここが見たいのは「LPまで何人来て何人送信したか」
+    snapshotSum({ metric: { startsWith: "lp_view_" } }, range),
+    snapshotSum({ metric: { startsWith: "lp_cta_click_" } }, range),
+    snapshotSum({ metric: { startsWith: "lp_form_submit_" } }, range),
   ]);
 
-  // 記事側のCTA表示/クリックは自前タグ（FunnelEvent）。まだ動いていない
+  // 記事側のCTA表示/クリックは自前タグ（FunnelEvent）。本番未設置
   const [ctaView, ctaClick] = funnelMeasured
-    ? await Promise.all([funnelStepCount("cta_view"), funnelStepCount("cta_click")])
+    ? await Promise.all([funnelStepCount("cta_view", range), funnelStepCount("cta_click", range)])
     : [null, null];
 
-  // LP到達・送信は GA4 の実測（lp_view_* / lp_form_submit_*）
-  const [lpView, lpCtaClick, submit] = await Promise.all([
-    ga4LpSum("lp_view_"),
-    ga4LpSum("lp_cta_click_"),
-    ga4LpSum("lp_form_submit_"),
-  ]);
-  // ★フォーム到達だけは計測イベントが無い。0 ではなく未計測として残す
-  const formView = null;
-
-  const rows: FunnelRow[] = [
-    { key: "impressions", label: "表示", value: impr?.value ?? null, source: "gsc" },
-    { key: "clicks", label: "クリック", value: clicks?.value ?? null, source: "gsc" },
-    { key: "cta_view", label: "CTA表示", value: ctaView, source: "funnel" },
-    { key: "cta_click", label: "CTAクリック", value: ctaClick, source: "funnel" },
-    { key: "lp_view", label: "LP到達", value: lpView, source: "ga4" },
-    { key: "lp_cta_click", label: "LP内CTAクリック", value: lpCtaClick, source: "ga4" },
-    { key: "form_view", label: "フォーム到達", value: formView, source: "funnel" },
-    { key: "submit", label: "送信", value: submit, source: "ga4" },
+  const stages: Stage[] = [
+    {
+      key: "impressions",
+      label: "検索での表示",
+      value: impr?.value ?? null,
+      hint: "GSC 実測",
+      action: "上位表示できるKWを増やす（/keywords）",
+    },
+    {
+      key: "clicks",
+      label: "記事へのクリック",
+      value: clicks?.value ?? null,
+      hint: "GSC 実測",
+      action: "タイトル・説明文を書き換える（CTR改善）",
+    },
+    {
+      key: "cta_view",
+      label: "CTA表示",
+      value: ctaView,
+      hint: "記事内の計測タグ",
+      action: "CTAの位置を上げる",
+    },
+    {
+      key: "cta_click",
+      label: "CTAクリック",
+      value: ctaClick,
+      hint: "記事内の計測タグ",
+      action: "CTAの文言・形を変える",
+    },
+    {
+      key: "lp_view",
+      label: "診断LP到達",
+      value: lpView?.value ?? null,
+      hint: "GA4 lp_view",
+      action: "記事→LPの導線を増やす",
+    },
+    {
+      key: "lp_cta_click",
+      label: "LP内CTAクリック",
+      value: lpCtaClick?.value ?? null,
+      hint: "GA4 lp_cta_click",
+      action: "LPの構成・オファーを見直す",
+    },
+    {
+      key: "submit",
+      label: "問い合わせ送信",
+      value: submit?.value ?? null,
+      hint: "GA4 lp_form_submit",
+      action: "フォームの項目を減らす",
+    },
   ];
 
-  // 隣接段間の残存率と最大ドロップ地点
-  const retention: (number | null)[] = [null];
-  let biggestDropIndex: number | null = null;
-  let worstRetention = Infinity;
-  for (let i = 1; i < rows.length; i++) {
-    const prev = rows[i - 1].value;
-    const cur = rows[i].value;
-    if (prev !== null && cur !== null && prev > 0) {
-      const r = cur / prev;
-      retention.push(r);
-      if (r < worstRetention) {
-        worstRetention = r;
-        biggestDropIndex = i;
-      }
-    } else {
-      retention.push(null);
-    }
-  }
-  return { rows, asOf: impr?.asOf ?? clicks?.asOf ?? null, retention, biggestDropIndex };
+  return {
+    ...buildFlow(stages),
+    asOf: {
+      gsc: impr?.asOf ?? clicks?.asOf ?? null,
+      ga4: lpView?.asOf ?? submit?.asOf ?? null,
+    },
+    unmeasured: stages.filter((s) => s.value === null).length,
+  };
 }
 
 // ── 段3: 買い手の質 ────────────────────────────────────────────
@@ -587,48 +712,190 @@ export type SiteTrend = {
   impressions: TrendPoint[];
   position: TrendPoint[];
   pv: TrendPoint[];
+  /** ★ゴールそのものの推移。問い合わせ件数（LINE登録を除く）/日 */
+  inquiries: TrendPoint[];
   days: number;
+  /**
+   * 反映待ちの日数（末尾）。
+   * ★GSCは2〜3日遅れて入る。その未到着分を「欠測」と書くと毎日警告が出て、
+   *   本物の欠測が埋もれる。反映待ちと欠測は分けて扱う（§3）。
+   */
+  pendingDays: number;
+  /** 期間内で本当に欠けている日数（反映待ちを除く） */
+  missingDays: number;
 };
 
-export async function getSiteTrend(days = 30, now: Date = new Date()): Promise<SiteTrend> {
-  const since = new Date(now.getTime() - days * 86400000);
-  const [snaps, pv] = await Promise.all([
+/** 各ソースの最終取得日より後は「反映待ち」。それ以前の穴が本当の欠測 */
+function countGaps(points: TrendPoint[], latestKey: string | null) {
+  let pending = 0;
+  let missing = 0;
+  for (const p of points) {
+    if (p.value !== null) continue;
+    if (latestKey === null || p.date > latestKey) pending += 1;
+    else missing += 1;
+  }
+  return { pending, missing };
+}
+
+export async function getSiteTrend(range: Range): Promise<SiteTrend> {
+  const [snaps, pv, leads, gscLatest] = await Promise.all([
     prisma.metricSnapshot.findMany({
-      where: { metric: { in: ["clicks", "impressions", "position"] }, date: { gte: since } },
+      where: {
+        metric: { in: ["clicks", "impressions", "position"] },
+        date: { gte: range.since, lt: range.until },
+      },
       select: { metric: true, value: true, date: true },
     }),
     prisma.contentMetric.groupBy({
       by: ["date"],
-      where: { metric: "pv", date: { gte: since } },
+      where: { metric: "pv", date: { gte: range.since, lt: range.until } },
       _sum: { value: true },
+    }),
+    prisma.lead.findMany({
+      where: { occurredAt: { gte: range.since, lt: range.until }, type: { not: "line_friend" } },
+      select: { occurredAt: true },
+    }),
+    prisma.metricSnapshot.findFirst({
+      where: { metric: "clicks" },
+      orderBy: { date: "desc" },
+      select: { date: true },
     }),
   ]);
 
-  const key = (d: Date) => new Date(d.getTime() + JST_OFFSET_MS).toISOString().slice(0, 10);
   const maps: Record<string, Map<string, number>> = {
     clicks: new Map(),
     impressions: new Map(),
     position: new Map(),
     pv: new Map(),
   };
-  for (const s of snaps) maps[s.metric]?.set(key(s.date), s.value);
-  for (const r of pv) maps.pv.set(key(r.date), r._sum.value ?? 0);
+  for (const s of snaps) maps[s.metric]?.set(jstDayKey(s.date), s.value);
+  for (const r of pv) maps.pv.set(jstDayKey(r.date), r._sum.value ?? 0);
 
-  const series = (name: string): TrendPoint[] => {
-    const out: TrendPoint[] = [];
-    for (let i = days - 1; i >= 0; i--) {
-      const k = key(new Date(now.getTime() - i * 86400000));
+  const keys = dayKeys(range.since, range.until);
+
+  const series = (name: string): TrendPoint[] =>
+    keys.map((k) => {
       const v = maps[name].get(k);
-      out.push({ date: k, value: v === undefined ? null : Math.round(v * 100) / 100 });
-    }
-    return out;
-  };
+      return { date: k, value: v === undefined ? null : Math.round(v * 100) / 100 };
+    });
+
+  // ★リードは「その日に0件」が事実として意味を持つ（計測は動いている）。
+  //   欠測ではないので 0 を入れる。GSC/PV の null とは扱いが違う。
+  const leadByDay = new Map<string, number>();
+  for (const l of leads) {
+    const k = jstDayKey(l.occurredAt);
+    leadByDay.set(k, (leadByDay.get(k) ?? 0) + 1);
+  }
+
+  const clicksSeries = series("clicks");
+  const gaps = countGaps(clicksSeries, gscLatest ? jstDayKey(gscLatest.date) : null);
 
   return {
-    clicks: series("clicks"),
+    clicks: clicksSeries,
     impressions: series("impressions"),
     position: series("position"),
     pv: series("pv"),
-    days,
+    inquiries: keys.map((k) => ({ date: k, value: leadByDay.get(k) ?? 0 })),
+    days: keys.length,
+    pendingDays: gaps.pending,
+    missingDays: gaps.missing,
   };
+}
+
+// ── 送客の量（期間内・経路別）────────────────────────────────────
+//
+// ★受け皿（リード）だけ見ても、増減の原因が「送客が減った」のか
+//   「受け皿が壊れた」のか分からない。送客側の量を同じ期間で並べる。
+
+export type SenderVolume = {
+  key: string;
+  label: string;
+  /** 送り出した量（表示・クリック・views など）。null = 未計測 */
+  value: number | null;
+  unit: string;
+  /** 受け皿に着いた量。null = 未計測 */
+  arrived: number | null;
+  arrivedLabel: string;
+  detailHref: string;
+  note: string;
+};
+
+export async function getSenderVolumes(range: Range): Promise<SenderVolume[]> {
+  const win = { gte: range.since, lt: range.until };
+  // ★期間内に行が無いことと、そもそも計測していないことは別。
+  //   計測開始が記録されていれば「その期間は 0 だった」が実測（§3）。
+  const measured = await measuredMetrics();
+  const anyThreadsClickMetric = await prisma.contentMetric.findFirst({
+    where: { metric: { startsWith: "threads_link_clicks_" } },
+    select: { id: true },
+  });
+
+  const [impressions, clicks, pv, threadsViews, threadsClicks] = await Promise.all([
+    snapshotSum({ metric: "impressions" }, range),
+    snapshotSum({ metric: "clicks" }, range),
+    prisma.contentMetric.aggregate({
+      _sum: { value: true },
+      _count: { _all: true },
+      where: { metric: "pv", date: win },
+    }),
+    prisma.contentMetric.aggregate({
+      _sum: { value: true },
+      _count: { _all: true },
+      where: { metric: "threads_views", date: win },
+    }),
+    prisma.contentMetric.groupBy({
+      by: ["metric"],
+      _sum: { value: true },
+      where: { metric: { startsWith: "threads_link_clicks_" }, date: win },
+    }),
+  ]);
+
+  const threadsClickTotal = threadsClicks.reduce((s, r) => s + Math.round(r._sum.value ?? 0), 0);
+
+  return [
+    {
+      key: "media",
+      label: "メディア（検索流入）",
+      value: impressions?.value ?? null,
+      unit: "表示",
+      arrived: clicks?.value ?? null,
+      arrivedLabel: "記事クリック",
+      detailHref: "/content",
+      note: "GSC 実測",
+    },
+    {
+      key: "article",
+      label: "記事（閲覧）",
+      value: measured.has("pv") || pv._count._all > 0 ? Math.round(pv._sum.value ?? 0) : null,
+      unit: "PV",
+      arrived: null,
+      arrivedLabel: "記事→受け皿",
+      detailHref: "/content",
+      note: "GA4 実測。記事→受け皿のクリックは未計装（CTAタグが本番未設置）",
+    },
+    {
+      key: "threads",
+      label: "Threads",
+      value:
+        measured.has("threads_post_metrics") || threadsViews._count._all > 0
+          ? Math.round(threadsViews._sum.value ?? 0)
+          : null,
+      unit: "views",
+      // ★リダイレクタが1度でも記録していれば、期間内0件は実測ゼロ（未計測ではない）
+      arrived: anyThreadsClickMetric ? threadsClickTotal : null,
+      arrivedLabel: "リンククリック",
+      detailHref: "/threads",
+      note: "/r/ 経由のクリックのみ計測（LINE・LP・記事）",
+    },
+    {
+      key: "hp",
+      label: "HP",
+      value: null,
+      unit: "セッション",
+      arrived: null,
+      arrivedLabel: "フォーム到達",
+      detailHref: "/leads",
+      note: "HPのGA4を未接続。テーマ内の lin.ee も生リンクのため経路が取れない",
+    },
+  ];
 }

@@ -1,6 +1,8 @@
 import { getLpData } from "@/lib/lp";
 import { TrendChart } from "@/components/chart";
 import { Stages } from "@/components/stages";
+import { RangePicker } from "@/components/range-picker";
+import { resolveRange } from "@/lib/period";
 
 // LP（診断LP・代理店LP）— 設計書 §3.8.6 / PRJ-034
 //
@@ -10,19 +12,27 @@ export const dynamic = "force-dynamic";
 
 const jaDate = (d: Date) => d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" });
 
-export default async function LpPage() {
-  const { diagnosis, agency, days } = await getLpData();
+export default async function LpPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const range = resolveRange(await searchParams);
+  const { diagnosis, agency, days } = await getLpData(range);
 
   // LP到達率（記事PV基準）。cowork の診断ロジックと同じ 0.5% を目安にする
   const reachRate = diagnosis.mediaPv > 0 ? diagnosis.totalUsers / diagnosis.mediaPv : null;
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="mb-5">
-        <h1 className="text-xl font-bold tracking-tight">LP</h1>
-        <p className="mt-0.5 text-[13px] text-[var(--muted)]">
-          直近{days}日・診断LP（自社）と代理店LP（外部ドメイン）は評価軸が違うので分けて出す
-        </p>
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">LP</h1>
+          <p className="mt-0.5 text-[13px] text-[var(--muted)]">
+            {range.label}・診断LP（自社）と代理店LP（外部ドメイン）は評価軸が違うので分けて出す
+          </p>
+        </div>
+        <RangePicker range={range} basePath="/lp" />
       </div>
 
       {/* ── 診断LP ───────────────────────────────── */}
@@ -32,6 +42,7 @@ export default async function LpPage() {
         stages={diagnosis.stages}
         transitions={diagnosis.transitions}
         biggestDropIndex={diagnosis.biggestDropIndex}
+        comparableSegments={diagnosis.comparableSegments}
       />
 
       <div className="my-3 flex flex-wrap gap-x-6 gap-y-1 text-[12px] text-[var(--muted)]">

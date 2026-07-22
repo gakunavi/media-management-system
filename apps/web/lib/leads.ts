@@ -3,6 +3,7 @@
 // ★個人情報は decryptIfEncrypted → maskContact で必ずマスキングして返す（§16.2）。
 //   生の氏名・連絡先を画面やログに出さない。
 import { prisma, type Prisma } from "@mms/db";
+import type { Range } from "./period";
 import { decryptIfEncrypted, maskContact } from "./crypto";
 
 export type LeadListRow = {
@@ -31,8 +32,9 @@ export function firstResponseMinutes(row: {
   return Math.round((row.firstResponseAt.getTime() - row.occurredAt.getTime()) / 60000);
 }
 
-export async function getLeads(): Promise<LeadListRow[]> {
+export async function getLeads(range?: Range): Promise<LeadListRow[]> {
   const rows = await prisma.lead.findMany({
+    where: range ? { occurredAt: { gte: range.since, lt: range.until } } : undefined,
     orderBy: { occurredAt: "desc" },
     include: { firstTouchContent: { select: { externalId: true } } },
   });
@@ -67,8 +69,9 @@ export type LeadStats = {
   total: number;
 };
 
-export async function getLeadStats(): Promise<LeadStats> {
+export async function getLeadStats(range?: Range): Promise<LeadStats> {
   const rows = await prisma.lead.findMany({
+    where: range ? { occurredAt: { gte: range.since, lt: range.until } } : undefined,
     select: {
       type: true,
       status: true,
@@ -198,7 +201,7 @@ export type SourceBreakdown = {
 };
 
 /** その経路の計測が始まっているか。MeasurementCoverage の metric 名 */
-const SOURCE_COVERAGE: Record<string, string> = {
+export const SOURCE_COVERAGE: Record<string, string> = {
   form: "lead_direct_inquiry",
   lp_diagnosis: "lp_form_submit_b",
   lp_agency: "agency_lp_inquiries",
@@ -209,21 +212,21 @@ const SOURCE_COVERAGE: Record<string, string> = {
   email: "lead_direct_inquiry",
 };
 
-export async function getSourceBreakdown(
-  days = 30,
-  now: Date = new Date(),
-): Promise<SourceBreakdown> {
-  const since = new Date(now.getTime() - days * 86400000);
+export async function getSourceBreakdown(range: Range): Promise<SourceBreakdown> {
+  const win = { gte: range.since, lt: range.until };
 
   const [leads, coverages, lineFollowObserved, clickAgg] = await Promise.all([
+    // ★期間で絞る。旧実装は全期間のリードを数えていて、画面の「直近30日」という
+    //   見出しと中身が食い違っていた
     prisma.lead.findMany({
+      where: { occurredAt: win },
       select: { sourceType: true, status: true, closedAmount: true },
     }),
     prisma.measurementCoverage.findMany({ select: { metric: true } }),
-    prisma.lineFriend.count(),
+    prisma.lineFriend.count({ where: { addedAt: win } }),
     prisma.contentMetric.aggregate({
       _sum: { value: true },
-      where: { metric: "threads_link_clicks_line", date: { gte: since } },
+      where: { metric: "threads_link_clicks_line", date: win },
     }),
   ]);
 
@@ -272,6 +275,6 @@ export async function getSourceBreakdown(
     // ★Webhook 設置以降しか観測していない。0 件なら「まだ観測していない」
     lineFriends: lineFollowObserved > 0 ? lineFollowObserved : null,
     threadsToLineClicks: Math.round(clickAgg._sum.value ?? 0),
-    days,
+    days: range.days,
   };
 }

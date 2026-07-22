@@ -10,13 +10,9 @@ import {
   type SourceRow,
 } from "@/lib/leads";
 import { LeadForm } from "./lead-form";
-import { TrendChart } from "@/components/chart";
-import {
-  getAcquisitionMatrix,
-  SENDERS,
-  RECEIVERS,
-  type AcquisitionMatrix,
-} from "@/lib/acquisition";
+import { resolveRange } from "@/lib/period";
+import { RangePicker } from "@/components/range-picker";
+import Link from "next/link";
 
 // リード一覧（設計書 §4.2 /leads・§14.3）
 export const dynamic = "force-dynamic";
@@ -38,24 +34,31 @@ function statusBadge(status: string): string {
   }
 }
 
-export default async function LeadsPage() {
-  const [leads, stats, sources, matrix] = await Promise.all([
-    getLeads(),
-    getLeadStats(),
-    getSourceBreakdown(),
-    getAcquisitionMatrix(),
+export default async function LeadsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const range = resolveRange(await searchParams);
+  const [leads, stats, sources] = await Promise.all([
+    getLeads(range),
+    getLeadStats(range),
+    getSourceBreakdown(range),
   ]);
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight">リード</h1>
           <p className="mt-0.5 text-[13px] text-[var(--muted)]">
-            問い合わせ・成約の一覧。★最優先は直客（§14.0）
+            問い合わせ・成約の一覧（{range.label}）。★最優先は直客（§14.0）
           </p>
         </div>
-        <LeadForm />
+        <div className="flex flex-wrap items-center gap-3">
+          <RangePicker range={range} basePath="/leads" />
+          <LeadForm />
+        </div>
       </div>
 
       {/* サマリー */}
@@ -75,7 +78,6 @@ export default async function LeadsPage() {
       </div>
 
       <SourcePanel data={sources} />
-      <MatrixPanel m={matrix} />
 
       {/* 成約サマリー */}
       {stats.won > 0 && (
@@ -168,6 +170,12 @@ export default async function LeadsPage() {
       <p className="mt-3 text-[12px] text-[var(--faint)]">
         個人情報（会社名・連絡先・メモ）は AES-256-GCM で暗号化して保存し、画面ではマスキング表示（§16.2）。
         商談以降は m2（ML営業管理システム）が正（§3.8.4）。
+        <br />
+        送客 × 受け皿のマトリクス（どのマスが測れていないか）は{" "}
+        <Link href="/?tab=routes" className="text-[var(--accent)] hover:underline">
+          ダッシュボードの「経路」タブ
+        </Link>
+        に移しました。
       </p>
     </div>
   );
@@ -251,7 +259,7 @@ function SourcePanel({ data }: { data: SourceBreakdown }) {
         効いているかは、この並びでしか判断できない。
         <br />
         ★このシステムのゴールは<strong>問い合わせ数を増やすこと</strong>。
-        PV・クリック・到達はそのための手前の数字で、下の「送客 × 受け皿」で見る。
+        PV・クリック・到達はそのための手前の数字で、ダッシュボードの「経路」タブで見る。
       </p>
       <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
         <div className="overflow-x-auto">
@@ -291,97 +299,15 @@ function SourcePanel({ data }: { data: SourceBreakdown }) {
           )}
           <span className="text-[var(--faint)]">
             {" "}
-            ※MMSが数えるのは Webhook 設置以降の登録のみ
+            ※MMSが数えるのは Webhook 設置以降・この期間内の登録のみ
           </span>
         </span>
         <span>
           Threads → LINE の送客:{" "}
           <strong className="tnum">{data.threadsToLineClicks}</strong>
-          <span className="text-[var(--faint)]"> クリック（直近{data.days}日・経路の近似）</span>
+          <span className="text-[var(--faint)]"> クリック（{data.days}日・経路の近似）</span>
         </span>
       </div>
-    </section>
-  );
-}
-
-/**
- * 送客 × 受け皿のマトリクス。
- *
- * ★目的は「どこが埋まっていないか」を出すこと。空欄を 0 で埋めると
- *   「送客していない」のか「測っていない」のか分からなくなる（§3）。
- * ★未計測（直せる）と測定不能（直せない）を分ける。混ぜると打ち手を誤る。
- */
-function MatrixPanel({ m }: { m: AcquisitionMatrix }) {
-  const at = (sender: string, receiver: string) =>
-    m.cells.find((c) => c.sender === sender && c.receiver === receiver);
-
-  return (
-    <section className="mb-5">
-      <h2 className="mb-2 text-[14px] font-semibold">
-        送客 × 受け皿（直近{m.days}日）
-      </h2>
-      <p className="mb-2 text-[12px] text-[var(--faint)]">
-        計測できているマス <strong className="tnum">{m.coverage.measured}</strong> /{" "}
-        {m.coverage.target}（測定不能なマスは分母から除外）。
-        <br />
-        ★空欄を 0 で埋めない。「送客していない」のか「測っていない」のかが
-        分からなくなる。<strong>未計測は直せるが、測定不能は直せない</strong>ので分けて出す。
-      </p>
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="border-b border-[var(--border)] bg-[var(--panel-2)] text-left text-[12px] text-[var(--muted)]">
-                <th className="whitespace-nowrap px-3 py-2 font-medium">送客 ＼ 受け皿</th>
-                {RECEIVERS.map((r) => (
-                  <th key={r.key} className="whitespace-nowrap px-3 py-2 text-right font-medium">
-                    {r.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {SENDERS.map((s) => (
-                <tr key={s.key} className="border-b border-[var(--border)]">
-                  <Td className="font-medium">{s.label}</Td>
-                  {RECEIVERS.map((r) => {
-                    const c = at(s.key, r.key);
-                    return (
-                      <Td key={r.key} className="text-right">
-                        <span title={c?.reason}>
-                          {c?.state === "measured" ? (
-                            <span className="tnum font-medium">
-                              {(c.value ?? 0).toLocaleString("ja-JP")}
-                            </span>
-                          ) : c?.state === "not_measured" ? (
-                            <span className="text-[11px] text-[var(--warn)]">未計測</span>
-                          ) : c?.state === "unmeasurable" ? (
-                            <span className="text-[11px] text-[var(--faint)]">測定不能</span>
-                          ) : (
-                            <span className="text-[11px] text-[var(--faint)]">—</span>
-                          )}
-                        </span>
-                      </Td>
-                    );
-                  })}
-                </tr>
-              ))}
-              <tr className="bg-[var(--panel-2)] font-semibold">
-                <Td>リード（実績）</Td>
-                {RECEIVERS.map((r) => (
-                  <Td key={r.key} className="text-right">
-                    <span className="tnum">{m.receiverTotals[r.key] ?? 0}</span>
-                  </Td>
-                ))}
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <p className="mt-2 text-[12px] text-[var(--faint)]">
-        ★上段は「送った数（クリック・到達）」、最下段は「着地したリード数」。単位が違うので
-        縦に足し引きしないこと。マスにカーソルを合わせると、その状態の理由が出ます。
-      </p>
     </section>
   );
 }

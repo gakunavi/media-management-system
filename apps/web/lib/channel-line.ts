@@ -18,21 +18,13 @@
 // ★段ごとに「未計測」を持つ。0 と混ぜると、壊れている計測が
 //   「成果ゼロ」に化ける（診断LPの lp_form_submit で実際に起きた）。
 import { prisma } from "@mms/db";
-
-const DAY = 86400000;
+import { buildFlow, type Stage as SharedStage } from "./stages";
+import { dayKeys, jstDayKey, type Range } from "./period";
 
 export type StageKey = "sent" | "followed" | "replied" | "inquired" | "won";
 
-export type Stage = {
-  key: StageKey;
-  label: string;
-  /** null = 未計測（§3）。0 とは意味が違う */
-  value: number | null;
-  /** その段が何を意味するか */
-  hint: string;
-  /** 落ちていたときに打つ手 */
-  action: string;
-};
+/** 階段の1段。定義は lib/stages.ts（全画面で同じ形にそろえる） */
+export type Stage = SharedStage;
 
 export type TrendPoint = { date: string; value: number | null };
 
@@ -49,6 +41,8 @@ export type LineChannel = {
   transitions: (number | null)[];
   /** 最大ドロップの段 index（transitions 内）。null は判定不可 */
   biggestDropIndex: number | null;
+  /** 転換率を出せた区間の数。1以下なら落ち込みは比較できない */
+  comparableSegments: number;
   trends: {
     sent: TrendPoint[];
     followed: TrendPoint[];
@@ -61,7 +55,7 @@ export type LineChannel = {
   notMeasured: string[];
 };
 
-const ymd = (d: Date) => new Date(d.getTime() + 9 * 3600000).toISOString().slice(0, 10);
+const ymd = jstDayKey;
 
 /**
  * 日次の系列。
@@ -71,38 +65,35 @@ const ymd = (d: Date) => new Date(d.getTime() + 9 * 3600000).toISOString().slice
  */
 function series(
   map: Map<string, number>,
-  days: number,
-  now: Date,
+  keys: string[],
   startedAt: Date | null,
 ): TrendPoint[] {
-  const out: TrendPoint[] = [];
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(now.getTime() - i * DAY);
-    const k = ymd(d);
+  return keys.map((k) => {
     const measured = startedAt !== null && ymd(startedAt) <= k;
-    out.push({ date: k, value: measured ? (map.get(k) ?? 0) : null });
-  }
-  return out;
+    return { date: k, value: measured ? (map.get(k) ?? 0) : null };
+  });
 }
 
-export async function getLineChannel(days = 30, now: Date = new Date()): Promise<LineChannel> {
-  const since = new Date(now.getTime() - days * DAY);
+export async function getLineChannel(range: Range): Promise<LineChannel> {
+  // ★期間は画面（resolveRange）が決める。lib が勝手に「直近30日」を決めない
+  const win = { gte: range.since, lt: range.until };
+  const keys = dayKeys(range.since, range.until);
 
   const [clickRows, friends, inbounds, leads, coverages] = await Promise.all([
     prisma.contentMetric.findMany({
-      where: { metric: "threads_link_clicks_line", date: { gte: since } },
+      where: { metric: "threads_link_clicks_line", date: win },
       select: { value: true, date: true, contentItem: { select: { note: true, id: true } } },
     }),
     prisma.lineFriend.findMany({
-      where: { addedAt: { gte: since } },
+      where: { addedAt: win },
       select: { addedAt: true },
     }),
     prisma.lineInbound.findMany({
-      where: { receivedAt: { gte: since } },
+      where: { receivedAt: win },
       select: { receivedAt: true },
     }),
     prisma.lead.findMany({
-      where: { sourceType: "line", occurredAt: { gte: since } },
+      where: { sourceType: "line", occurredAt: win },
       select: { occurredAt: true, status: true, closedAmount: true },
     }),
     prisma.measurementCoverage.findMany({ select: { metric: true, startedAt: true } }),
@@ -164,25 +155,8 @@ export async function getLineChannel(days = 30, now: Date = new Date()): Promise
     },
   ];
 
-  // ── 段間の転換率と最大ドロップ ──
-  const transitions: (number | null)[] = [null];
-  let biggestDropIndex: number | null = null;
-  let worst = Infinity;
-  for (let i = 1; i < stages.length; i++) {
-    const prev = stages[i - 1].value;
-    const cur = stages[i].value;
-    // ★どちらかが未計測なら率を出さない。0除算も避ける（§16.5）
-    if (prev !== null && cur !== null && prev > 0) {
-      const r = cur / prev;
-      transitions.push(r);
-      if (r < worst) {
-        worst = r;
-        biggestDropIndex = i;
-      }
-    } else {
-      transitions.push(null);
-    }
-  }
+  // ── 段間の転換率と最大ドロップ（判定は lib/stages.ts に集約）──
+  const { transitions, biggestDropIndex, comparableSegments } = buildFlow(stages);
 
   // ── 推移 ──
   const sentByDay = new Map<string, number>();
@@ -216,15 +190,16 @@ export async function getLineChannel(days = 30, now: Date = new Date()): Promise
   if (!lineMeasured) notMeasured.push("② 登録・③ 反応（LINE Webhook が未設置）");
 
   return {
-    days,
+    days: range.days,
     stages,
     transitions,
     biggestDropIndex,
+    comparableSegments,
     trends: {
-      sent: series(sentByDay, days, now, sentStart),
-      followed: series(followedByDay, days, now, lineStart),
+      sent: series(sentByDay, keys, sentStart),
+      followed: series(followedByDay, keys, lineStart),
       // 問い合わせは手入力でも入るので、期間全体を計測済みとして扱う
-      inquired: series(inquiredByDay, days, now, since),
+      inquired: series(inquiredByDay, keys, range.since),
     },
     byFormat,
     wonAmount,

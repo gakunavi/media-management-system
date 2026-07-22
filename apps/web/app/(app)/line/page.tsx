@@ -1,6 +1,8 @@
 import { getLineChannel } from "@/lib/channel-line";
 import { TrendChart } from "@/components/chart";
 import { Stages } from "@/components/stages";
+import { RangePicker } from "@/components/range-picker";
+import { resolveRange } from "@/lib/period";
 
 // 公式LINE（設計書 §4.1 段1③）
 //
@@ -8,16 +10,24 @@ import { Stages } from "@/components/stages";
 //   どの段で落ちているかを見る画面。落ちている段が分かれば打ち手が決まる。
 export const dynamic = "force-dynamic";
 
-export default async function LinePage() {
-  const ch = await getLineChannel();
+export default async function LinePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const range = resolveRange(await searchParams);
+  const ch = await getLineChannel(range);
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="mb-5">
-        <h1 className="text-xl font-bold tracking-tight">公式LINE</h1>
-        <p className="mt-0.5 text-[13px] text-[var(--muted)]">
-          直近{ch.days}日・送客 → 登録 → 反応 → 問い合わせ → 成約
-        </p>
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">公式LINE</h1>
+          <p className="mt-0.5 text-[13px] text-[var(--muted)]">
+            {range.label}・送客 → 登録 → 反応 → 問い合わせ → 成約
+          </p>
+        </div>
+        <RangePicker range={range} basePath="/line" />
       </div>
 
       {ch.notMeasured.length > 0 && (
@@ -33,6 +43,7 @@ export default async function LinePage() {
         stages={ch.stages}
         transitions={ch.transitions}
         biggestDropIndex={ch.biggestDropIndex}
+        comparableSegments={ch.comparableSegments}
       />
 
       {ch.stages[4].value !== null && ch.stages[4].value > 0 && (

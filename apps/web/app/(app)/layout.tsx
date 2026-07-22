@@ -18,8 +18,14 @@ export default async function AppLayout({
       <div className="pl-60">
         {/* トップバー */}
         <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-[var(--border)] bg-[var(--panel)]/80 px-6 backdrop-blur">
+          {/* ★年月を直書きしない。月が変わっても直らず、古い月を見ていると誤認する */}
           <div className="text-[13px] text-[var(--muted)]">
-            節税総研メディア ・ 2026年07月
+            節税総研メディア ・{" "}
+            {new Date().toLocaleDateString("ja-JP", {
+              timeZone: "Asia/Tokyo",
+              year: "numeric",
+              month: "long",
+            })}
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden text-[13px] text-[var(--muted)] sm:inline">

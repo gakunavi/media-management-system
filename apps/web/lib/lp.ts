@@ -11,6 +11,8 @@
 //   診断LP … 自社ドメイン。記事から送客し、問い合わせを取る
 //   代理店LP … 外部ドメイン（防災防犯ライト）。代理店に配布したコード別の流入
 import { prisma } from "@mms/db";
+import { buildFlow, type Stage as SharedStage } from "./stages";
+import { dayKeys, jstDayKey, type Range } from "./period";
 
 const DAY = 86400000;
 
@@ -25,16 +27,8 @@ export type DiagnosisVariant = {
 
 export type DailyPoint = { date: string; value: number };
 
-/** 階段の1段。/line と同じ形にそろえる（読み方を毎回覚え直さないため） */
-export type LpStage = {
-  key: string;
-  label: string;
-  /** null = 未計測（§3）。0 とは意味が違う */
-  value: number | null;
-  hint: string;
-  /** 落ちていたときに打つ手 */
-  action: string;
-};
+/** 階段の1段。定義は lib/stages.ts（読み方を毎回覚え直さないため全画面で共通） */
+export type LpStage = SharedStage;
 
 export type DiagnosisLp = {
   variants: DiagnosisVariant[];
@@ -44,6 +38,8 @@ export type DiagnosisLp = {
   stages: LpStage[];
   transitions: (number | null)[];
   biggestDropIndex: number | null;
+  /** 転換率を出せた区間の数。1以下なら落ち込みは比較できない */
+  comparableSegments: number;
   /** LP経由のリード（Lead.sourceType=lp_diagnosis） */
   leads: number;
   won: number;
@@ -99,32 +95,30 @@ const VARIANT_LABEL: Record<string, string> = {
 const MIN_USERS_PER_VARIANT = 100;
 const MIN_SUBMITS_PER_VARIANT = 10;
 
-function ymd(d: Date): string {
-  return new Date(d.getTime() + 9 * 3600000).toISOString().slice(0, 10);
-}
-
-export async function getLpData(days = 30, now: Date = new Date()): Promise<LpData> {
-  const since = new Date(now.getTime() - days * DAY);
+export async function getLpData(range: Range, now: Date = new Date()): Promise<LpData> {
+  // ★期間は画面（resolveRange）が決める。lib が勝手に「直近30日」を決めない
+  const days = range.days;
+  const win = { gte: range.since, lt: range.until };
 
   const [snaps, pvAgg, agencyRows, diagLeads, agencyLeads] = await Promise.all([
     prisma.metricSnapshot.findMany({
-      where: { metric: { startsWith: "lp_" }, date: { gte: since } },
+      where: { metric: { startsWith: "lp_" }, date: win },
       select: { metric: true, value: true, date: true },
     }),
     prisma.contentMetric.aggregate({
       _sum: { value: true },
-      where: { metric: "pv", date: { gte: since } },
+      where: { metric: "pv", date: win },
     }),
     prisma.agencyLpDaily.findMany({
-      where: { date: { gte: since } },
+      where: { date: win },
       select: { agencyCode: true, visits: true, inquiries: true, date: true },
     }),
     prisma.lead.findMany({
-      where: { sourceType: "lp_diagnosis", occurredAt: { gte: since } },
+      where: { sourceType: "lp_diagnosis", occurredAt: win },
       select: { status: true, closedAmount: true },
     }),
     prisma.lead.findMany({
-      where: { sourceType: "lp_agency", occurredAt: { gte: since } },
+      where: { sourceType: "lp_agency", occurredAt: win },
       select: { status: true, closedAmount: true },
     }),
   ]);
@@ -139,7 +133,7 @@ export async function getLpData(days = 30, now: Date = new Date()): Promise<LpDa
     const cur = byVariant.get(v) ?? { users: 0, views: 0, submits: 0 };
     if (kind === "users") {
       cur.users += s.value;
-      const k = ymd(s.date);
+      const k = jstDayKey(s.date);
       dailyUsers.set(k, (dailyUsers.get(k) ?? 0) + s.value);
     } else if (kind === "view") cur.views += s.value;
     else if (kind === "form_submit") cur.submits += s.value;
@@ -195,7 +189,7 @@ export async function getLpData(days = 30, now: Date = new Date()): Promise<LpDa
     if (r.date < cur.first) cur.first = r.date;
     if (r.date > cur.last) cur.last = r.date;
     byCode.set(r.agencyCode, cur);
-    const k = ymd(r.date);
+    const k = jstDayKey(r.date);
     agencyDaily.set(k, (agencyDaily.get(k) ?? 0) + r.visits);
   }
 
@@ -210,14 +204,9 @@ export async function getLpData(days = 30, now: Date = new Date()): Promise<LpDa
     }))
     .sort((a, b) => b.visits - a.visits);
 
-  const toSeries = (m: Map<string, number>): DailyPoint[] => {
-    const out: DailyPoint[] = [];
-    for (let i = days - 1; i >= 0; i--) {
-      const k = ymd(new Date(now.getTime() - i * DAY));
-      out.push({ date: k, value: Math.round(m.get(k) ?? 0) });
-    }
-    return out;
-  };
+  const keys = dayKeys(range.since, range.until);
+  const toSeries = (m: Map<string, number>): DailyPoint[] =>
+    keys.map((k) => ({ date: k, value: Math.round(m.get(k) ?? 0) }));
 
   // ── 診断LPの階段（記事PV → 到達 → 送信 → 問い合わせ → 成約）──
   const mediaPv = Math.round(pvAgg._sum.value ?? 0);
@@ -265,24 +254,8 @@ export async function getLpData(days = 30, now: Date = new Date()): Promise<LpDa
     },
   ];
 
-  const transitions: (number | null)[] = [null];
-  let biggestDropIndex: number | null = null;
-  let worst = Infinity;
-  for (let i = 1; i < stages.length; i++) {
-    const prev = stages[i - 1].value;
-    const cur = stages[i].value;
-    // ★どちらかが未計測なら率を出さない（§16.5）
-    if (prev !== null && cur !== null && prev > 0) {
-      const r = cur / prev;
-      transitions.push(r);
-      if (r < worst) {
-        worst = r;
-        biggestDropIndex = i;
-      }
-    } else {
-      transitions.push(null);
-    }
-  }
+  // 転換率と最大ドロップの判定は lib/stages.ts に集約
+  const { transitions, biggestDropIndex, comparableSegments } = buildFlow(stages);
 
   return {
     days,
@@ -293,6 +266,7 @@ export async function getLpData(days = 30, now: Date = new Date()): Promise<LpDa
       stages,
       transitions,
       biggestDropIndex,
+      comparableSegments,
       leads: diagLeads.length,
       won: diagWon,
       wonAmount: diagWonAmount,

@@ -64,7 +64,8 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-[var(--sb-border)] px-4 py-3 text-[10px] text-[var(--sb-muted)]">
-        獲得3ゴール：直客・代理店・LINE
+        {/* ★ゴールは問い合わせ数。構造は 送客 → 受け皿 → リード → 成約（2026-07-22） */}
+        送客 → 受け皿 → 問い合わせ
       </div>
     </aside>
   );
