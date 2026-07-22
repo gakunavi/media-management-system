@@ -95,6 +95,10 @@ export function RoutesPanel({
           計測できているマス <strong className="tnum">{matrix.coverage.measured}</strong> /{" "}
           {matrix.coverage.target}（測定不能なマスは分母から除外）。
           <strong>未計測は直せるが、測定不能は直せない</strong>ので分けて出す。
+          <br />
+          「手」は自動取得できないがヒアリングで記録する経路（電話・info メール）。
+          <strong>自動で取れないことと測れないことは別</strong>で、リード登録の
+          「きっかけ」を埋めれば施策の成果として数えられる。
         </p>
         <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
           <table className="w-full text-[13px]">
@@ -120,6 +124,12 @@ export function RoutesPanel({
                           {c?.state === "measured" ? (
                             <span className="tnum font-medium">
                               {(c.value ?? 0).toLocaleString("ja-JP")}
+                            </span>
+                          ) : c?.state === "manual" ? (
+                            // ★手入力（ヒアリング）で記録する経路。0 は実測ゼロ
+                            <span className="tnum font-medium text-[var(--muted)]">
+                              {(c.value ?? 0).toLocaleString("ja-JP")}
+                              <span className="ml-0.5 text-[10px] text-[var(--faint)]">手</span>
                             </span>
                           ) : c?.state === "not_measured" ? (
                             <span className="text-[11px] text-[var(--warn)]">未計測</span>

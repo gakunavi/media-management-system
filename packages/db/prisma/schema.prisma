@@ -173,6 +173,33 @@ enum LeadStatus {
   lost
 }
 
+/// 送客元（どの施策に触れて問い合わせに至ったか）。2026-07-23 石井さん確定。
+///
+/// ★受け皿（sourceType）と直交する軸。受け皿は「どこで受けたか」、
+///   こちらは「何がきっかけか」。送客 × 受け皿のマトリクス（§3.8.3）の
+///   送客側にあたる。
+///
+/// ★電話・info メールは自動取得できないが、**測定不能ではない**。
+///   いきなり連絡してくる人はほぼおらず、何かの施策に触れている。
+///   ヒアリングして記録すれば、電話もメールも施策の成果として数えられる。
+///   「取れない」と「聞いていない」を混同しない（§3）。
+enum LeadOrigin {
+  /// メディア記事（記事が特定できるときは firstTouchContentId も埋める）
+  media_article
+  threads
+  line
+  /// 診断LP
+  lp_diagnosis
+  /// 商品LP（防災防犯ライト・代理店経由の送客）
+  lp_product
+  /// HP（記事以外のページ）
+  hp
+  /// 紹介・既存顧客・名刺交換など、施策外の接点
+  referral
+  /// 聞けていない。★「施策に触れていない」ではない
+  unknown
+}
+
 /// §3 Lead.sourceType（§3.8.3）— phone_manual は provenance=declared として扱う
 /// 受け皿（問い合わせがどこに着地したか）。2026-07-22 に石井さんと整理:
 ///   LINE / 診断LP / 代理店LP / HPの問い合わせ / 電話 / Threads DM / info メール直接
@@ -1009,6 +1036,8 @@ model Lead {
   closedAmount Decimal?       @db.Decimal(14, 2)
   closedAt     DateTime?
   sourceType   LeadSourceType
+  /// 送客元（きっかけ）。★受け皿と直交する軸。電話・メールでも聞けば埋まる
+  origin       LeadOrigin     @default(unknown)
 
   // ── §3.8.4 m2 連携（★商談以降は m2 が正）──
   m2DealId       String?

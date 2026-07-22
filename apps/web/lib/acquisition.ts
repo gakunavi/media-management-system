@@ -30,7 +30,7 @@ export const SENDERS = [
 export const RECEIVERS = [
   { key: "line", label: "公式LINE" },
   { key: "lp_diagnosis", label: "診断LP" },
-  { key: "lp_agency", label: "代理店LP" },
+  { key: "lp_agency", label: "商品LP（代理店経由）" },
   { key: "form", label: "HPの問い合わせ" },
   { key: "threads_dm", label: "Threads DM" },
   { key: "phone_manual", label: "電話" },
@@ -44,7 +44,16 @@ export type CellState =
   | "not_measured"
   /** 仕組み上そもそも到達しない組み合わせ */
   | "n/a"
-  /** 原理的に測れない（LINE内検索・名刺・電話の発信元など） */
+  /**
+   * 自動取得はできないが、ヒアリングして手で記録すれば測れる（電話・info メール）。
+   *
+   * ★2026-07-23 石井さんの指摘で「測定不能」から格上げした。
+   *   いきなり電話してくる人はほとんどおらず、何かの施策に触れている。
+   *   「自動で取れない」を「測れない」と書くと、記録する動機まで消える。
+   *   Lead.origin（きっかけ）に記録すれば、電話も施策の成果として数えられる。
+   */
+  | "manual"
+  /** 原理的に測れない（LINE内検索など、本人も出所を言えない類） */
   | "unmeasurable";
 
 export type Cell = {
@@ -77,8 +86,8 @@ const CELL_RULES: Record<string, Record<string, { state: CellState; reason: stri
     lp_agency: { state: "n/a", reason: "代理店LPは外部ドメイン。HPからの導線は無い" },
     form: { state: "not_measured", reason: "フォーム送信のWebhookが未設置" },
     threads_dm: { state: "n/a", reason: "HPからThreads DMへは繋がらない" },
-    phone_manual: { state: "unmeasurable", reason: "電話の発信元は特定できない" },
-    email: { state: "unmeasurable", reason: "メールの発信元は特定できない" },
+    phone_manual: { state: "manual", reason: "ヒアリングして手入力（リード登録の「きっかけ」）" },
+    email: { state: "manual", reason: "ヒアリングして手入力（リード登録の「きっかけ」）" },
   },
   media: {
     line: { state: "not_measured", reason: "記事内の lin.ee が生リンク（/media/ 9箇所）" },
@@ -86,8 +95,8 @@ const CELL_RULES: Record<string, Record<string, { state: CellState; reason: stri
     lp_agency: { state: "n/a", reason: "代理店LPは外部ドメイン" },
     form: { state: "not_measured", reason: "段2ファネル（CTA表示→クリック→送信）が未計測" },
     threads_dm: { state: "n/a", reason: "メディアからThreads DMへは繋がらない" },
-    phone_manual: { state: "unmeasurable", reason: "電話の発信元は特定できない" },
-    email: { state: "unmeasurable", reason: "メールの発信元は特定できない" },
+    phone_manual: { state: "manual", reason: "ヒアリングして手入力（リード登録の「きっかけ」）" },
+    email: { state: "manual", reason: "ヒアリングして手入力（リード登録の「きっかけ」）" },
   },
   article: {
     line: { state: "not_measured", reason: "記事CTAの lin.ee が生リンク" },
@@ -95,8 +104,9 @@ const CELL_RULES: Record<string, Record<string, { state: CellState; reason: stri
     lp_agency: { state: "n/a", reason: "代理店LPは外部ドメイン" },
     form: { state: "not_measured", reason: "段2ファネルが未計測" },
     threads_dm: { state: "n/a", reason: "記事からThreads DMへは繋がらない" },
-    phone_manual: { state: "unmeasurable", reason: "電話の発信元は特定できない" },
-    email: { state: "unmeasurable", reason: "メールの発信元は特定できない" },
+    // ★きっかけは記事単位まで分解できない（電話で記事IDまで聞けない）。メディア行に含める
+    phone_manual: { state: "n/a", reason: "メディア行に含む（きっかけは記事単位まで聞けない）" },
+    email: { state: "n/a", reason: "メディア行に含む（きっかけは記事単位まで聞けない）" },
   },
   threads: {
     line: { state: "measured", reason: "/r/line/<投稿ID> のクリック" },
@@ -104,9 +114,19 @@ const CELL_RULES: Record<string, Record<string, { state: CellState; reason: stri
     lp_agency: { state: "n/a", reason: "代理店LPへはThreadsから送っていない" },
     form: { state: "measured", reason: "/r/soken/<投稿ID> のクリック（記事経由）" },
     threads_dm: { state: "measured", reason: "cowork の dm-log.md（アングル別）" },
-    phone_manual: { state: "unmeasurable", reason: "電話の発信元は特定できない" },
-    email: { state: "unmeasurable", reason: "メールの発信元は特定できない" },
+    phone_manual: { state: "manual", reason: "ヒアリングして手入力（リード登録の「きっかけ」）" },
+    email: { state: "manual", reason: "ヒアリングして手入力（リード登録の「きっかけ」）" },
   },
+};
+
+/**
+ * 送客元 → Lead.origin。手入力の受け皿（電話・info メール）を埋めるのに使う。
+ * ★「きっかけ」を聞いて記録すれば、電話も施策の成果として数えられる。
+ */
+const SENDER_ORIGIN: Record<string, string> = {
+  hp: "hp",
+  media: "media_article",
+  threads: "threads",
 };
 
 /** 送客元 → 実測に使う指標 */
@@ -121,7 +141,7 @@ const SENDER_METRIC: Record<string, Record<string, string>> = {
 export async function getAcquisitionMatrix(range: Range): Promise<AcquisitionMatrix> {
   const win = { gte: range.since, lt: range.until };
 
-  const [clickAgg, lpViews, dmLeads, leads, coverages] = await Promise.all([
+  const [clickAgg, lpViews, dmLeads, leads, manualLeads, coverages] = await Promise.all([
     prisma.contentMetric.groupBy({
       by: ["metric"],
       where: { metric: { startsWith: "threads_link_clicks_" }, date: win },
@@ -135,6 +155,12 @@ export async function getAcquisitionMatrix(range: Range): Promise<AcquisitionMat
     prisma.lead.groupBy({
       by: ["sourceType"],
       where: { occurredAt: win },
+      _count: { _all: true },
+    }),
+    // ★手入力の受け皿（電話・info メール）を送客元別に埋める
+    prisma.lead.groupBy({
+      by: ["sourceType", "origin"],
+      where: { occurredAt: win, sourceType: { in: ["phone_manual", "email"] } },
       _count: { _all: true },
     }),
     // ★「まだ1度も計測していない」と「計測しているが期間内0件」を分けるための材料。
@@ -159,6 +185,13 @@ export async function getAcquisitionMatrix(range: Range): Promise<AcquisitionMat
       let state = rule.state;
       let reason = rule.reason;
 
+      if (state === "manual") {
+        const origin = SENDER_ORIGIN[s.key];
+        value = manualLeads
+          .filter((m) => m.sourceType === r.key && m.origin === origin)
+          .reduce((sum, m) => sum + m._count._all, 0);
+      }
+
       if (state === "measured") {
         if (s.key === "threads") {
           if (r.key === "threads_dm") value = dmLeads;
@@ -178,8 +211,10 @@ export async function getAcquisitionMatrix(range: Range): Promise<AcquisitionMat
         }
       }
 
-      if (state === "measured") measured += 1;
-      if (state === "measured" || state === "not_measured") target += 1;
+      // ★手入力でも「記録する仕組みがある」なら計測できているマスに数える。
+      //   自動で取れないことと、測れないことは別（2026-07-23）
+      if (state === "measured" || state === "manual") measured += 1;
+      if (state === "measured" || state === "not_measured" || state === "manual") target += 1;
 
       cells.push({ sender: s.key, receiver: r.key, state, value, reason });
     }

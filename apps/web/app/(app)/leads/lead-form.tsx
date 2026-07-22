@@ -58,22 +58,47 @@ export function LeadForm() {
         <form action={onSubmit} className="grid gap-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={label}>種別</label>
+              <label className={label}>種別（何を募集した結果か）</label>
               <select name="type" className={field} defaultValue="direct_inquiry">
-                <option value="direct_inquiry">直客の問い合わせ</option>
-                <option value="agency">代理店</option>
+                <option value="direct_inquiry">見込み客</option>
+                <option value="agency">代理店見込み</option>
                 <option value="line_friend">LINE登録</option>
               </select>
             </div>
             <div>
-              <label className={label}>経路</label>
+              {/* ★受け皿は7つ。info メールや診断LPが選べないと手入力できない */}
+              <label className={label}>受け皿（どこで受けたか）</label>
               <select name="sourceType" className={field} defaultValue="phone_manual">
-                <option value="phone_manual">電話（手動）</option>
-                <option value="form">フォーム</option>
-                <option value="line">LINE</option>
+                <option value="phone_manual">電話</option>
+                <option value="email">info メール直接</option>
+                <option value="form">HPの問い合わせ</option>
+                <option value="lp_diagnosis">診断LP</option>
+                <option value="lp_agency">商品LP（代理店経由）</option>
+                <option value="line">公式LINE</option>
                 <option value="threads_dm">Threads DM</option>
               </select>
             </div>
+          </div>
+
+          {/* ★きっかけ（送客元）。電話・メールでも「何を見たか」を聞けば埋まる。
+              これが無いと、電話の問い合わせが施策の成果に繋がらない */}
+          <div>
+            <label className={label}>
+              きっかけ（何を見て連絡してきたか）
+              <span className="ml-1 font-normal text-[var(--faint)]">
+                ★電話・メールでも必ず聞く。分からないときだけ「不明」
+              </span>
+            </label>
+            <select name="origin" className={field} defaultValue="unknown">
+              <option value="media_article">メディア記事</option>
+              <option value="threads">Threads</option>
+              <option value="line">公式LINE</option>
+              <option value="lp_diagnosis">診断LP</option>
+              <option value="lp_product">商品LP（防災防犯ライト）</option>
+              <option value="hp">HP（記事以外）</option>
+              <option value="referral">紹介・既存顧客・名刺交換</option>
+              <option value="unknown">不明（聞けていない）</option>
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

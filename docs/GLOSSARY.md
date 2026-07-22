@@ -312,7 +312,7 @@
 | `form` | **HPの問い合わせ**フォーム送信（Webhook） | `measured` |
 | `lp_form` | **@deprecated**。診断LPと代理店LPを区別できないため下2つに分割 | `measured` |
 | `lp_diagnosis` | **診断LP**（`setsuzei-diagnosis-*`・CF7 601652） | `measured` |
-| `lp_agency` | **代理店LP**（`bousai-bouhan-light.com`・`?ag=AG-XXXX`） | `measured` |
+| `lp_agency` | **商品LP（代理店経由）**（`bousai-bouhan-light.com`・`?ag=AG-XXXX`）。★代理店を募集するLPではなく、既存代理店が顧客に配る**商品LP**。`?ag=` はどの代理店が送客したかの印（2026-07-23 訂正） | `measured` |
 | `email` | **info@ に直接届いたメール**。電話と同じく手入力 | **`declared`** |
 | `phone_manual` | **電話受電時の手動登録**（§3.8.3・入力は3項目のみ） | **`declared`** |
 | `line` | 公式LINE（Messaging API Webhook） | `measured` |
@@ -320,6 +320,33 @@
 
 > ★電話受電時は**「何を見てお電話いただきましたか」を必ず聞く**（これが唯一の経路情報）。
 > コールトラッキング（月数千円）は**件数が月10件を超えたら再検討**。
+
+### 4.3.1 `LeadOrigin` — 送客元（何がきっかけで問い合わせに至ったか）
+
+> ★2026-07-23 追加（石井さん）。**受け皿（`LeadSourceType`）と直交する軸**。
+> 施策（メディア・Threads・LP・LINE）はすべて「見込み客募集」か「代理店募集」の
+> ために動いており、各施策のゴールは問い合わせ増加。だから
+> **どの施策がきっかけで来たか**を受け皿と別に持つ。
+>
+> ★電話・info メールは自動取得できないが**測定不能ではない**。
+> いきなり連絡してくる人はほとんどおらず、何かの施策に触れている。
+> ヒアリングして記録すれば施策の成果として数えられる。
+> 「自動で取れない」と「測れない」を混同しない（§2 欠測とゼロの区別）。
+
+<!-- enum: LeadOrigin -->
+| 値 | 意味 | provenance |
+|---|---|---|
+| `media_article` | メディア記事（記事が特定できれば `firstTouchContentId` も埋める） | `measured` / `declared` |
+| `threads` | Threads（投稿・DM） | `measured` / `declared` |
+| `line` | 公式LINE | `measured` / `declared` |
+| `lp_diagnosis` | 診断LP | `measured` |
+| `lp_product` | 商品LP（防災防犯ライト・代理店経由） | `measured` |
+| `hp` | HP（記事以外のページ） | `declared` |
+| `referral` | 紹介・既存顧客・名刺交換など施策外の接点 | `declared` |
+| `unknown` | 聞けていない。★「施策に触れていない」ではない | — |
+
+> ★`unknown` の割合は**ヒアリングの実行率**。ここが高いままだと施策を評価できない。
+> `/leads` の「きっかけ別」に割合を出している。
 
 ### 4.4 `TouchpointRole` — アシスト貢献（§3.6.2）
 

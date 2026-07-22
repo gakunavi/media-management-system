@@ -32,9 +32,12 @@ export function firstResponseMinutes(row: {
   return Math.round((row.firstResponseAt.getTime() - row.occurredAt.getTime()) / 60000);
 }
 
-export async function getLeads(range?: Range): Promise<LeadListRow[]> {
+export async function getLeads(range?: Range, kind: KindKey = "all"): Promise<LeadListRow[]> {
   const rows = await prisma.lead.findMany({
-    where: range ? { occurredAt: { gte: range.since, lt: range.until } } : undefined,
+    where: {
+      ...(range ? { occurredAt: { gte: range.since, lt: range.until } } : {}),
+      ...kindFilter(kind),
+    },
     orderBy: { occurredAt: "desc" },
     include: { firstTouchContent: { select: { externalId: true } } },
   });
@@ -69,9 +72,12 @@ export type LeadStats = {
   total: number;
 };
 
-export async function getLeadStats(range?: Range): Promise<LeadStats> {
+export async function getLeadStats(range?: Range, kind: KindKey = "all"): Promise<LeadStats> {
   const rows = await prisma.lead.findMany({
-    where: range ? { occurredAt: { gte: range.since, lt: range.until } } : undefined,
+    where: {
+      ...(range ? { occurredAt: { gte: range.since, lt: range.until } } : {}),
+      ...kindFilter(kind),
+    },
     select: {
       type: true,
       status: true,
@@ -104,9 +110,10 @@ export async function getLeadStats(range?: Range): Promise<LeadStats> {
 }
 
 export const LEAD_TYPE_LABEL: Record<string, string> = {
-  direct_inquiry: "直客",
-  agency: "代理店",
-  line_friend: "LINE",
+  // ★用語は「何を募集した結果か」で統一（2026-07-23 石井さん）
+  direct_inquiry: "見込み客",
+  agency: "代理店見込み",
+  line_friend: "LINE登録",
 };
 
 export const LEAD_STATUS_LABEL: Record<string, string> = {
@@ -134,6 +141,98 @@ export const BUDGET_TIER_LABEL: Record<string, string> = {
 
 export type LeadFilter = Prisma.LeadWhereInput;
 
+// ── 種別（何を募集した結果か）────────────────────────────────
+//
+// ★施策（メディア・Threads・LP・LINE）はすべて「代理店募集」か
+//   「見込み客募集」のために動いている（2026-07-23 石井さん）。
+//   どちらの募集に効いたのかを分けて見ないと、施策の評価ができない。
+
+export const KIND_TABS = [
+  { key: "all", label: "総合", type: null },
+  { key: "prospect", label: "見込み客", type: "direct_inquiry" },
+  { key: "agency", label: "代理店見込み", type: "agency" },
+] as const;
+
+export type KindKey = (typeof KIND_TABS)[number]["key"];
+
+export function resolveKind(v: string | string[] | undefined): KindKey {
+  const k = Array.isArray(v) ? v[0] : v;
+  return KIND_TABS.some((t) => t.key === k) ? (k as KindKey) : "all";
+}
+
+export function kindFilter(kind: KindKey): Prisma.LeadWhereInput {
+  const t = KIND_TABS.find((x) => x.key === kind)?.type;
+  return t ? { type: t } : {};
+}
+
+/** きっかけ（送客元）の表示名。schema の LeadOrigin と対応 */
+export const ORIGIN_LABEL: Record<string, string> = {
+  media_article: "メディア記事",
+  threads: "Threads",
+  line: "公式LINE",
+  lp_diagnosis: "診断LP",
+  lp_product: "商品LP（代理店経由）",
+  hp: "HP（記事以外）",
+  referral: "紹介・既存顧客",
+  unknown: "不明（聞けていない）",
+};
+
+export const ORIGIN_ORDER = [
+  "media_article",
+  "threads",
+  "line",
+  "lp_diagnosis",
+  "lp_product",
+  "hp",
+  "referral",
+  "unknown",
+];
+
+export type OriginRow = {
+  key: string;
+  label: string;
+  leads: number;
+  won: number;
+  wonAmount: number;
+};
+
+/**
+ * きっかけ（施策）別の実績。
+ * ★電話・info メールも、きっかけを聞いて記録すればここに乗る。
+ *   「自動で取れない」を「測れない」と書くと、記録する動機まで消える。
+ */
+export async function getOriginBreakdown(
+  range: Range,
+  kind: KindKey = "all",
+): Promise<{ rows: OriginRow[]; unknownRate: number | null }> {
+  const leads = await prisma.lead.findMany({
+    where: { occurredAt: { gte: range.since, lt: range.until }, ...kindFilter(kind) },
+    select: { origin: true, status: true, closedAmount: true },
+  });
+
+  const acc = new Map<string, { leads: number; won: number; amount: number }>();
+  for (const l of leads) {
+    const cur = acc.get(l.origin) ?? { leads: 0, won: 0, amount: 0 };
+    cur.leads += 1;
+    if (l.status === "won") {
+      cur.won += 1;
+      cur.amount += l.closedAmount ? Number(l.closedAmount) : 0;
+    }
+    acc.set(l.origin, cur);
+  }
+
+  const rows: OriginRow[] = ORIGIN_ORDER.map((k) => {
+    const a = acc.get(k) ?? { leads: 0, won: 0, amount: 0 };
+    return { key: k, label: ORIGIN_LABEL[k] ?? k, leads: a.leads, won: a.won, wonAmount: a.amount };
+  });
+
+  return {
+    rows,
+    // ★「不明」の割合はヒアリングの実行率。高いままだと施策の評価ができない
+    unknownRate: leads.length ? (acc.get("unknown")?.leads ?? 0) / leads.length : null,
+  };
+}
+
 // ── 経路別のリード実績（設計書 §3.8.3 Lead.sourceType）────────────────
 //
 // ★これが本来の見せ方。以前は「直客/代理店/LINE」（＝ゴールの種類）しか
@@ -146,7 +245,10 @@ export type LeadFilter = Prisma.LeadWhereInput;
 export const SOURCE_LABEL: Record<string, string> = {
   form: "HPの問い合わせ",
   lp_diagnosis: "診断LP",
-  lp_agency: "代理店LP",
+  // ★bousai-bouhan-light.com は代理店募集LPではなく**商品LP**。
+  //   既存代理店が顧客に配るURLで、?ag=AG-XXXX はどの代理店が送客したかの印。
+  //   「代理店LP」と書くと代理店開拓の成果に見える（2026-07-23 石井さん指摘）
+  lp_agency: "商品LP（代理店経由）",
   line: "公式LINE",
   threads_dm: "Threads DM",
   phone_manual: "電話",
@@ -215,14 +317,17 @@ export const SOURCE_COVERAGE: Record<string, string> = {
   email: "lead_direct_inquiry",
 };
 
-export async function getSourceBreakdown(range: Range): Promise<SourceBreakdown> {
+export async function getSourceBreakdown(
+  range: Range,
+  kind: KindKey = "all",
+): Promise<SourceBreakdown> {
   const win = { gte: range.since, lt: range.until };
 
   const [leads, coverages, lineFollowObserved, clickAgg] = await Promise.all([
     // ★期間で絞る。旧実装は全期間のリードを数えていて、画面の「直近30日」という
     //   見出しと中身が食い違っていた
     prisma.lead.findMany({
-      where: { occurredAt: win },
+      where: { occurredAt: win, ...kindFilter(kind) },
       select: { sourceType: true, status: true, closedAmount: true },
     }),
     prisma.measurementCoverage.findMany({ select: { metric: true } }),

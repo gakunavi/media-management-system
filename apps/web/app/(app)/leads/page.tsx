@@ -1,6 +1,9 @@
 import {
   getLeads,
   getLeadStats,
+  getOriginBreakdown,
+  KIND_TABS,
+  resolveKind,
   firstResponseMinutes,
   LEAD_TYPE_LABEL,
   LEAD_STATUS_LABEL,
@@ -39,12 +42,27 @@ export default async function LeadsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const range = resolveRange(await searchParams);
-  const [leads, stats, sources] = await Promise.all([
-    getLeads(range),
-    getLeadStats(range),
-    getSourceBreakdown(range),
+  const sp = await searchParams;
+  const range = resolveRange(sp);
+  // ★施策はすべて「見込み客募集」か「代理店募集」のために動いている。
+  //   どちらに効いたのかを分けて見ないと施策を評価できない（2026-07-23）
+  const kind = resolveKind(sp.kind);
+  const [leads, stats, sources, origins] = await Promise.all([
+    getLeads(range, kind),
+    getLeadStats(range, kind),
+    getSourceBreakdown(range, kind),
+    getOriginBreakdown(range, kind),
   ]);
+  const kindHref = (k: string) => {
+    const p = new URLSearchParams();
+    p.set("range", range.key);
+    const from = Array.isArray(sp.from) ? sp.from[0] : sp.from;
+    const to = Array.isArray(sp.to) ? sp.to[0] : sp.to;
+    if (from) p.set("from", from);
+    if (to) p.set("to", to);
+    p.set("kind", k);
+    return `/leads?${p.toString()}`;
+  };
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -56,16 +74,33 @@ export default async function LeadsPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <RangePicker range={range} basePath="/leads" />
+          <RangePicker range={range} basePath="/leads" keep={{ kind: kind === "all" ? undefined : kind }} />
           <LeadForm />
         </div>
       </div>
 
+      {/* ★種別タブ。施策の評価軸そのもの */}
+      <div className="mb-4 flex gap-1 border-b border-[var(--border)]">
+        {KIND_TABS.map((t) => (
+          <Link
+            key={t.key}
+            href={kindHref(t.key)}
+            className={`-mb-px border-b-2 px-3 py-2 text-[13px] font-medium transition-colors ${
+              kind === t.key
+                ? "border-[var(--accent)] text-[var(--accent)]"
+                : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]"
+            }`}
+          >
+            {t.label}
+          </Link>
+        ))}
+      </div>
+
       {/* サマリー */}
       <div className="mb-4 grid gap-3 sm:grid-cols-4">
-        <Stat label="直客" value={stats.byType.direct_inquiry ?? 0} accent />
-        <Stat label="代理店" value={stats.byType.agency ?? 0} />
-        <Stat label="LINE" value={stats.byType.line_friend ?? 0} />
+        <Stat label="見込み客" value={stats.byType.direct_inquiry ?? 0} accent />
+        <Stat label="代理店見込み" value={stats.byType.agency ?? 0} />
+        <Stat label="LINE登録" value={stats.byType.line_friend ?? 0} />
         <Stat
           label="経路特定率"
           value={
@@ -77,6 +112,7 @@ export default async function LeadsPage({
         />
       </div>
 
+      <OriginPanel data={origins} />
       <SourcePanel data={sources} />
 
       {/* 成約サマリー */}
@@ -178,6 +214,82 @@ export default async function LeadsPage({
         に移しました。
       </p>
     </div>
+  );
+}
+
+/**
+ * きっかけ（施策）別。
+ *
+ * ★電話・info メールも、きっかけを聞いて記録すればここに乗る。
+ *   「いきなり連絡してくる人」はほとんどおらず、何かの施策に触れている。
+ * ★「不明」の割合はヒアリングの実行率。ここが高いままだと施策を評価できない。
+ */
+function OriginPanel({
+  data,
+}: {
+  data: { rows: { key: string; label: string; leads: number; won: number; wonAmount: number }[]; unknownRate: number | null };
+}) {
+  const total = data.rows.reduce((s, r) => s + r.leads, 0);
+  return (
+    <section className="mb-5">
+      <h2 className="mb-1 text-[14px] font-semibold">きっかけ別（どの施策に触れて来たか）</h2>
+      <p className="mb-2 text-[12px] text-[var(--faint)]">
+        ★受け皿（どこで受けたか）と直交する軸。電話・info メールも
+        <strong>聞いて記録すれば施策の成果として数えられる</strong>。
+        {data.unknownRate !== null && data.unknownRate > 0 && (
+          <>
+            {" "}
+            いま <strong className="text-[var(--warn)]">
+              {Math.round(data.unknownRate * 100)}%
+            </strong>{" "}
+            が「不明」＝ヒアリングできていない。
+          </>
+        )}
+      </p>
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-[var(--border)] bg-[var(--panel-2)] text-left text-[12px] text-[var(--muted)]">
+                <th className="whitespace-nowrap px-3 py-2 font-medium">きっかけ（施策）</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">リード</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">構成比</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">成約</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">成約金額</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.rows.map((r) => (
+                <tr
+                  key={r.key}
+                  className={`border-b border-[var(--border)] ${
+                    r.key === "unknown" && r.leads > 0 ? "bg-[var(--warn)]/[0.06]" : ""
+                  }`}
+                >
+                  <Td>{r.label}</Td>
+                  <Td className="text-right">
+                    <span className="tnum font-medium">{r.leads}</span>
+                  </Td>
+                  <Td className="text-right">
+                    <span className="tnum text-[var(--faint)]">
+                      {total > 0 ? `${Math.round((r.leads / total) * 100)}%` : "—"}
+                    </span>
+                  </Td>
+                  <Td className="text-right">
+                    <span className="tnum">{r.won || "—"}</span>
+                  </Td>
+                  <Td className="text-right">
+                    <span className="tnum">
+                      {r.wonAmount > 0 ? `¥${r.wonAmount.toLocaleString("ja-JP")}` : "—"}
+                    </span>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   );
 }
 

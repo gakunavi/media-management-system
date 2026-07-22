@@ -11,7 +11,31 @@ import { encryptPii, isPiiKeyReady } from "@/lib/crypto";
 
 const schema = z.object({
   type: z.enum(["direct_inquiry", "agency", "line_friend"]),
-  sourceType: z.enum(["form", "phone_manual", "line", "threads_dm"]),
+  // ★受け皿は7つある（2026-07-22 の整理）。フォームに無いと
+  //   info メールや診断LPからの問い合わせを手入力できない
+  sourceType: z.enum([
+    "form",
+    "lp_diagnosis",
+    "lp_agency",
+    "line",
+    "threads_dm",
+    "phone_manual",
+    "email",
+  ]),
+  // ★きっかけ（送客元）。電話・メールでも聞けば埋まる。
+  //   これが無いと「電話は測定不能」のまま施策の成果に繋がらない
+  origin: z
+    .enum([
+      "media_article",
+      "threads",
+      "line",
+      "lp_diagnosis",
+      "lp_product",
+      "hp",
+      "referral",
+      "unknown",
+    ])
+    .default("unknown"),
   occurredAt: z.string().min(1),
   companyName: z.string().trim().optional(),
   contactEmail: z.string().trim().optional(),
@@ -82,6 +106,8 @@ export async function createLead(formData: FormData): Promise<CreateLeadResult> 
       businessId: business.id,
       type: d.type,
       sourceType: d.sourceType,
+      // ★記事IDが入っていれば、きっかけは記事と分かる（申告より実データを優先）
+      origin: firstTouch ? "media_article" : d.origin,
       status: d.status,
       occurredAt,
       budgetTier: d.budgetTier,
@@ -101,12 +127,18 @@ export async function createLead(formData: FormData): Promise<CreateLeadResult> 
 
   // ★計測開始を記録（§3 規約）。手動でも「直客を計測している」状態にする。
   //   これが無いと段1が —(未計測) のままになる。
+  // ★計測開始は「受け皿」単位で記録する。種別（見込み客/代理店見込み）ではない。
+  //   /leads の受け皿一覧・ダッシュボード段1 がこの指標を見ている
   const coverageMetric =
-    d.type === "direct_inquiry"
-      ? "lead_direct_inquiry"
-      : d.type === "agency"
-        ? "lead_agency"
-        : "lead_line";
+    d.sourceType === "line"
+      ? "lead_line"
+      : d.sourceType === "threads_dm"
+        ? "lead_threads_dm"
+        : d.sourceType === "lp_diagnosis"
+          ? "lp_form_submit_b"
+          : d.sourceType === "lp_agency"
+            ? "agency_lp_inquiries"
+            : "lead_direct_inquiry";
   const existing = await prisma.measurementCoverage.findFirst({
     where: { metric: coverageMetric },
   });
