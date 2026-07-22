@@ -24,15 +24,16 @@ export const NAV: NavGroup[] = [
   },
   {
     title: "獲得",
+    // ★並びは「結果 → 受け皿・送客元」（2026-07-23 石井さん指定）。
+    //   LP は受け皿（問い合わせの着地点）なので分析ではなく獲得に置く。
+    //   もともと cowork の media-console（A/Bテストの分析画面）の後継として
+    //   作ったため「分析」にあったが、送客→受け皿の整理では中身が受け皿。
     items: [
       { href: "/leads", label: "リード", ready: true, icon: "leads" },
-      { href: "/threads", label: "Threads", ready: true, icon: "threads" },
-      { href: "/agency", label: "代理店", ready: true, icon: "agency" },
-      { href: "/line", label: "公式LINE", ready: true, icon: "line" },
-      // ★LP は受け皿（問い合わせの着地点）。分析ではなく獲得（2026-07-23）。
-      //   もともと cowork の media-console（A/Bテストの分析画面）の後継として
-      //   作ったため「分析」に置いていたが、送客→受け皿の整理では中身が受け皿。
       { href: "/lp", label: "LP", ready: true, icon: "lp" },
+      { href: "/threads", label: "Threads", ready: true, icon: "threads" },
+      { href: "/line", label: "公式LINE", ready: true, icon: "line" },
+      { href: "/agency", label: "代理店", ready: true, icon: "agency" },
     ],
   },
   {

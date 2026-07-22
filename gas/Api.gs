@@ -542,7 +542,9 @@ function handleTopPosts_(e) {
       quotes: r.quotes,
       engagement: r.likes + r.replies + r.reposts + r.quotes,
       // 空文字なら未計測。上の views 等は 0 が入るが「0だった」ではない
-      insights_updated_at: formatDateForJson_(r.insightsUpdatedAt)
+      insights_updated_at: formatDateForJson_(r.insightsUpdatedAt),
+      // ★action=list と同じ列名で返す。MMS はこの値で送客ゴールを判定する（2026-07-23）
+      article_link: r.articleLink
     };
   });
 
@@ -650,6 +652,10 @@ function getPostedRowsWithInsights_() {
       text:        String(row[CONFIG.COL.TEXT - 1] || ''),
       target:      String(row[CONFIG.COL.TARGET - 1] || ''),
       coreMessage: String(row[CONFIG.COL.CORE_MESSAGE - 1] || ''),
+      // ★MMS が「その投稿がどのゴールを狙ったか」を判定するのに使う
+      //   （/r/soken → メディア送客 / /r/line → LINE / /r/lp → 診断LP）。
+      //   これが無いと、リンクを貼った投稿も MMS 側では全て「狙い未設定」に落ちる（2026-07-23）
+      articleLink: String(row[CONFIG.COL.ARTICLE_LINK - 1] || '').trim(),
       format:      format,
       hasImage:    imageUrl.length > 0,
       postedAt:    postedAt,
