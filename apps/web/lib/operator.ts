@@ -11,6 +11,9 @@ const DAY = 86400000;
 
 /** 打ち手タイプごとの判定期間（日）。docs/GLOSSARY.md §5.1 */
 export const JUDGE_DAYS: Record<string, number> = {
+  // 本文リライトと統合は効果が出るまで時間がかかる（再クロール＋再評価）
+  rewrite: 28,
+  merge: 56,
   title_meta_rewrite: 28,
   cta_move: 14,
   cta_variant: 14,

@@ -294,6 +294,11 @@ enum ActionState {
 /// §5.2 Action.type — 打ち手タイプ。効く指標・判定期間は docs/GLOSSARY.md 参照
 /// ★設計書は「打ち手8タイプ」と記すが表の行は9値（cta_move / cta_variant が同一行）（§13 記録済）
 enum ActionType {
+  /// 本文のリライト。timeseries.db の実績9件の大半がこれで、
+  /// 立案（title_meta_rewrite 等）では表せない人主導の施策だった
+  rewrite
+  /// 記事の統合＋301（ART-142 に ART-006 を統合した実績あり）
+  merge
   title_meta_rewrite
   cta_move
   cta_variant

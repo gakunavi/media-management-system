@@ -2,6 +2,7 @@ import { getProposedActions, getActionStats } from "@/lib/actions-repo";
 import { getInterventions } from "@/lib/interventions";
 import { ActionCard, RunOperatorButton } from "./action-card";
 import { runOperator } from "./actions";
+import { ManualRecord } from "./manual-record";
 
 // 施策・PDCA（設計書 §4.1 段5「次の一手」・§5.2 立案・§5.3 判定）
 export const dynamic = "force-dynamic";
@@ -42,6 +43,9 @@ export default async function ExperimentsPage() {
         <Stat label="却下" value={stats.rejected} />
         <Stat label="完了" value={stats.done} />
       </div>
+
+      {/* ★立案していない施策も同じ判定経路に乗せる（入口が無いと記録が止まる） */}
+      <ManualRecord />
 
       {/* 段5「次の一手」 */}
       <section className="mb-6">
