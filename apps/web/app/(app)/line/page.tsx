@@ -1,8 +1,12 @@
-import { getLineChannel } from "@/lib/channel-line";
+import { NOT_MEASURED } from "@mms/shared";
+import { getLineChannel, type Entrance } from "@/lib/channel-line";
+import { getReceiverStats } from "@/lib/receivers";
 import { TrendChart } from "@/components/chart";
 import { Stages } from "@/components/stages";
 import { RangePicker } from "@/components/range-picker";
+import { ReceiverScreen } from "@/components/receiver-screen";
 import { resolveRange } from "@/lib/period";
+import { LeadForm } from "../leads/lead-form";
 
 // 公式LINE（設計書 §4.1 段1③）
 //
@@ -16,7 +20,13 @@ export default async function LinePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const range = resolveRange(await searchParams);
-  const ch = await getLineChannel(range);
+  const [ch, stats] = await Promise.all([
+    getLineChannel(range),
+    // ★他の受け皿画面（/hp・/phone）と同じ軸を出す。
+    //   LINEの問い合わせは Webhook では取れない（follow は取れるが相談は取れない）。
+    //   実際そのすべてが手入力なので、この画面から登録できる必要がある
+    getReceiverStats(["line"], "lead_line", range),
+  ]);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -27,7 +37,10 @@ export default async function LinePage({
             {range.label}・送客 → 登録 → 反応 → 問い合わせ → 成約
           </p>
         </div>
-        <RangePicker range={range} basePath="/line" />
+        <div className="flex flex-wrap items-center gap-3">
+          <RangePicker range={range} basePath="/line" />
+          <LeadForm defaultSourceType="line" label="＋ 記録する" />
+        </div>
       </div>
 
       {ch.notMeasured.length > 0 && (
@@ -36,6 +49,29 @@ export default async function LinePage({
           これらの 0 は「成果ゼロ」ではありません。
         </p>
       )}
+
+      {/* ── 友だち総数 ── */}
+      <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-4">
+        <div className="flex flex-wrap items-baseline gap-3">
+          <span className="text-[13px] text-[var(--muted)]">友だち総数</span>
+          <span className="text-lg font-medium text-[var(--warn)]">
+            {ch.friendsTotal === null ? NOT_MEASURED : ch.friendsTotal.toLocaleString("ja-JP")}
+          </span>
+        </div>
+        <p className="mt-1 text-[11px] leading-relaxed text-[var(--faint)]">★{ch.friendsNote}</p>
+      </section>
+
+      {/* ── 入口 ── */}
+      <h2 className="mb-1 text-[14px] font-semibold">入口（どこから送っているか）</h2>
+      <p className="mb-2 text-[12px] text-[var(--faint)]">
+        ★「未計装」は<strong>送っていない</strong>のではなく<strong>測っていない</strong>。
+        HP・記事の lin.ee は生リンクのままで、踏まれても記録されない。
+      </p>
+      <div className="mb-5 grid gap-2 sm:grid-cols-4">
+        {ch.entrances.map((e) => (
+          <EntranceCard key={e.key} e={e} />
+        ))}
+      </div>
 
       {/* ── 階段 ── */}
       <h2 className="mb-2 text-[14px] font-semibold">どこで落ちているか</h2>
@@ -68,8 +104,13 @@ export default async function LinePage({
         />
       </div>
 
+      {/* ── 種別・きっかけ・一覧（他の受け皿画面と同じ軸）── */}
+      <div className="mb-6 mt-6">
+        <ReceiverScreen stats={stats} showTrend={false} />
+      </div>
+
       {/* ── 送客元の内訳 ── */}
-      <h2 className="mb-2 text-[14px] font-semibold">どの型がLINEへ送ったか</h2>
+      <h2 className="mb-2 text-[14px] font-semibold">どの型がLINEへ送ったか（Threads）</h2>
       <p className="mb-2 text-[12px] text-[var(--faint)]">
         ★LINE の follow イベントには経路情報が入らない（LINE の仕様）。
         「どの投稿が登録を生んだか」は原理的に取れないため、送客クリックで近似する。
@@ -120,3 +161,27 @@ export default async function LinePage({
   );
 }
 
+/** 入口1つ。未計装は 0 と区別して出す（§3） */
+function EntranceCard({ e }: { e: Entrance }) {
+  return (
+    <div
+      className={`rounded-lg border p-3 ${
+        e.clicks === null
+          ? "border-[var(--warn)]/40 bg-[var(--warn)]/[0.06]"
+          : "border-[var(--border)] bg-[var(--panel)]"
+      }`}
+    >
+      <div className="text-[12px] font-medium text-[var(--muted)]">{e.label}</div>
+      <div className="tnum mt-1 text-xl font-bold leading-none">
+        {e.clicks === null ? (
+          <span className="text-[13px] font-medium text-[var(--warn)]">
+            {e.key === "unknown" ? "—(測定不能)" : "—(未計装)"}
+          </span>
+        ) : (
+          e.clicks.toLocaleString("ja-JP")
+        )}
+      </div>
+      <p className="mt-1 text-[10px] leading-tight text-[var(--faint)]">{e.note}</p>
+    </div>
+  );
+}

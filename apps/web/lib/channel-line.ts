@@ -34,8 +34,34 @@ export type FormatShare = {
   posts: number;
 };
 
+/**
+ * 入口（どこから公式LINEへ送っているか）。2026-07-23 石井さん。
+ *
+ * ★段①を「Threadsからのクリック」だけで作っていたため、
+ *   「① 送客 —(未計測)（まだ1件もクリックされていない）」と出て、
+ *   **LINEへ誰も送っていない**ように読めていた。実際は HP・記事の lin.ee が
+ *   生リンクで、送ってはいるが測っていない。意味がまるで違う。
+ *
+ * ★「不明」は登録のうち経路が分からないもの。LINE の follow イベントには
+ *   経路情報が入らない（LINE の仕様）ので、原理的にここは残る。
+ */
+export type Entrance = {
+  key: "hp" | "media" | "threads" | "unknown";
+  label: string;
+  /** クリック数。null = 未計装（0 とは別） */
+  clicks: number | null;
+  /** その入口の状態と、測れるようにする手 */
+  note: string;
+};
+
 export type LineChannel = {
   days: number;
+  entrances: Entrance[];
+  /** 友だち総数。null = 未接続（Messaging API のトークン未設定） */
+  friendsTotal: number | null;
+  friendsNote: string;
+  /** ②③の計測開始日。期間の途中から測り始めた場合に画面へ出す */
+  webhookStartedAt: Date | null;
   stages: Stage[];
   /** 段間の転換率。stages[i-1] → stages[i]。null は算出不能 */
   transitions: (number | null)[];
@@ -101,16 +127,76 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
 
   const startedOf = new Map(coverages.map((c) => [c.metric, c.startedAt]));
   const sentStart = startedOf.get("threads_link_clicks_line") ?? null;
+  const siteStart = startedOf.get("site_link_clicks_line") ?? null;
   // ★登録・反応は Webhook が入って初めて測れる。lead_line がその印
   const lineStart = startedOf.get("lead_line") ?? null;
   const sentMeasured = sentStart !== null;
   const lineMeasured = lineStart !== null;
 
+  // ── 入口別の送客（HP / メディア / Threads / 不明）──
+  const threadsClicks = clickRows.reduce((s, r) => s + r.value, 0);
+  const siteRows = await prisma.metricSnapshot.findMany({
+    where: { metric: { startsWith: "site_link_clicks_line__" }, date: win },
+    select: { metric: true, value: true },
+  });
+  const siteBy = { hp: 0, media: 0, other: 0 };
+  for (const r of siteRows) {
+    const src = r.metric.split("__")[1] ?? "";
+    if (src.startsWith("hp")) siteBy.hp += r.value;
+    else if (src.startsWith("media") || src.startsWith("article")) siteBy.media += r.value;
+    else siteBy.other += r.value;
+  }
+
+  const entrances: Entrance[] = [
+    {
+      key: "hp",
+      label: "HP",
+      // ★1度も計測が始まっていないなら 0 ではなく未計装（§3）
+      clicks: siteStart ? Math.round(siteBy.hp) : null,
+      note: siteStart
+        ? "/r/line/hp-… のクリック"
+        : "テーマの lin.ee が生リンク（/contact/ 7箇所）。/r/line/hp-… に変えれば測れる",
+    },
+    {
+      key: "media",
+      label: "メディア（記事）",
+      clicks: siteStart ? Math.round(siteBy.media) : null,
+      note: siteStart
+        ? "/r/line/media-… のクリック"
+        : "記事内の lin.ee が生リンク（/media/ 9箇所）。/r/line/media-… に変えれば測れる",
+    },
+    {
+      key: "threads",
+      label: "Threads",
+      clicks: sentStart ? Math.round(threadsClicks) : null,
+      note: sentStart
+        ? "/r/line/<投稿ID> のクリック"
+        : "投稿にLINEへのリンクが1本も無い（cowork が22本を投入済み・投稿待ち）",
+    },
+    {
+      key: "unknown",
+      label: "不明",
+      // ★登録から、経路が分かっているクリックを引いた残り…は出せない。
+      //   クリックと登録は別人の可能性があり、引き算すると嘘になる
+      clicks: null,
+      note: "LINE の follow イベントに経路情報が入らない（LINE 仕様）。原理的に測れない",
+    },
+  ];
+  const measuredEntrances = entrances.filter((e) => e.clicks !== null);
+
   // ── 段の値 ──
-  const sent = clickRows.reduce((s, r) => s + r.value, 0);
+  // ★段①は入口の合計。測れている入口が1つも無ければ未計測（0 ではない）
+  const sent = measuredEntrances.reduce((s, e) => s + (e.clicks ?? 0), 0);
+  const sentMeasuredAny = measuredEntrances.length > 0;
   const followed = friends.length;
   const replied = inbounds.length;
   const inquired = leads.length;
+  // ★計測開始より前に起票した件数。②登録0なのに④問い合わせ2、という
+  //   ファネルとして成立しない並びは、これが原因（Webhook設置前の遡及入力）。
+  //   黙って並べると「登録0から問い合わせが2件生まれた」と読めてしまう
+  const retroactive = lineStart
+    ? leads.filter((l) => l.occurredAt < lineStart).length
+    : leads.length;
   const won = leads.filter((l) => l.status === "won").length;
   const wonAmount = leads.reduce(
     (s, l) => s + (l.status === "won" && l.closedAmount ? Number(l.closedAmount) : 0),
@@ -121,29 +207,39 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
     {
       key: "sent",
       label: "① 送客",
-      value: sentMeasured ? Math.round(sent) : null,
-      hint: "Threads から公式LINEへのクリック",
-      action: "投稿の型・CTA文言を見直す（/threads の →LINE 列）",
+      value: sentMeasuredAny ? sent : null,
+      pendingLabel: "—(未計装)",
+      hint: `入口 ${measuredEntrances.length}/3 を計測中`,
+      action: "生リンクを /r/line/… に変える（HP・記事）",
     },
     {
+      // ★計測開始より前は「0件」ではなく測っていない期間。
+      //   90日窓のうち Webhook 後だけが実測なのに 0 と出していた
       key: "followed",
       label: "② 登録",
       value: lineMeasured ? followed : null,
-      hint: "友だち追加（Webhook 観測分）",
+      hint: lineStart
+        ? `友だち追加（${ymd(lineStart)}〜の実測）`
+        : "友だち追加（Webhook 未設置）",
       action: "登録画面と登録の動機（軽オファー）を作る",
     },
     {
       key: "replied",
       label: "③ 反応",
       value: lineMeasured ? replied : null,
-      hint: "受信したメッセージ（スタンプ等を含む）",
+      hint: lineStart
+        ? `受信したメッセージ（${ymd(lineStart)}〜の実測）`
+        : "受信したメッセージ（Webhook 未設置）",
       action: "あいさつメッセージと初回の導線を作り直す",
     },
     {
       key: "inquired",
       label: "④ 問い合わせ",
       value: inquired,
-      hint: "商談になりうるものとして起票した数",
+      hint:
+        retroactive > 0
+          ? `起票した数（うち${retroactive}件は計測開始前の遡及入力）`
+          : "商談になりうるものとして起票した数",
       action: "会話の質・返信テンプレを見直す",
     },
     {
@@ -186,11 +282,27 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
     .sort((a, b) => b.clicks - a.clicks);
 
   const notMeasured: string[] = [];
-  if (!sentMeasured) notMeasured.push("① 送客（まだ1件もクリックされていない）");
+  const unmeasuredEntrances = entrances.filter((e) => e.clicks === null && e.key !== "unknown");
+  if (unmeasuredEntrances.length > 0) {
+    notMeasured.push(
+      `① 送客のうち ${unmeasuredEntrances.map((e) => e.label).join("・")} が未計装（送っていないのではなく測っていない）`,
+    );
+  }
   if (!lineMeasured) notMeasured.push("② 登録・③ 反応（LINE Webhook が未設置）");
+  if (retroactive > 0 && lineStart) {
+    notMeasured.push(
+      `④ 問い合わせ ${inquired}件のうち ${retroactive}件は ${ymd(lineStart)} の計測開始より前の遡及入力（②③の実測期間に含まれない。段の上下は比較できない）`,
+    );
+  }
 
   return {
     days: range.days,
+    entrances,
+    // ★MMS が数えられるのは Webhook 観測分だけ。総数は Messaging API が要る
+    friendsTotal: null,
+    friendsNote:
+      "友だち総数は Messaging API（insight/followers）で取れますが、チャネルアクセストークンが未設定です。MMS が数えられるのは Webhook 設置後の追加ぶんだけで、それ以前の友だちは観測していません。",
+    webhookStartedAt: lineStart,
     stages,
     transitions,
     biggestDropIndex,

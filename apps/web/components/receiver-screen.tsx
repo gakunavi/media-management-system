@@ -29,10 +29,13 @@ function Delta({ now, prev }: { now: number; prev: number }) {
 export function ReceiverScreen({
   stats,
   note,
+  showTrend = true,
 }: {
   stats: ReceiverStats;
   /** その受け皿に固有の注意書き（計測の限界など） */
   note?: string;
+  /** 独自の推移グラフを持つ画面（/line）は false */
+  showTrend?: boolean;
 }) {
   return (
     <div className="grid gap-4">
@@ -109,13 +112,15 @@ export function ReceiverScreen({
       </section>
 
       {/* ── 推移 ── */}
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
-        <h2 className="mb-2 text-[15px] font-semibold">推移（{stats.days}日）</h2>
-        <TrendChart
-          series={[{ label: "問い合わせ", color: "var(--accent)", points: stats.trend }]}
-          height={150}
-        />
-      </section>
+      {showTrend && (
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
+          <h2 className="mb-2 text-[15px] font-semibold">推移（{stats.days}日）</h2>
+          <TrendChart
+            series={[{ label: "問い合わせ", color: "var(--accent)", points: stats.trend }]}
+            height={150}
+          />
+        </section>
+      )}
 
       {/* ── 一覧 ── */}
       <section>
