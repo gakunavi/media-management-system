@@ -32,6 +32,8 @@ type FormPayload = {
   company?: string;
   message?: string;
   interestProduct?: string[];
+  /** CF7 の customer_type / customer-type。Lead.type に対応させる */
+  customerType?: string;
   /** ?from=media&article=ART-XXX（§5.4 の経路自動判定） */
   from?: string;
   article?: string;
@@ -68,6 +70,36 @@ function deriveLeadId(businessId: string, body: FormPayload): string {
 
 function bad(status: number, reason: string) {
   return NextResponse.json({ ok: false, reason }, { status });
+}
+
+/**
+ * 顧客区分 → Lead.type
+ *
+ * ★新しいフィールドは足さない。MMS には既に LeadType.agency があり、
+ *   Threads DM 経由の代理店候補がこれで入っている。同じ意味の区分を
+ *   2つ持つと、/agency の分母がどちらを見ているか分からなくなる。
+ *
+ * ★区分を間違えると実害が出る（cowork 指摘）:
+ *     資産防衛をご検討の方 → 顧客。営業フローへ
+ *     パートナー提携をご検討の方 → 代理店候補。百瀬さんへ
+ *   混ざると両方の歩留まりの分母が壊れる。
+ *
+ * ★CF7 のラベル文言は変わりうるので、完全一致ではなく語で判定する。
+ *   それでも判定できなければ通知する（黙って営業に流さない）。
+ */
+function toLeadType(raw: string | undefined): {
+  type: "direct_inquiry" | "agency";
+  unmapped: boolean;
+} {
+  const s = (raw ?? "").trim();
+  if (!s) return { type: "direct_inquiry", unmapped: false };
+  if (/パートナー|提携|代理店|会計士|税理士/.test(s)) {
+    return { type: "agency", unmapped: false };
+  }
+  if (/資産防衛|経営者|投資家|顧客/.test(s)) {
+    return { type: "direct_inquiry", unmapped: false };
+  }
+  return { type: "direct_inquiry", unmapped: true };
 }
 
 /**
@@ -212,6 +244,8 @@ async function handle(req: Request) {
     return NextResponse.json({ ok: true, leadId, duplicate: true });
   }
 
+  const leadType = toLeadType(body.customerType);
+
   // ★存在しないセッションは null 化する（/api/ingest/events と同じ方針）。
   //
   //   Lead.sessionId は VisitorSession への外部キー。WPのフォームは
@@ -234,7 +268,7 @@ async function handle(req: Request) {
     data: {
       id: leadId,
       businessId: business.id,
-      type: "direct_inquiry",
+      type: leadType.type,
       sourceType: "form",
       occurredAt,
       // ★個人情報は必ず暗号化して保存する（§16.2）
@@ -268,9 +302,18 @@ async function handle(req: Request) {
   // ── 9. 即時通知（§5.4・★個人情報はマスキングして渡す）──
   await notify({
     event: "lead.created",
-    title: "🔴 直客の問い合わせが入りました",
+    title:
+      leadType.type === "agency"
+        ? "🔵 代理店候補の問い合わせが入りました"
+        : "🔴 直客の問い合わせが入りました",
     body: [
       `受信: ${occurredAt.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}`,
+      // ★区分は行き先（営業 / 百瀬さん）を決めるので必ず出す。
+      //   判定できなかった場合は直客扱いで起票しているが、
+      //   代理店候補を営業に流すと歩留まりの分母が壊れるので明示する。
+      leadType.unmapped
+        ? `区分: ★判定できず（直客として起票）「${body.customerType}」`
+        : `区分: ${leadType.type === "agency" ? "代理店候補" : "直客"}`,
       `会社: ${body.company ? maskContact(body.company) : "—"}`,
       `連絡先: ${maskContact(body.email ?? body.phone)}`,
       `興味商材: ${(body.interestProduct ?? []).join(" / ") || "—"}`,

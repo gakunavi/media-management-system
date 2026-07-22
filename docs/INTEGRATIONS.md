@@ -65,13 +65,37 @@ WP プラグイン側は `debug.log` にしか書かないので、MMS から鳴
   "phone":   "03-1234-5678",
   "company": "株式会社サンプル",
   "message": "即時償却について相談したい",
-  "interestProduct": ["ML"],
+  "interestProduct": ["外貨両替機", "GPUサーバー"],  // interest[] を配列のまま。1文字列に潰さない
+  "customerType": "パートナー提携をご検討の方（会計士・税理士様）",  // customer_type。Lead.type に対応（下記 1.3.1）
   "from":    "media",                          // ?from= の値（§5.4 経路判定）
   "article": "ART-088",                        // ?article= の値。ContentItem と突合する
   "sessionId": "…",                            // P2.5 のファネル計測と接続する
   "pageUrl": "https://asset-support.co.jp/contact/",
   "idempotencyKey": "wp-entry-12345"           // 省略可。あれば再送判定が確実になる
 }
+```
+
+#### 1.3.1 `customerType` は `Lead.type` になる（2026-07-22 追加）
+
+区分は**リードの行き先**を決める。商材の情報ではない。
+
+| CF7 の値 | `Lead.type` | 行き先 |
+|---|---|---|
+| パートナー提携をご検討の方（会計士・税理士様） | `agency` | 代理店候補。百瀬さん |
+| 資産防衛をご検討の方（経営者・投資家様） | `direct_inquiry` | 顧客。営業フロー |
+
+★**新しいフィールドは作らない。** `LeadType.agency` は既にあり、Threads DM 経由の
+代理店候補がこれで入っている。同じ意味の区分を2つ持つと `/agency` の分母が
+どちらを見ているか分からなくなる。
+
+★`interestProduct` に混ぜてはいけない。混ざると商材別集計が顧客区分で埋まり、
+代理店候補が顧客として営業に流れて**両方の歩留まりの分母が壊れる**。
+
+**判定はラベルの完全一致ではなく語で行う**（CF7 の文言は変わりうる）。
+判定できなければ**直客として起票したうえで通知する**（黙って営業に流さない）。
+
+```
+区分: ★判定できず（直客として起票）「その他のご相談」
 ```
 
 ### 1.4 WordPress 側の実装（子テーマ or 専用プラグイン）
@@ -206,7 +230,7 @@ POST /api/ingest/events
 |---|---|
 | `data-mms="<step>"` | クリックでそのステップを送る（`cta_click` / `phone_click` 等） |
 | `data-mms-view="cta"` | 画面に入ったら `cta_view`（IntersectionObserver・1回だけ） |
-| `data-cta-id="hero"` | CTA位置（hero/mid/final/sidebar）。既存 `Cta` の id を入れると位置別集計に接続 |
+| `data-cta-id="hero"` | CTA位置。`hero`/`mid`/`final`/`sidebar`/`header`/`footer`/`fixed` の7種のみ（2.1.1）。`meta.ctaPosition` に入る |
 | `data-mms-form` | フォーム。focus→`form_view` / change→`form_field` / submit→`submit` |
 
 ### 2.3 計測タグの7原則（§3.10.3・タグに実装済み）
