@@ -1,5 +1,6 @@
 import { getLpData } from "@/lib/lp";
 import { TrendChart } from "@/components/chart";
+import { Stages } from "@/components/stages";
 
 // LP（診断LP・代理店LP）— 設計書 §3.8.6 / PRJ-034
 //
@@ -27,35 +28,31 @@ export default async function LpPage() {
       {/* ── 診断LP ───────────────────────────────── */}
       <h2 className="mb-2 text-[14px] font-semibold">診断LP（記事 → LP → 問い合わせ）</h2>
 
-      <div className="mb-3 grid gap-3 sm:grid-cols-4">
-        <Stat label="記事PV" value={diagnosis.mediaPv.toLocaleString("ja-JP")} hint="LP到達率の分母" />
-        <Stat
-          label="LP到達（実人数）"
-          value={diagnosis.totalUsers.toLocaleString("ja-JP")}
-          hint={`イベント${diagnosis.totalViews}件（再訪を含む）`}
-          accent
-        />
-        <Stat
-          label="LP到達率"
-          value={reachRate === null ? "—" : `${(reachRate * 100).toFixed(2)}%`}
-          hint="目安 0.5%（下回ると記事側ボタンの問題）"
-          bad={reachRate !== null && reachRate < 0.005}
-        />
-        <Stat
-          label="問い合わせ"
-          value={diagnosis.submits === null ? "—（未計測）" : diagnosis.submits.toLocaleString("ja-JP")}
-          hint={
-            diagnosis.submits === null
-              ? "★CF7 6.x でイベント名が変わり計測が壊れている"
-              : "lp_form_submit"
-          }
-          bad={diagnosis.submits !== null && diagnosis.submits === 0}
-        />
-      </div>
+      <Stages
+        stages={diagnosis.stages}
+        transitions={diagnosis.transitions}
+        biggestDropIndex={diagnosis.biggestDropIndex}
+      />
 
-      <p className="mb-3 rounded-md bg-[var(--warn)]/12 px-3 py-2 text-[12px] text-[#9a6a00]">
-        {diagnosis.verdict}
-      </p>
+      <div className="my-3 flex flex-wrap gap-x-6 gap-y-1 text-[12px] text-[var(--muted)]">
+        <span>
+          LP到達率{" "}
+          <strong className="tnum">
+            {reachRate === null ? "—" : `${(reachRate * 100).toFixed(2)}%`}
+          </strong>
+          <span className="text-[var(--faint)]"> ／ 目安 0.5%（下回ると記事側ボタンの問題）</span>
+        </span>
+        <span>
+          到達イベント <strong className="tnum">{diagnosis.totalViews}</strong>
+          <span className="text-[var(--faint)]">（再訪を含む。実人数と別）</span>
+        </span>
+        <span>
+          成約金額{" "}
+          <strong className="tnum">
+            {diagnosis.wonAmount > 0 ? `¥${diagnosis.wonAmount.toLocaleString("ja-JP")}` : "—"}
+          </strong>
+        </span>
+      </div>
 
       <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_360px]">
         <Panel title={`LP到達（実人数）の推移・${days}日`}>
@@ -107,7 +104,7 @@ export default async function LpPage() {
         </p>
       ) : (
         <>
-          <div className="mb-3 grid gap-3 sm:grid-cols-3">
+          <div className="mb-3 grid gap-3 sm:grid-cols-4">
             <Stat label="訪問" value={agency.totalVisits.toLocaleString("ja-JP")} hint={`${days}日間`} accent />
             <Stat
               label="問い合わせ"
@@ -118,6 +115,11 @@ export default async function LpPage() {
               label="稼働コード"
               value={String(agency.codes.filter((c) => c.code !== "direct").length)}
               hint="流入が1件以上あったコード"
+            />
+            <Stat
+              label="リード"
+              value={agency.leads.toLocaleString("ja-JP")}
+              hint={`成約 ${agency.won}件${agency.wonAmount > 0 ? ` / ¥${agency.wonAmount.toLocaleString("ja-JP")}` : ""}`}
             />
           </div>
 

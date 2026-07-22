@@ -25,10 +25,29 @@ export type DiagnosisVariant = {
 
 export type DailyPoint = { date: string; value: number };
 
+/** 階段の1段。/line と同じ形にそろえる（読み方を毎回覚え直さないため） */
+export type LpStage = {
+  key: string;
+  label: string;
+  /** null = 未計測（§3）。0 とは意味が違う */
+  value: number | null;
+  hint: string;
+  /** 落ちていたときに打つ手 */
+  action: string;
+};
+
 export type DiagnosisLp = {
   variants: DiagnosisVariant[];
   totalUsers: number;
   totalViews: number;
+  /** 記事PV → LP到達 → 送信 → 問い合わせ → 成約 */
+  stages: LpStage[];
+  transitions: (number | null)[];
+  biggestDropIndex: number | null;
+  /** LP経由のリード（Lead.sourceType=lp_diagnosis） */
+  leads: number;
+  won: number;
+  wonAmount: number;
   /**
    * 問い合わせ。null は未計測。
    * ★2026-07-22 判明: 診断LPの送信計測は CF7 6.x でイベント名が変わって
@@ -60,6 +79,10 @@ export type AgencyLp = {
   totalVisits: number;
   totalInquiries: number;
   daily: DailyPoint[];
+  /** 代理店LP経由のリード（Lead.sourceType=lp_agency） */
+  leads: number;
+  won: number;
+  wonAmount: number;
   /** データが1行も無い＝未取得。0 とは別（§3） */
   measured: boolean;
 };
@@ -83,7 +106,7 @@ function ymd(d: Date): string {
 export async function getLpData(days = 30, now: Date = new Date()): Promise<LpData> {
   const since = new Date(now.getTime() - days * DAY);
 
-  const [snaps, pvAgg, agencyRows] = await Promise.all([
+  const [snaps, pvAgg, agencyRows, diagLeads, agencyLeads] = await Promise.all([
     prisma.metricSnapshot.findMany({
       where: { metric: { startsWith: "lp_" }, date: { gte: since } },
       select: { metric: true, value: true, date: true },
@@ -95,6 +118,14 @@ export async function getLpData(days = 30, now: Date = new Date()): Promise<LpDa
     prisma.agencyLpDaily.findMany({
       where: { date: { gte: since } },
       select: { agencyCode: true, visits: true, inquiries: true, date: true },
+    }),
+    prisma.lead.findMany({
+      where: { sourceType: "lp_diagnosis", occurredAt: { gte: since } },
+      select: { status: true, closedAmount: true },
+    }),
+    prisma.lead.findMany({
+      where: { sourceType: "lp_agency", occurredAt: { gte: since } },
+      select: { status: true, closedAmount: true },
     }),
   ]);
 
@@ -188,14 +219,85 @@ export async function getLpData(days = 30, now: Date = new Date()): Promise<LpDa
     return out;
   };
 
+  // ── 診断LPの階段（記事PV → 到達 → 送信 → 問い合わせ → 成約）──
+  const mediaPv = Math.round(pvAgg._sum.value ?? 0);
+  const diagWon = diagLeads.filter((l) => l.status === "won").length;
+  const diagWonAmount = diagLeads.reduce(
+    (s, l) => s + (l.status === "won" && l.closedAmount ? Number(l.closedAmount) : 0),
+    0,
+  );
+
+  const stages: LpStage[] = [
+    {
+      key: "pv",
+      label: "① 記事PV",
+      value: mediaPv,
+      hint: "LPへ送り出す母数（GA4）",
+      action: "記事を増やす・検索順位を上げる",
+    },
+    {
+      key: "reach",
+      label: "② LP到達",
+      value: totalUsers,
+      hint: "実人数（イベント数ではない）",
+      action: "記事内ボタンの文言・位置・目立ち方を直す",
+    },
+    {
+      key: "submit",
+      label: "③ 送信",
+      value: submits,
+      hint: "lp_form_submit イベント",
+      action: "LPの構成を大きく変える（§3.7.0）",
+    },
+    {
+      key: "lead",
+      label: "④ 問い合わせ",
+      value: diagLeads.length,
+      hint: "LP経由として起票したリード",
+      action: "送信内容の質・フォーム項目を見直す",
+    },
+    {
+      key: "won",
+      label: "⑤ 成約",
+      value: diagWon,
+      hint: "status=won",
+      action: "オファー・価格を見直す",
+    },
+  ];
+
+  const transitions: (number | null)[] = [null];
+  let biggestDropIndex: number | null = null;
+  let worst = Infinity;
+  for (let i = 1; i < stages.length; i++) {
+    const prev = stages[i - 1].value;
+    const cur = stages[i].value;
+    // ★どちらかが未計測なら率を出さない（§16.5）
+    if (prev !== null && cur !== null && prev > 0) {
+      const r = cur / prev;
+      transitions.push(r);
+      if (r < worst) {
+        worst = r;
+        biggestDropIndex = i;
+      }
+    } else {
+      transitions.push(null);
+    }
+  }
+
   return {
     days,
     diagnosis: {
       variants,
       totalUsers,
       totalViews: variants.reduce((s, v) => s + v.views, 0),
+      stages,
+      transitions,
+      biggestDropIndex,
+      leads: diagLeads.length,
+      won: diagWon,
+      wonAmount: diagWonAmount,
       submits,
-      mediaPv: Math.round(pvAgg._sum.value ?? 0),
+      mediaPv,
       daily: toSeries(dailyUsers),
       days,
       verdict,
@@ -205,6 +307,12 @@ export async function getLpData(days = 30, now: Date = new Date()): Promise<LpDa
       totalVisits: codes.reduce((s, c) => s + c.visits, 0),
       totalInquiries: codes.reduce((s, c) => s + c.inquiries, 0),
       daily: toSeries(agencyDaily),
+      leads: agencyLeads.length,
+      won: agencyLeads.filter((l) => l.status === "won").length,
+      wonAmount: agencyLeads.reduce(
+        (s, l) => s + (l.status === "won" && l.closedAmount ? Number(l.closedAmount) : 0),
+        0,
+      ),
       // ★1行も無いのは「訪問0」ではなく「まだ取得していない」（§3）
       measured: agencyRows.length > 0,
     },

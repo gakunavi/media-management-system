@@ -1,5 +1,6 @@
-import { getLineChannel, type LineChannel, type Stage } from "@/lib/channel-line";
+import { getLineChannel } from "@/lib/channel-line";
 import { TrendChart } from "@/components/chart";
+import { Stages } from "@/components/stages";
 
 // 公式LINE（設計書 §4.1 段1③）
 //
@@ -28,40 +29,11 @@ export default async function LinePage() {
 
       {/* ── 階段 ── */}
       <h2 className="mb-2 text-[14px] font-semibold">どこで落ちているか</h2>
-      <div className="mb-2 flex flex-wrap items-stretch gap-1.5">
-        {ch.stages.map((s, i) => (
-          <div key={s.key} className="flex items-stretch gap-1.5">
-            {i > 0 && (
-              <div className="flex flex-col items-center justify-center px-1">
-                <span className="text-[var(--faint)]">→</span>
-                <span
-                  className={`tnum text-[11px] ${
-                    ch.biggestDropIndex === i
-                      ? "font-bold text-[var(--bad)]"
-                      : "text-[var(--faint)]"
-                  }`}
-                >
-                  {ch.transitions[i] === null
-                    ? "—"
-                    : `${(ch.transitions[i]! * 100).toFixed(0)}%`}
-                </span>
-              </div>
-            )}
-            <StageCard stage={s} worst={ch.biggestDropIndex === i} />
-          </div>
-        ))}
-      </div>
-
-      {ch.biggestDropIndex !== null ? (
-        <p className="mb-5 rounded-md bg-[var(--panel-2)] px-3 py-2 text-[12px] text-[var(--muted)]">
-          最大の落ち込みは <strong>{ch.stages[ch.biggestDropIndex].label}</strong>。
-          打つ手: {ch.stages[ch.biggestDropIndex].action}
-        </p>
-      ) : (
-        <p className="mb-5 rounded-md bg-[var(--panel-2)] px-3 py-2 text-[12px] text-[var(--muted)]">
-          転換率を出せる段がまだありません（未計測か母数0）。落ち込みの判定はできません。
-        </p>
-      )}
+      <Stages
+        stages={ch.stages}
+        transitions={ch.transitions}
+        biggestDropIndex={ch.biggestDropIndex}
+      />
 
       {ch.stages[4].value !== null && ch.stages[4].value > 0 && (
         <div className="mb-5 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3.5">
@@ -137,27 +109,3 @@ export default async function LinePage() {
   );
 }
 
-function StageCard({ stage, worst }: { stage: Stage; worst: boolean }) {
-  return (
-    <div
-      className={`flex min-w-[124px] flex-col rounded-lg border px-3 py-2.5 ${
-        worst
-          ? "border-[var(--bad)]/50 bg-[var(--bad)]/[0.05]"
-          : "border-[var(--border)] bg-[var(--panel-2)]"
-      }`}
-      title={stage.hint}
-    >
-      <div className="text-[11px] text-[var(--muted)]">{stage.label}</div>
-      <div className="mt-1">
-        {stage.value === null ? (
-          <span className="text-xs font-medium text-[var(--warn)]">—(未計測)</span>
-        ) : (
-          <span className="tnum text-lg font-bold leading-none">
-            {stage.value.toLocaleString("ja-JP")}
-          </span>
-        )}
-      </div>
-      <div className="mt-1 text-[10px] leading-tight text-[var(--faint)]">{stage.hint}</div>
-    </div>
-  );
-}
