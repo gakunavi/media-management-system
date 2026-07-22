@@ -5,8 +5,11 @@ import {
   LEAD_TYPE_LABEL,
   LEAD_STATUS_LABEL,
   BUDGET_TIER_LABEL,
+  getLineStats,
+  type LineStats,
 } from "@/lib/leads";
 import { LeadForm } from "./lead-form";
+import { TrendChart } from "@/components/chart";
 
 // リード一覧（設計書 §4.2 /leads・§14.3）
 export const dynamic = "force-dynamic";
@@ -29,7 +32,7 @@ function statusBadge(status: string): string {
 }
 
 export default async function LeadsPage() {
-  const [leads, stats] = await Promise.all([getLeads(), getLeadStats()]);
+  const [leads, stats, line] = await Promise.all([getLeads(), getLeadStats(), getLineStats()]);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -58,6 +61,8 @@ export default async function LeadsPage() {
           hint="§1.1 成功指標①（目標100%）"
         />
       </div>
+
+      <LinePanel line={line} />
 
       {/* 成約サマリー */}
       {stats.won > 0 && (
@@ -190,4 +195,63 @@ function Td({
   className?: string;
 }) {
   return <td className={`whitespace-nowrap px-3 py-2.5 ${className}`}>{children}</td>;
+}
+
+/**
+ * 公式LINE の数値（PDCA用）。
+ * ★MMS が持つのは「数」だけ。会話の中身は LINE 公式アカウント側にある。
+ *   見たいのは 登録 → 問い合わせ → 成約 → 金額 の落ち方。
+ */
+function LinePanel({ line }: { line: LineStats }) {
+  const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toFixed(1)}%`);
+  return (
+    <section className="mb-5">
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="text-[14px] font-semibold">公式LINE（直近{line.days}日）</h2>
+        {line.unhandled > 0 && (
+          <span className="rounded-md bg-[var(--bad)]/10 px-2 py-1 text-[12px] font-medium text-[var(--bad)]">
+            ● 未対応 {line.unhandled}件
+          </span>
+        )}
+      </div>
+
+      {!line.measured && (
+        <p className="mb-2 rounded-md bg-[var(--warn)]/12 px-3 py-2 text-[12px] text-[#9a6a00]">
+          ★LINE登録の計測開始が未記録です。ここの数字は 0 ではなく「まだ測っていない」
+          状態を含みます（Webhook で最初の登録が入ると計測が始まります）。
+        </p>
+      )}
+
+      <div className="mb-3 grid gap-3 sm:grid-cols-5">
+        <Stat
+          label="友だち登録"
+          value={line.friends}
+          hint={`うち直近${line.days}日 ${line.friendsInPeriod}件`}
+          accent
+        />
+        <Stat label="問い合わせ" value={line.inbounds} hint="届いたメッセージ数" />
+        <Stat label="成約" value={line.won} hint="LINE経由のリード" />
+        <Stat
+          label="成約金額"
+          value={line.wonAmount > 0 ? `¥${line.wonAmount.toLocaleString("ja-JP")}` : "—"}
+          hint="closedAmount の合計"
+        />
+        <Stat
+          label="転換率"
+          value={`${pct(line.inquiryRate)} → ${pct(line.closeRate)}`}
+          hint="登録→問い合わせ→成約。母数0なら—"
+        />
+      </div>
+
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3.5">
+        <div className="mb-1 text-[12px] font-medium text-[var(--muted)]">
+          問い合わせの推移
+        </div>
+        <TrendChart
+          series={[{ label: "問い合わせ", color: "var(--accent)", points: line.daily }]}
+          height={140}
+        />
+      </div>
+    </section>
+  );
 }

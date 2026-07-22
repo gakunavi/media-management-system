@@ -23,7 +23,6 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { prisma } from "@mms/db";
-import { encryptPii, isPiiKeyReady } from "@/lib/crypto";
 import { notify } from "@/lib/notify";
 
 export const runtime = "nodejs";
@@ -45,17 +44,6 @@ function verify(rawBody: string, signature: string | null, secret: string): bool
   // ★長さが違うと timingSafeEqual が例外を投げる
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
-}
-
-/** 通知に載せる本文の要約。★個人情報を載せない（§16.2） */
-function preview(text: string | undefined): string {
-  if (!text) return "（テキスト以外）";
-  const t = text.replace(/\s+/g, " ").trim();
-  // 連絡先らしき文字列は落とす。通知は Slack に残り続ける
-  const masked = t
-    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "（メール）")
-    .replace(/0\d{1,4}-?\d{1,4}-?\d{3,4}/g, "（電話番号）");
-  return masked.length > 60 ? `${masked.slice(0, 60)}…` : masked;
 }
 
 export async function POST(req: Request) {
@@ -101,6 +89,7 @@ export async function POST(req: Request) {
         create: { lineUserId: userId, addedAt: at, status: "active", tags: [] },
       });
       // ★獲得3ゴールの③。Lead にも起こして段1に出す
+      //   通知も出す。登録は「来たこと」を知りたい対象（見落とし防止）
       if (business) {
         await prisma.lead.create({
           data: {
@@ -111,32 +100,30 @@ export async function POST(req: Request) {
           },
         });
       }
+      await notify({
+        event: "line.follow",
+        title: "🟢 公式LINEに新しい友だち登録",
+        body: "登録がありました。",
+      });
       follows += 1;
       continue;
     }
 
     if (ev.type === "message") {
-      const kind = ev.message?.type ?? "unknown";
-      const text = ev.message?.text;
-      // ★本文は暗号化して保存する。鍵が無いなら保存しない（平文で置かない）
-      const bodyEnc = kind === "text" && text && isPiiKeyReady() ? encryptPii(text) : null;
+      // ★本文は保存しない。MMS が持つのは PDCA に使う数（件数）だけで、
+      //   内容は LINE 公式アカウント側にある。持たなければ守る必要も無い（§16.2）。
       await prisma.lineInbound.create({
-        data: { lineUserId: userId, receivedAt: at, kind, bodyEnc },
+        data: { lineUserId: userId, receivedAt: at, kind: ev.message?.type ?? "unknown" },
       });
       messages += 1;
 
-      // ★ここが本題。届いた瞬間に知らせる
+      // ★通知は「来た」ことだけ伝える。見落とさないためのもので、
+      //   内容を読む場所は LINE 公式アカウント。ここに要約を載せると
+      //   Slack に個人情報が残り続ける。
       await notify({
         event: "line.inbound",
-        title: "📩 公式LINEに新しいメッセージ",
-        body: [
-          `内容: ${preview(text)}`,
-          bodyEnc === null && kind === "text"
-            ? "★本文は保存していません（MMS_PII_KEY 未設定）"
-            : "本文は暗号化して保存しました",
-          "※ 返信は LINE 公式アカウントから行ってください",
-        ].join("\n"),
-        url: `${process.env.MMS_PUBLIC_URL ?? "http://localhost:3000"}/leads`,
+        title: "📩 公式LINEにメッセージが届きました",
+        body: "内容の確認と返信は LINE 公式アカウントから行ってください。",
       });
     }
   }

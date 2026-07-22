@@ -1,0 +1,1 @@
+ALTER TABLE "LineInbound" DROP COLUMN IF EXISTS "bodyEnc";
