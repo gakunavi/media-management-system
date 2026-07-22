@@ -5,8 +5,9 @@ import {
   LEAD_TYPE_LABEL,
   LEAD_STATUS_LABEL,
   BUDGET_TIER_LABEL,
-  getLineStats,
-  type LineStats,
+  getSourceBreakdown,
+  type SourceBreakdown,
+  type SourceRow,
 } from "@/lib/leads";
 import { LeadForm } from "./lead-form";
 import { TrendChart } from "@/components/chart";
@@ -32,7 +33,11 @@ function statusBadge(status: string): string {
 }
 
 export default async function LeadsPage() {
-  const [leads, stats, line] = await Promise.all([getLeads(), getLeadStats(), getLineStats()]);
+  const [leads, stats, sources] = await Promise.all([
+    getLeads(),
+    getLeadStats(),
+    getSourceBreakdown(),
+  ]);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -62,7 +67,7 @@ export default async function LeadsPage() {
         />
       </div>
 
-      <LinePanel line={line} />
+      <SourcePanel data={sources} />
 
       {/* 成約サマリー */}
       {stats.won > 0 && (
@@ -198,83 +203,101 @@ function Td({
 }
 
 /**
- * 公式LINE の数値（PDCA用）。
- * ★MMS が持つのは「数」だけ。会話の中身は LINE 公式アカウント側にある。
- *   見たいのは 登録 → 問い合わせ → 成約 → 金額 の落ち方。
+ * 経路別のリード実績（§3.8.3 Lead.sourceType）。
+ *
+ * ★以前は「直客/代理店/LINE」（＝ゴールの種類）しか出しておらず、
+ *   経路（どこから来たか）を画面に一度も出していなかった。
+ *   さらに LINE だけ専用パネルを作り、経路の1つを特別扱いしていた。
  */
-function LinePanel({ line }: { line: LineStats }) {
+function SourcePanel({ data }: { data: SourceBreakdown }) {
   const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toFixed(1)}%`);
-  return (
-    <section className="mb-5">
-      <div className="mb-2 flex items-baseline justify-between">
-        <h2 className="text-[14px] font-semibold">公式LINE（直近{line.days}日）</h2>
-        {line.unhandled > 0 && (
-          <span className="rounded-md bg-[var(--bad)]/10 px-2 py-1 text-[12px] font-medium text-[var(--bad)]">
-            ● 未対応 {line.unhandled}件
+  const yen = (v: number) => (v > 0 ? `¥${v.toLocaleString("ja-JP")}` : "—");
+  const cell = (r: SourceRow) => (
+    <>
+      <Td className="text-right">
+        {r.measured ? (
+          <span className="tnum font-medium">{r.leads}</span>
+        ) : (
+          <span className="text-[11px] text-[var(--warn)]" title="この経路はまだ計測が始まっていない">
+            未計測
           </span>
         )}
-      </div>
+      </Td>
+      <Td className="text-right">
+        <span className="tnum">{r.won}</span>
+      </Td>
+      <Td className="text-right">
+        <span className="tnum">{yen(r.wonAmount)}</span>
+      </Td>
+      <Td className="text-right">
+        <span className="tnum">{pct(r.closeRate)}</span>
+      </Td>
+      <Td className="text-right">
+        {r.unresponded > 0 ? (
+          <span className="tnum font-medium text-[var(--bad)]">{r.unresponded}</span>
+        ) : (
+          <span className="text-[var(--faint)]">0</span>
+        )}
+      </Td>
+    </>
+  );
 
-      {!line.measured && (
-        <p className="mb-2 rounded-md bg-[var(--warn)]/12 px-3 py-2 text-[12px] text-[#9a6a00]">
-          ★LINE登録の計測開始が未記録です。ここの数字は 0 ではなく「まだ測っていない」
-          状態を含みます（Webhook で最初の登録が入ると計測が始まります）。
-        </p>
-      )}
-
-      <div className="mb-3 grid gap-3 sm:grid-cols-4 lg:grid-cols-7">
-        <Stat
-          label="友だち登録"
-          value={line.friends}
-          hint={`うち直近${line.days}日 ${line.friendsInPeriod}件`}
-          accent
-        />
-        <Stat label="メッセージ受信" value={line.inbounds} hint="スタンプ等も含む全件" />
-        <Stat
-          label="問い合わせ"
-          value={line.inquiries}
-          hint="商談になりうるものを起票した数"
-        />
-        <Stat label="成約" value={line.won} hint="LINE経由のリード" />
-        <Stat
-          label="成約金額"
-          value={line.wonAmount > 0 ? `¥${line.wonAmount.toLocaleString("ja-JP")}` : "—"}
-          hint="closedAmount の合計"
-        />
-        <Stat
-          label="転換率"
-          value={`${pct(line.inquiryRate)} → ${pct(line.closeRate)}`}
-          hint="登録→問い合わせ→成約。母数0なら—"
-        />
-        <Stat
-          label="Threads送客"
-          value={line.threadsClicks}
-          hint={
-            line.followPerClick === null
-              ? "→LINEのクリック数（まだ送客なし）"
-              : `うち登録 ${pct(line.followPerClick)}`
-          }
-        />
-      </div>
-
-      <p className="mb-2 text-[12px] leading-relaxed text-[var(--faint)]">
-        ★LINE の follow イベントには経路情報が入らない（LINE の仕様）。
-        「どの投稿がLINE登録を生んだか」は原理的に取れないため、
-        <strong>Threads送客のクリック数で近似する</strong>。投稿別の内訳は{" "}
-        <a className="text-[var(--accent)] underline" href="/threads">
-          Threads
-        </a>{" "}
-        の「→LINE」列にある。
+  return (
+    <section className="mb-5">
+      <h2 className="mb-2 text-[14px] font-semibold">経路別（どこから来たか）</h2>
+      <p className="mb-2 text-[12px] text-[var(--faint)]">
+        ★「直客/代理店/LINE」はゴールの種類で、経路ではない。どの経路が獲得に
+        効いているかは、この並びでしか判断できない。
+        <br />
+        ★未対応＝初回応答が未記録のリード。設計書はSLA1時間を段1で監視するとしている。
       </p>
-
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3.5">
-        <div className="mb-1 text-[12px] font-medium text-[var(--muted)]">
-          メッセージ受信の推移
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-[var(--border)] bg-[var(--panel-2)] text-left text-[12px] text-[var(--muted)]">
+                <th className="whitespace-nowrap px-3 py-2 font-medium">経路</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">リード</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">成約</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">成約金額</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">成約率</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">未対応</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.rows.map((r) => (
+                <tr key={r.key} className="border-b border-[var(--border)]">
+                  <Td>{r.label}</Td>
+                  {cell(r)}
+                </tr>
+              ))}
+              <tr className="bg-[var(--panel-2)] font-semibold">
+                <Td>{data.total.label}</Td>
+                {cell(data.total)}
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <TrendChart
-          series={[{ label: "問い合わせ", color: "var(--accent)", points: line.daily }]}
-          height={140}
-        />
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-[12px] text-[var(--muted)]">
+        <span>
+          公式LINEの友だち:{" "}
+          {data.lineFriends === null ? (
+            <span className="text-[var(--warn)]">—（未計測）</span>
+          ) : (
+            <strong className="tnum">{data.lineFriends}</strong>
+          )}
+          <span className="text-[var(--faint)]">
+            {" "}
+            ※MMSが数えるのは Webhook 設置以降の登録のみ
+          </span>
+        </span>
+        <span>
+          Threads → LINE の送客:{" "}
+          <strong className="tnum">{data.threadsToLineClicks}</strong>
+          <span className="text-[var(--faint)]"> クリック（直近{data.days}日・経路の近似）</span>
+        </span>
       </div>
     </section>
   );

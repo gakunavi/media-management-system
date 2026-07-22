@@ -167,7 +167,12 @@ enum LeadStatus {
 
 /// §3 Lead.sourceType（§3.8.3）— phone_manual は provenance=declared として扱う
 enum LeadSourceType {
+  /// サイトの問い合わせフォーム
   form
+  /// 診断LPのフォーム（CF7 601652）。form と分ける。
+  /// ★どちらもCF7なので form のままだと「LPが効いたのか記事が効いたのか」が
+  ///   永久に分離できない（2026-07-22 に判明）
+  lp_form
   phone_manual
   line
   threads_dm

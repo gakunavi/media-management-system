@@ -131,123 +131,138 @@ export const BUDGET_TIER_LABEL: Record<string, string> = {
 
 export type LeadFilter = Prisma.LeadWhereInput;
 
-// ── 公式LINE の数値（PDCA用・設計書 §4.1 段1 ③）────────────────────
+// ── 経路別のリード実績（設計書 §3.8.3 Lead.sourceType）────────────────
 //
-// ★MMS が LINE について持つのは「数」だけ。会話の中身は LINE 公式アカウント側にある。
-//   ここで見たいのは 登録者数 → 問い合わせ数 → 成約数 → 金額 の落ち方。
+// ★これが本来の見せ方。以前は「直客/代理店/LINE」（＝ゴールの種類）しか
+//   出しておらず、経路（どこから来たか）を一度も画面に出していなかった。
+//   さらに LINE だけ専用パネルを作っており、経路の1つを特別扱いしていた。
 //
-// ★2026-07-22 の経緯: 購入検討中の方から2件の問い合わせが来ていたが
-//   誰も気づいていなかった。MMS は公式LINEを未計測として扱っていた。
+// ★経路ごとに「件数 → 成約 → 金額」を並べ、最後に合計を出す。
+//   どの経路が獲得に効いているかは、この並びでしか判断できない。
 
-export type LineStats = {
-  /** 友だち登録の累計（LineFriend） */
-  friends: number;
-  /** 期間内の登録数 */
-  friendsInPeriod: number;
-  /**
-   * 期間内に届いたメッセージ件数。
-   * ★これは「問い合わせ数」ではない。スタンプや「こんにちは」も1件に数える。
-   */
-  inbounds: number;
-  /**
-   * 問い合わせ数。Lead(sourceType=line) の件数。
-   * ★受信メッセージのうち「商談になりうるもの」だけを人が起票する。
-   *   全受信を問い合わせと呼ぶと、PDCA の分母が実態より大きくなる。
-   */
-  inquiries: number;
-  /** 未対応のメッセージ件数。見落としの検知 */
-  unhandled: number;
-  /** LINE 経由のリードのうち成約したもの */
-  won: number;
-  wonAmount: number;
-  /** 登録 → 問い合わせ の転換率。母数が無ければ null（§16.5） */
-  inquiryRate: number | null;
-  /** 問い合わせ → 成約 の転換率 */
-  closeRate: number | null;
-  /** 計測が始まっているか。false は 0 ではなく未計測（§3） */
-  measured: boolean;
-  days: number;
-  daily: { date: string; value: number | null }[];
-
-  /**
-   * Threads から公式LINEへ送ったクリック数（期間内）。
-   *
-   * ★LINE の follow イベントには経路情報が入らない（LINE の仕様）。
-   *   「どの投稿がLINE登録を生んだか」は原理的に取れないので、
-   *   送客クリック数で近似する。登録数と並べて初めて意味を持つ:
-   *     クリック 40 → 登録 8  なら「送った人の2割が登録」
-   *   投稿別の内訳は /threads の「→LINE」列にある。
-   */
-  threadsClicks: number;
-  /** クリック → 登録 の到達率。どちらかが0なら null（§16.5） */
-  followPerClick: number | null;
+export const SOURCE_LABEL: Record<string, string> = {
+  line: "公式LINE",
+  threads_dm: "Threads DM",
+  lp_form: "診断LP",
+  form: "問い合わせフォーム",
+  phone_manual: "電話",
 };
 
-export async function getLineStats(days = 30, now: Date = new Date()): Promise<LineStats> {
+/** 表示順。上ほど注力している経路 */
+export const SOURCE_ORDER = ["form", "lp_form", "line", "threads_dm", "phone_manual"];
+
+export type SourceRow = {
+  key: string;
+  label: string;
+  /** リード件数 */
+  leads: number;
+  /** 成約数 */
+  won: number;
+  /** 成約金額 */
+  wonAmount: number;
+  /** 成約率。母数0なら null（§16.5） */
+  closeRate: number | null;
+  /** 未対応（初回応答が未記録）の件数。見落としの検知 */
+  unresponded: number;
+  /** その経路の計測が始まっているか。false は 0 ではなく未計測（§3） */
+  measured: boolean;
+};
+
+export type SourceBreakdown = {
+  rows: SourceRow[];
+  total: SourceRow;
+  /**
+   * 公式LINEの友だち数。
+   * ★null は未計測。MMS が数えられるのは Webhook 設置（2026-07-22）以降の
+   *   follow だけで、それ以前の友だちは観測していない。0 と書くと
+   *   「友だちがいない」という誤った像になる。
+   *   実数は Messaging API の insight/followers で取れるが、
+   *   チャネルアクセストークンが必要（未設定）。
+   */
+  lineFriends: number | null;
+  /** Threads から公式LINEへ送ったクリック数（経路の近似・直近30日） */
+  threadsToLineClicks: number;
+  days: number;
+};
+
+/** その経路の計測が始まっているか。MeasurementCoverage の metric 名 */
+const SOURCE_COVERAGE: Record<string, string> = {
+  form: "lead_direct_inquiry",
+  lp_form: "lp_form_submit_b",
+  line: "lead_line",
+  threads_dm: "lead_agency",
+  phone_manual: "lead_direct_inquiry",
+};
+
+export async function getSourceBreakdown(
+  days = 30,
+  now: Date = new Date(),
+): Promise<SourceBreakdown> {
   const since = new Date(now.getTime() - days * 86400000);
 
-  const [friends, friendsInPeriod, inboundRows, unhandled, leads, coverage, clickAgg] =
-    await Promise.all([
-    prisma.lineFriend.count(),
-    prisma.lineFriend.count({ where: { addedAt: { gte: since } } }),
-    prisma.lineInbound.findMany({
-      where: { receivedAt: { gte: since } },
-      select: { receivedAt: true },
-    }),
-    prisma.lineInbound.count({ where: { handledAt: null } }),
+  const [leads, coverages, lineFollowObserved, clickAgg] = await Promise.all([
     prisma.lead.findMany({
-      where: { sourceType: "line" },
-      select: { status: true, closedAmount: true },
+      select: {
+        sourceType: true,
+        status: true,
+        closedAmount: true,
+        firstResponseAt: true,
+      },
     }),
-    prisma.measurementCoverage.findFirst({ where: { metric: "lead_line" }, select: { id: true } }),
+    prisma.measurementCoverage.findMany({ select: { metric: true } }),
+    prisma.lineFriend.count(),
     prisma.contentMetric.aggregate({
       _sum: { value: true },
       where: { metric: "threads_link_clicks_line", date: { gte: since } },
     }),
   ]);
 
-  let won = 0;
-  let wonAmount = 0;
+  const covered = new Set(coverages.map((c) => c.metric));
+  const acc = new Map<string, { leads: number; won: number; amount: number; unresponded: number }>();
   for (const l of leads) {
+    const k = l.sourceType;
+    const cur = acc.get(k) ?? { leads: 0, won: 0, amount: 0, unresponded: 0 };
+    cur.leads += 1;
     if (l.status === "won") {
-      won += 1;
-      wonAmount += l.closedAmount ? Number(l.closedAmount) : 0;
+      cur.won += 1;
+      cur.amount += l.closedAmount ? Number(l.closedAmount) : 0;
     }
+    if (!l.firstResponseAt) cur.unresponded += 1;
+    acc.set(k, cur);
   }
 
-  const inbounds = inboundRows.length;
-  const inquiries = leads.length;
-  const byDay = new Map<string, number>();
-  for (const r of inboundRows) {
-    const k = new Date(r.receivedAt.getTime() + 9 * 3600000).toISOString().slice(0, 10);
-    byDay.set(k, (byDay.get(k) ?? 0) + 1);
-  }
-  const daily: { date: string; value: number | null }[] = [];
-  for (let i = days - 1; i >= 0; i--) {
-    const k = new Date(now.getTime() - i * 86400000 + 9 * 3600000).toISOString().slice(0, 10);
-    daily.push({ date: k, value: byDay.get(k) ?? 0 });
-  }
+  const rows: SourceRow[] = SOURCE_ORDER.map((k) => {
+    const a = acc.get(k) ?? { leads: 0, won: 0, amount: 0, unresponded: 0 };
+    return {
+      key: k,
+      label: SOURCE_LABEL[k] ?? k,
+      leads: a.leads,
+      won: a.won,
+      wonAmount: a.amount,
+      closeRate: a.leads > 0 ? a.won / a.leads : null,
+      unresponded: a.unresponded,
+      measured: covered.has(SOURCE_COVERAGE[k] ?? ""),
+    };
+  });
 
-  const threadsClicks = Math.round(clickAgg._sum.value ?? 0);
+  const total: SourceRow = {
+    key: "total",
+    label: "合計",
+    leads: rows.reduce((s, r) => s + r.leads, 0),
+    won: rows.reduce((s, r) => s + r.won, 0),
+    wonAmount: rows.reduce((s, r) => s + r.wonAmount, 0),
+    closeRate: null,
+    unresponded: rows.reduce((s, r) => s + r.unresponded, 0),
+    measured: rows.some((r) => r.measured),
+  };
+  total.closeRate = total.leads > 0 ? total.won / total.leads : null;
 
   return {
-    friends,
-    friendsInPeriod,
-    threadsClicks,
-    // ★分母0で率を出さない。送客していないのに「到達率0%」は誤り
-    followPerClick: threadsClicks > 0 ? friendsInPeriod / threadsClicks : null,
-    inbounds,
-    inquiries,
-    unhandled,
-    won,
-    wonAmount,
-    // ★母数0で率を出さない。0% と「まだ分からない」は違う（§16.5）
-    // ★分母は「登録者数」、分子は「問い合わせとして起票された数」。
-    //   受信メッセージ数を分子にすると、スタンプ1つで転換率が上がる
-    inquiryRate: friends > 0 ? inquiries / friends : null,
-    closeRate: inquiries > 0 ? won / inquiries : null,
-    measured: Boolean(coverage),
+    rows,
+    total,
+    // ★Webhook 設置以降しか観測していない。0 件なら「まだ観測していない」
+    lineFriends: lineFollowObserved > 0 ? lineFollowObserved : null,
+    threadsToLineClicks: Math.round(clickAgg._sum.value ?? 0),
     days,
-    daily,
   };
 }
