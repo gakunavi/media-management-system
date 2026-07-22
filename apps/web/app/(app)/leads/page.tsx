@@ -13,6 +13,8 @@ import {
   type SourceRow,
 } from "@/lib/leads";
 import { LeadForm } from "./lead-form";
+import { getAgencyData } from "@/lib/agency";
+import { AgencySection } from "./agency-section";
 import { resolveRange } from "@/lib/period";
 import { RangePicker } from "@/components/range-picker";
 import Link from "next/link";
@@ -47,11 +49,13 @@ export default async function LeadsPage({
   // ★施策はすべて「見込み客募集」か「代理店募集」のために動いている。
   //   どちらに効いたのかを分けて見ないと施策を評価できない（2026-07-23）
   const kind = resolveKind(sp.kind);
-  const [leads, stats, sources, origins] = await Promise.all([
+  const [leads, stats, sources, origins, agency] = await Promise.all([
     getLeads(range, kind),
     getLeadStats(range, kind),
     getSourceBreakdown(range, kind),
     getOriginBreakdown(range, kind),
+    // ★代理店見込みの選別（stage 遷移）はこのタブで扱う。専用画面は畳んだ
+    kind === "agency" ? getAgencyData() : Promise.resolve(null),
   ]);
   const kindHref = (k: string) => {
     const p = new URLSearchParams();
@@ -112,6 +116,9 @@ export default async function LeadsPage({
         />
       </div>
 
+      {/* ★代理店見込みタブだけ、選別パイプライン（DM受信→有効→契約）を出す。
+          種別ごとに見るべきものが違う（見込み客は商談、代理店は選別と取次） */}
+      {agency && <AgencyPipeline data={agency} />}
       <OriginPanel data={origins} />
       <SourcePanel data={sources} />
 
@@ -214,6 +221,41 @@ export default async function LeadsPage({
         に移しました。
       </p>
     </div>
+  );
+}
+
+/**
+ * 代理店見込みの選別（§3-6・P5.6）。
+ *
+ * ★もともと /agency という専用画面にあったが、獲得しているものは
+ *   「見込み客」と「代理店見込み」の2種類で経路が違うだけなので、
+ *   種別タブの中に入れた（2026-07-23 石井さん）。専用画面だと
+ *   同じ数字が2箇所に散り、どちらが正か分からなくなる。
+ */
+function AgencyPipeline({ data }: { data: Awaited<ReturnType<typeof getAgencyData>> }) {
+  return (
+    <section className="mb-5">
+      <h2 className="mb-1 text-[14px] font-semibold">選別パイプライン（現在の状態）</h2>
+      <p className="mb-2 text-[12px] text-[var(--faint)]">
+        ★期間ではなく<strong>いまの状態</strong>の内訳です（stage は動くため）。
+        DMは Threads にしか来ないので、投稿側の効きは{" "}
+        <Link href="/threads?tab=posts" className="text-[var(--accent)] hover:underline">
+          Threads（投稿の効き）
+        </Link>{" "}
+        で見ます。
+      </p>
+      <div className="mb-3 flex flex-wrap gap-2">
+        {data.stages.map((s) => (
+          <div
+            key={s.stage}
+            className="rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-[12px] text-[var(--muted)]"
+          >
+            {s.label} <strong className="tnum ml-1 text-[var(--ink)]">{s.count}</strong>
+          </div>
+        ))}
+      </div>
+      <AgencySection data={data} />
+    </section>
   );
 }
 

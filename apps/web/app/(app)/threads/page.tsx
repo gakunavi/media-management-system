@@ -10,6 +10,7 @@ import {
 } from "@/lib/threads";
 import { getThreadsGoals } from "@/lib/channel-threads";
 import { getPostBriefs, type PostBriefs } from "@/lib/post-briefs";
+import { getAgencyData, type AngleStat } from "@/lib/agency";
 import { getQueueOverview } from "@/lib/threads-queue";
 import { resolveRange, type Range } from "@/lib/period";
 import { RangePicker } from "@/components/range-picker";
@@ -113,7 +114,12 @@ async function GoalsTab({ range }: { range: Range }) {
 /* ─────────────────────── タブ2: 投稿の効き ─────────────────── */
 
 async function PostsTab({ range }: { range: Range }) {
-  const { summary, byFormat, byTarget, byCore, byAgencyAngle, top } = await getThreadsData(range);
+  const [{ summary, byFormat, byTarget, byCore, byAgencyAngle, top }, agency] = await Promise.all([
+    getThreadsData(range),
+    // ★代理店募集トラックの評価軸は views ではなく DM 獲得。
+    //   /agency を畳んだので、アングル別のDM実績はここに置く（2026-07-23）
+    getAgencyData(),
+  ]);
 
   return (
     <div className="grid gap-4">
@@ -151,13 +157,14 @@ async function PostsTab({ range }: { range: Range }) {
           <h2 className="mb-1 text-[14px] font-semibold">代理店募集トラック（参考）</h2>
           <p className="mb-2 text-[12px] text-[var(--faint)]">
             ★このトラックの評価軸は<strong>DM獲得</strong>であって views ではない。
-            アングル別のDM実績は{" "}
-            <Link href="/agency" className="text-[var(--accent)] hover:underline">
-              代理店
+            選別（受信→有効→契約）は{" "}
+            <Link href="/leads?kind=agency" className="text-[var(--accent)] hover:underline">
+              リード統計の「代理店見込み」
             </Link>{" "}
-            にあります。ここは配信量の確認用。
+            にあります。
           </p>
-          <Section title="アングル別" table={byAgencyAngle} />
+          <AngleDmTable rows={agency.byAngle} />
+          <Section title="アングル別（配信量）" table={byAgencyAngle} />
         </div>
       )}
 
@@ -416,6 +423,51 @@ function HealthPanel({ health }: { health: AccountHealth }) {
         （その日に公開した投稿の views から）自前で算出します。
       </p>
     </section>
+  );
+}
+
+/**
+ * アングル別のDM実績。
+ * ★代理店募集トラックはこれが評価軸。views で比べると
+ *   「A12は低調だから減らせ」という有害な提案が出る（実際に出た）。
+ * ★DMは stage が動くので期間で切らない（いまの累計）。
+ */
+function AngleDmTable({ rows }: { rows: AngleStat[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="mb-4">
+      <h3 className="mb-1 text-[13px] font-semibold">アングル別のDM実績（累計）</h3>
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-[var(--border)] bg-[var(--panel-2)] text-left text-[12px] text-[var(--muted)]">
+                <th className="whitespace-nowrap px-3 py-2 font-medium">アングル</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">投稿数</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">DM</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">1投稿あたり</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">有効</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">契約</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.angle} className="border-b border-[var(--border)] last:border-0">
+                  <td className="px-3 py-2">{r.angle}</td>
+                  <td className="tnum px-3 py-2 text-right text-[var(--muted)]">{r.posts}</td>
+                  <td className="tnum px-3 py-2 text-right font-medium">{r.leads || "—"}</td>
+                  <td className="tnum px-3 py-2 text-right">
+                    {r.leadsPerPost === null ? "—" : r.leadsPerPost.toFixed(2)}
+                  </td>
+                  <td className="tnum px-3 py-2 text-right">{r.qualified || "—"}</td>
+                  <td className="tnum px-3 py-2 text-right">{r.contracted || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 }
 

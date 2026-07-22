@@ -184,8 +184,8 @@ export function GoalsPanel({ g }: { g: ThreadsGoals }) {
         />
         <p className="mt-2 text-[12px] text-[var(--faint)]">
           選別の中身（アングル別・stage別）は{" "}
-          <Link href="/agency" className="text-[var(--accent)] hover:underline">
-            代理店
+          <Link href="/leads?kind=agency" className="text-[var(--accent)] hover:underline">
+            リード統計の「代理店見込み」
           </Link>{" "}
           にあります。
         </p>

@@ -221,7 +221,7 @@ export async function getThreadsGoals(range: Range): Promise<ThreadsGoals> {
       rate: rateOf(dmCount, dmViews),
       perPost: perPostOf(dmCount, postsOf("dm")),
       breakdown: [
-        { label: "代理店希望", value: dmAgency, href: "/agency" },
+        { label: "代理店希望", value: dmAgency, href: "/leads?kind=agency" },
         { label: "見込み客", value: dmProspect, href: "/leads" },
       ],
       // ★2026-07-23 から dm-log.md の「反応元」列で代理店/見込み客を分別できる
@@ -229,7 +229,7 @@ export async function getThreadsGoals(range: Range): Promise<ThreadsGoals> {
         dmProspect > 0
           ? "代理店希望と見込み客を分けて記録している（dm-log.md の反応元で判定）"
           : "いまの記録はすべて代理店希望。見込み客DMは反応元を『集客…』で書くと分別される",
-      detailHref: "/agency",
+      detailHref: "/leads?kind=agency",
     },
   ];
 

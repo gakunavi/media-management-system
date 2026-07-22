@@ -24,6 +24,13 @@ export const NAV: NavGroup[] = [
   },
   {
     title: "獲得",
+    // ★代理店専用の画面は置かない（2026-07-23 石井さん）。獲得しているものは
+    //   「見込み客」と「代理店見込み」の2種類で、経路が違うだけ。経路ごとの画面の
+    //   中で種別を分ける方が、同じ数字が2箇所に散らない:
+    //     DMの選別       → リード統計の「代理店見込み」タブ
+    //     アングル別の実績 → Threads（投稿の効き）
+    //     配布コードの稼働 → LP（そのLPの属性なので）
+    //
     // ★並びは「結果 → 受け皿・送客元」（2026-07-23 石井さん指定）。
     //   LP は受け皿（問い合わせの着地点）なので分析ではなく獲得に置く。
     //   もともと cowork の media-console（A/Bテストの分析画面）の後継として
@@ -33,7 +40,6 @@ export const NAV: NavGroup[] = [
       { href: "/lp", label: "LP", ready: true, icon: "lp" },
       { href: "/threads", label: "Threads", ready: true, icon: "threads" },
       { href: "/line", label: "公式LINE", ready: true, icon: "line" },
-      { href: "/agency", label: "代理店", ready: true, icon: "agency" },
     ],
   },
   {
