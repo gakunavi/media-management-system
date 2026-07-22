@@ -89,94 +89,13 @@ export default async function LpPage() {
         </Panel>
       </div>
 
-      {/* ── 代理店LP ─────────────────────────────── */}
-      <h2 className="mb-2 mt-6 text-[14px] font-semibold">
-        代理店LP（防災防犯ライト・配布コード別）
-      </h2>
-      <p className="mb-2 text-[12px] text-[var(--faint)]">
-        ★診断LPとは評価軸が違う。ここで見るのは「配ったコードが動いているか」で、
-        訪問数の多寡ではない。0のコードは<strong>配布したが使われていない</strong>という情報。
+      <p className="mt-6 rounded-md bg-[var(--panel-2)] px-3 py-2 text-[12px] text-[var(--muted)]">
+        代理店LP（防災防犯ライト）は{" "}
+        <a className="text-[var(--accent)] underline" href="/agency">
+          代理店
+        </a>{" "}
+        にまとめました。自社の診断LPとは目的も母数の単位も違うためです。
       </p>
-
-      {!agency.measured ? (
-        <p className="rounded-md bg-[var(--warn)]/12 px-3 py-2 text-[12px] text-[#9a6a00]">
-          代理店LPのデータをまだ取得していません（訪問0ではありません）。
-        </p>
-      ) : (
-        <>
-          <div className="mb-3 grid gap-3 sm:grid-cols-4">
-            <Stat label="訪問" value={agency.totalVisits.toLocaleString("ja-JP")} hint={`${days}日間`} accent />
-            <Stat
-              label="問い合わせ"
-              value={agency.totalInquiries.toLocaleString("ja-JP")}
-              hint="テスト送信は除外済み"
-            />
-            <Stat
-              label="稼働コード"
-              value={String(agency.codes.filter((c) => c.code !== "direct").length)}
-              hint="流入が1件以上あったコード"
-            />
-            <Stat
-              label="リード"
-              value={agency.leads.toLocaleString("ja-JP")}
-              hint={`成約 ${agency.won}件${agency.wonAmount > 0 ? ` / ¥${agency.wonAmount.toLocaleString("ja-JP")}` : ""}`}
-            />
-          </div>
-
-          <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_360px]">
-            <Panel title={`訪問の推移・${days}日`}>
-              <TrendChart
-              series={[{ label: "訪問", color: "var(--accent)", points: agency.daily }]}
-              height={160}
-            />
-            </Panel>
-            <Panel title="コード別">
-              <table className="w-full text-[13px]">
-                <thead>
-                  <tr className="border-b border-[var(--border)] text-left text-[12px] text-[var(--muted)]">
-                    <th className="py-1.5 font-medium">コード</th>
-                    <th className="py-1.5 text-right font-medium">訪問</th>
-                    <th className="py-1.5 text-right font-medium">問合せ</th>
-                    <th className="py-1.5 text-right font-medium">最終</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {agency.codes.map((c) => (
-                    <tr key={c.code} className="border-b border-[var(--border)] last:border-0">
-                      <td className="py-1.5 font-mono text-[12px]">
-                        {c.code === "direct" ? (
-                          <span className="text-[var(--muted)]">コード無し</span>
-                        ) : (
-                          c.code
-                        )}
-                      </td>
-                      <td className="tnum py-1.5 text-right font-medium">{c.visits}</td>
-                      <td className="tnum py-1.5 text-right text-[var(--muted)]">{c.inquiries}</td>
-                      <td
-                        className={`tnum py-1.5 text-right text-[12px] ${
-                          c.idleDays >= 7 ? "text-[var(--bad)]" : "text-[var(--muted)]"
-                        }`}
-                        title={jaDate(c.lastAt)}
-                      >
-                        {c.idleDays}日前
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="mt-2 text-[11px] leading-relaxed text-[var(--faint)]">
-                ★「コード無し」は代理店経由でない訪問（検索・直打ち・OGP共有など）も
-                含む。LP側が全訪問にビーコンを送っているため、189は総訪問数で、
-                そのうち代理店経由と識別できるのが37。
-                <br />
-                ★コードは sessionStorage 保持のためタブを閉じると消える。
-                LINE/メールで受け取り、後日あらためて開いて問い合わせると
-                コードが失われる（要 localStorage + Cookie 化）。
-              </p>
-            </Panel>
-          </div>
-        </>
-      )}
     </div>
   );
 }
@@ -186,34 +105,6 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
     <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3.5">
       <div className="mb-2 text-[12px] font-medium text-[var(--muted)]">{title}</div>
       {children}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  hint,
-  accent,
-  bad,
-}: {
-  label: string;
-  value: string;
-  hint: string;
-  accent?: boolean;
-  bad?: boolean;
-}) {
-  return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3.5">
-      <div className="text-[12px] text-[var(--muted)]">{label}</div>
-      <div
-        className={`tnum mt-1 text-2xl font-bold leading-none ${
-          bad ? "text-[var(--bad)]" : accent ? "text-[var(--accent)]" : ""
-        }`}
-      >
-        {value}
-      </div>
-      <div className="mt-1 text-[11px] text-[var(--faint)]">{hint}</div>
     </div>
   );
 }

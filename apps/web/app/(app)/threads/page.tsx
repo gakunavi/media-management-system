@@ -6,9 +6,7 @@ import {
   type GroupStat,
   type AccountHealth,
 } from "@/lib/threads";
-import { getAgencyData } from "@/lib/agency";
 import { getPostBriefs, type PostBriefs } from "@/lib/post-briefs";
-import { AgencySection } from "./agency-section";
 import { getQueueOverview } from "@/lib/threads-queue";
 import { QueueSection } from "./queue-section";
 
@@ -26,13 +24,11 @@ const num = (n: number | null) => (n === null ? "—" : n.toLocaleString("ja-JP"
 export default async function ThreadsPage() {
   const [
     { summary, byFormat, byTarget, byCore, byAgencyAngle, top },
-    agency,
     health,
     briefs,
     queue,
   ] = await Promise.all([
     getThreadsData(),
-    getAgencyData(),
     getAccountHealth(),
     getPostBriefs(),
     // ★GAS への往復が入る。落ちても他が出るよう getQueueOverview 側で握る
@@ -73,17 +69,17 @@ export default async function ThreadsPage() {
         median={summary.medianFormatAvg}
       />
       {byAgencyAngle.length > 0 && (
-        <Section
-          title="代理店募集トラック（angle別）"
-          note={`★フォーマット別の比較には含めていない。代理店募集は対象が狭くviewsは伸びないのが当然で、評価軸はDM獲得であってviewsではない。ここでviewsの優劣を判断しないこと（${summary.agencyPosts}投稿）。`}
-          rows={byAgencyAngle}
-          median={null}
-        />
+        <p className="mb-5 rounded-md bg-[var(--panel-2)] px-3 py-2 text-[12px] text-[var(--muted)]">
+          代理店募集トラック（{summary.agencyPosts}投稿）は{" "}
+          <a className="text-[var(--accent)] underline" href="/agency">
+            代理店
+          </a>{" "}
+          にまとめました。評価軸がDM獲得で、集客コンテンツとは別物のためです。
+        </p>
       )}
       {/* ★配信が止まると他の指標も全部止まる。先に出す */}
       <QueueSection data={queue} />
 
-      <AgencySection data={agency} />
       <Section title="ターゲット別" rows={byTarget} median={summary.medianFormatAvg} />
       <Section title="コアメッセージ別" rows={byCore} median={summary.medianFormatAvg} />
 
