@@ -344,37 +344,6 @@ def post_to_ingest(
         raise RuntimeError(f"ingest HTTP {e.code}: {e.read().decode()[:300]}") from e
 
 
-def fetch_article_links() -> dict[str, str]:
-    """id → article_link の対応表を action=list から作る。
-
-    ★なぜ2回叩くのか（2026-07-23）
-      インサイト（views 等）を持つのは action=top_posts だが、
-      **top_posts の応答に article_link が入っていない**。
-      一方 MMS は「投稿がどのゴールを狙ったか」をこのリンクで判定する
-      （/r/soken → メディア送客・/r/line → LINE …）。
-      top_posts だけを見ていると、リンクを貼った投稿が公開されても
-      url が空のまま入り、全部「狙い未設定」に分類されて
-      **送客の計測が始まったことに誰も気づけない**。
-      list には article_link があるので、id で突き合わせて補う。
-
-    ★取れなくても同期は続ける。リンクが欠けるのは痛いが、
-      それで投稿とインサイトの取り込みまで止める理由はない。
-    """
-    try:
-        payload = gas_fetch("list")
-    except Exception as e:  # noqa: BLE001 - 同期本体は続ける
-        log(f"★article_link の取得に失敗（リンクは空のまま続行）: {e}")
-        return {}
-
-    links: dict[str, str] = {}
-    for row in extract_rows(payload):
-        ext_id = pick(row, FIELD_ALIASES["id"])
-        link = pick(row, FIELD_ALIASES["articleLink"])
-        if ext_id and link and str(link).strip():
-            links[str(ext_id)] = str(link).strip()
-    return links
-
-
 def main() -> int:
     probe = "--probe" in sys.argv
     account_ref = os.environ.get("MMS_THREADS_ACCOUNT_REF", "setsuzei_masa").strip()
@@ -384,9 +353,17 @@ def main() -> int:
     rows = extract_rows(payload)
     log(f"GAS から {len(rows)} 行を取得")
 
-    # ★送客リンクは list 側にしかない。id で補う（fetch_article_links の説明を参照）
-    links = fetch_article_links()
-    log(f"送客リンクを持つ行 {len(links)} 件")
+
+    seen: dict[str, int] = {}
+    for r in rows:
+        ext = pick(r, FIELD_ALIASES["id"])
+        if ext:
+            seen[str(ext)] = seen.get(str(ext), 0) + 1
+    dupes = {k: v for k, v in seen.items() if v > 1}
+    if dupes:
+        # ★同じ id が複数行あると、後の行が先の行を静かに上書きする
+        #   （ContentItem は externalId で upsert する）。件数だけでも残す
+        log(f"★id が重複している行があります（{len(dupes)}種）: {list(dupes)[:5]}")
 
     if not rows:
         log("★0行でした。GAS 側の action=top_posts が想定と違う可能性があります")
@@ -399,11 +376,12 @@ def main() -> int:
         log("  変換後: " + json.dumps(to_ingest_post(rows[0]), ensure_ascii=False)[:600])
         return 0
 
+    # ★送客リンクは top_posts が返す（2026-07-23 cowork が GAS に追加）。
+    #   以前は list から id で突き合わせて補っていたが、**シートには
+    #   同じ id の行が72種ある**（例 THR-101 は pending と posted の2行）。
+    #   id で引くと未投稿行のリンクが公開済みの投稿に付き、
+    #   踏まれていない投稿がメディア送客の実績として立つ。突き合わせは廃止した。
     posts = [p for p in (to_ingest_post(r) for r in rows) if p]
-    for post in posts:
-        link = links.get(post["id"])
-        if link:
-            post["articleLink"] = link
     with_metrics = sum(1 for p in posts if p.get("metrics"))
     with_link = sum(1 for p in posts if p.get("articleLink"))
     log(f"送信対象 {len(posts)} 件（うちインサイトあり {with_metrics} 件・送客リンクあり {with_link} 件）")

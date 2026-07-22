@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { NOT_MEASURED } from "@mms/shared";
-import { getLpList, LP_TYPE_LABEL, LP_STATUS_LABEL, type LpRow } from "@/lib/lp-registry";
+import { getLpSummary, LP_TYPE_LABEL, LP_STATUS_LABEL, type LpRow, type LpSummary } from "@/lib/lp-registry";
 import { resolveRange } from "@/lib/period";
 import { RangePicker } from "@/components/range-picker";
+import { TrendChart } from "@/components/chart";
 import { LpForm } from "./lp-form";
 
 // LP台帳（設計書 §3.8.6・PRJ-034）
@@ -28,7 +29,7 @@ export default async function LpPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const range = resolveRange(await searchParams);
-  const rows = await getLpList(range);
+  const { rows, totals, trends } = await getLpSummary(range);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -44,6 +45,50 @@ export default async function LpPage({
           <LpForm />
         </div>
       </div>
+
+      {/* ★開いた瞬間に全体像が見えるようにする。表だけだと
+          「で、合計どうなの」が読み取れない（他の獲得画面と揃える） */}
+      <div className="mb-4 grid gap-3 sm:grid-cols-5">
+        <Stat
+          label="到達"
+          value={totals.reach === null ? NOT_MEASURED : totals.reach.toLocaleString("ja-JP")}
+          hint={`公開中 ${totals.live} / 全${totals.lps}本`}
+        />
+        <Stat
+          label="問い合わせ"
+          value={totals.inquiries === null ? NOT_MEASURED : String(totals.inquiries)}
+          hint={
+            totals.unmeasuredLps > 0
+              ? `★${totals.unmeasuredLps}本は未計測。合計に含まれない`
+              : "全LPの合計"
+          }
+          accent
+        />
+        <Stat label="CVR" value={pct(totals.cvr)} hint="到達 → 問い合わせ" />
+        <Stat label="リード" value={String(totals.leads)} hint="LP経由で起票したもの" />
+        <Stat
+          label="成約"
+          value={`${totals.won}件`}
+          hint={totals.wonAmount > 0 ? yen(totals.wonAmount) : "金額未入力"}
+        />
+      </div>
+
+      {/* ★推移。LPごとに線を分ける（母数の違うLPを足すと意味が壊れる） */}
+      <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-4">
+        <div className="mb-1 text-[12px] font-medium text-[var(--muted)]">到達の推移（LP別）</div>
+        <TrendChart
+          series={trends.map((t, i) => ({
+            label: t.label,
+            color: LINE_COLORS[i % LINE_COLORS.length],
+            points: t.points,
+            axis: i === 0 ? "left" : "right",
+          }))}
+          height={160}
+        />
+        <p className="mt-1 text-[11px] text-[var(--faint)]">
+          ★LPごとに桁が違うので軸を分けています。線が切れている日は未計測（0ではない）。
+        </p>
+      </section>
 
       <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
         <div className="overflow-x-auto">
@@ -124,6 +169,35 @@ export default async function LpPage({
         {Object.values(LP_TYPE_LABEL).join(" / ")} から選び、代理店コードを配るLPは
         「代理店コード」を有効にすると、配布コード別の稼働が個別画面に出ます。
       </p>
+    </div>
+  );
+}
+
+/** LP別の線の色。3本目以降は循環する */
+const LINE_COLORS = ["var(--accent)", "#1a7a2e", "#b8860b", "#8aa0b8"];
+
+function Stat({
+  label,
+  value,
+  hint,
+  accent,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  accent?: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3.5">
+      <div className="text-[12px] text-[var(--muted)]">{label}</div>
+      <div
+        className={`tnum mt-1 text-2xl font-bold leading-none ${
+          value === NOT_MEASURED ? "text-[var(--warn)]" : accent ? "text-[var(--accent)]" : ""
+        }`}
+      >
+        {value === NOT_MEASURED ? <span className="text-lg">{NOT_MEASURED}</span> : value}
+      </div>
+      <div className="mt-1 text-[10px] text-[var(--faint)]">{hint}</div>
     </div>
   );
 }

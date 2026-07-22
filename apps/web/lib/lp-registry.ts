@@ -160,6 +160,103 @@ async function agencyLpStats(slug: string, range: Range) {
   };
 }
 
+export type LpSummary = {
+  rows: LpRow[];
+  /** 合計。★未計測を含む列は「実測だけの合計」と分けて出す（§3） */
+  totals: {
+    lps: number;
+    live: number;
+    reach: number | null;
+    inquiries: number | null;
+    cvr: number | null;
+    leads: number;
+    won: number;
+    wonAmount: number;
+    /** 問い合わせが未計測のLPの数。合計の読み方を誤らせないため */
+    unmeasuredLps: number;
+  };
+  /** 到達の日次推移（LP別・合計を重ねて見る） */
+  trends: { slug: string; label: string; points: { date: string; value: number | null }[] }[];
+};
+
+/**
+ * 一覧＋合計＋推移。
+ * ★他の獲得画面（/threads・/line）と同じく、開いた瞬間に全体像が見えるようにする。
+ *   表だけだと「で、合計どうなの」が読み取れない。
+ */
+export async function getLpSummary(range: Range): Promise<LpSummary> {
+  const rows = await getLpList(range);
+  const keys = dayKeys(range.since, range.until);
+
+  const measuredReach = rows.filter((r) => r.reach !== null);
+  const measuredInq = rows.filter((r) => r.inquiries !== null);
+  const reach = measuredReach.length
+    ? measuredReach.reduce((s2, r) => s2 + (r.reach ?? 0), 0)
+    : null;
+  const inquiries = measuredInq.length
+    ? measuredInq.reduce((s2, r) => s2 + (r.inquiries ?? 0), 0)
+    : null;
+
+  const trends = await Promise.all(
+    rows.map(async (r) => ({
+      slug: r.slug,
+      label: r.name,
+      points: await reachTrend(r.registry, keys, range),
+    })),
+  );
+
+  return {
+    rows,
+    totals: {
+      lps: rows.length,
+      live: rows.filter((r) => r.status === "live").length,
+      reach,
+      inquiries,
+      // ★両方が実測のときだけ率を出す（§16.5）
+      cvr: reach !== null && inquiries !== null && reach > 0 ? inquiries / reach : null,
+      leads: rows.reduce((s2, r) => s2 + r.leads, 0),
+      won: rows.reduce((s2, r) => s2 + r.won, 0),
+      wonAmount: rows.reduce((s2, r) => s2 + r.wonAmount, 0),
+      unmeasuredLps: rows.filter((r) => r.inquiries === null).length,
+    },
+    trends,
+  };
+}
+
+/** LPごとの到達の日次推移。計測が無いLPは null で返す（0で線を引かない・§3） */
+async function reachTrend(
+  reg: LpRow["registry"],
+  keys: string[],
+  range: Range,
+): Promise<{ date: string; value: number | null }[]> {
+  const win = { gte: range.since, lt: range.until };
+  const byDay = new Map<string, number>();
+
+  if (reg.metricPrefix) {
+    const snaps = await prisma.metricSnapshot.findMany({
+      where: { metric: { startsWith: `${reg.metricPrefix}_users_` }, date: win },
+      select: { value: true, date: true },
+    });
+    for (const s2 of snaps) {
+      const k = jstDayKey(s2.date);
+      byDay.set(k, (byDay.get(k) ?? 0) + s2.value);
+    }
+  } else if (reg.hasAgencyCodes) {
+    const rows = await prisma.agencyLpDaily.findMany({
+      where: { lp: reg.slug, date: win },
+      select: { visits: true, date: true },
+    });
+    for (const r of rows) {
+      const k = jstDayKey(r.date);
+      byDay.set(k, (byDay.get(k) ?? 0) + r.visits);
+    }
+  } else {
+    return keys.map((k) => ({ date: k, value: null }));
+  }
+
+  return keys.map((k) => ({ date: k, value: byDay.has(k) ? Math.round(byDay.get(k)!) : null }));
+}
+
 export async function getLpList(range: Range): Promise<LpRow[]> {
   const pages = await prisma.landingPage.findMany({ orderBy: { lpType: "asc" } });
 
