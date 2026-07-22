@@ -222,14 +222,19 @@ function LinePanel({ line }: { line: LineStats }) {
         </p>
       )}
 
-      <div className="mb-3 grid gap-3 sm:grid-cols-5">
+      <div className="mb-3 grid gap-3 sm:grid-cols-6">
         <Stat
           label="友だち登録"
           value={line.friends}
           hint={`うち直近${line.days}日 ${line.friendsInPeriod}件`}
           accent
         />
-        <Stat label="問い合わせ" value={line.inbounds} hint="届いたメッセージ数" />
+        <Stat label="メッセージ受信" value={line.inbounds} hint="スタンプ等も含む全件" />
+        <Stat
+          label="問い合わせ"
+          value={line.inquiries}
+          hint="商談になりうるものを起票した数"
+        />
         <Stat label="成約" value={line.won} hint="LINE経由のリード" />
         <Stat
           label="成約金額"

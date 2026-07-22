@@ -144,8 +144,17 @@ export type LineStats = {
   friends: number;
   /** 期間内の登録数 */
   friendsInPeriod: number;
-  /** 期間内に届いたメッセージ件数（＝アクション） */
+  /**
+   * 期間内に届いたメッセージ件数。
+   * ★これは「問い合わせ数」ではない。スタンプや「こんにちは」も1件に数える。
+   */
   inbounds: number;
+  /**
+   * 問い合わせ数。Lead(sourceType=line) の件数。
+   * ★受信メッセージのうち「商談になりうるもの」だけを人が起票する。
+   *   全受信を問い合わせと呼ぶと、PDCA の分母が実態より大きくなる。
+   */
+  inquiries: number;
   /** 未対応のメッセージ件数。見落としの検知 */
   unhandled: number;
   /** LINE 経由のリードのうち成約したもの */
@@ -189,6 +198,7 @@ export async function getLineStats(days = 30, now: Date = new Date()): Promise<L
   }
 
   const inbounds = inboundRows.length;
+  const inquiries = leads.length;
   const byDay = new Map<string, number>();
   for (const r of inboundRows) {
     const k = new Date(r.receivedAt.getTime() + 9 * 3600000).toISOString().slice(0, 10);
@@ -204,12 +214,15 @@ export async function getLineStats(days = 30, now: Date = new Date()): Promise<L
     friends,
     friendsInPeriod,
     inbounds,
+    inquiries,
     unhandled,
     won,
     wonAmount,
     // ★母数0で率を出さない。0% と「まだ分からない」は違う（§16.5）
-    inquiryRate: friends > 0 ? inbounds / friends : null,
-    closeRate: inbounds > 0 ? won / inbounds : null,
+    // ★分母は「登録者数」、分子は「問い合わせとして起票された数」。
+    //   受信メッセージ数を分子にすると、スタンプ1つで転換率が上がる
+    inquiryRate: friends > 0 ? inquiries / friends : null,
+    closeRate: inquiries > 0 ? won / inquiries : null,
     measured: Boolean(coverage),
     days,
     daily,
