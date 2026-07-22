@@ -83,6 +83,12 @@ const paths: Record<string, React.ReactNode> = {
       <path d="M14.5 9.2a3 3 0 0 0-5 2.3c0 2.6 5 1.6 5 4.1a3 3 0 0 1-5 2.2M12 7v10" />
     </>
   ),
+  line: (
+    <>
+      <path d="M21 10.5c0 4.1-4 7.4-9 7.4-.9 0-1.8-.1-2.6-.3L4 20l1.2-3.4A7.4 7.4 0 0 1 3 10.5C3 6.4 7 3 12 3s9 3.4 9 7.5z" />
+      <path d="M8 9v3M8 9h2M15 12V9l2 3V9" />
+    </>
+  ),
   lp: (
     <>
       <rect x="3" y="4" width="18" height="16" rx="2" />
