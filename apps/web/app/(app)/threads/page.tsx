@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import {
   getThreadsData,
@@ -224,16 +225,15 @@ async function PostsTab({ range }: { range: Range }) {
 /* ─────────────────────── タブ3: 配信 ─────────────────────── */
 
 async function DeliveryTab({ range }: { range: Range }) {
-  const [health, briefs, queue] = await Promise.all([
-    getAccountHealth(),
-    getPostBriefs(),
-    // ★GAS への往復が入る。落ちても他が出るよう getQueueOverview 側で握る
-    getQueueOverview(),
-  ]);
+  const [health, briefs] = await Promise.all([getAccountHealth(), getPostBriefs()]);
 
   return (
     <div className="grid gap-4">
-      <QueueSection data={queue} />
+      {/* ★キューは GAS への往復（実測6秒）。ここで待つとタブを押しても
+          画面が変わらず「動かない」ように見える。先にタブを描いて後から差し込む */}
+      <Suspense fallback={<QueueLoading />}>
+        <QueuePanel />
+      </Suspense>
       <BriefPanel briefs={briefs} />
       <HealthPanel health={health} />
       <p className="text-[12px] text-[var(--faint)]">
@@ -241,6 +241,23 @@ async function DeliveryTab({ range }: { range: Range }) {
         いまの状態なので期間に依存しません。
       </p>
     </div>
+  );
+}
+
+async function QueuePanel() {
+  // ★落ちても他が出るよう getQueueOverview 側で握っている
+  const queue = await getQueueOverview();
+  return <QueueSection data={queue} />;
+}
+
+function QueueLoading() {
+  return (
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
+      <h2 className="text-[15px] font-semibold">投稿キューの補充</h2>
+      <p className="mt-1 text-[12px] text-[var(--muted)]">
+        GAS（スプレッドシート）に問い合わせています…
+      </p>
+    </section>
   );
 }
 

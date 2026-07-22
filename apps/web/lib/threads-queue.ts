@@ -80,11 +80,23 @@ function gasConfig(): { url: string; key: string } | null {
   return url && key ? { url, key } : null;
 }
 
+/**
+ * GAS 往復の上限時間。
+ *
+ * ★実測で 6秒かかっていた。画面がその間まるごと待つと「押しても反応しない」
+ *   ように見える（実際に配信タブがそうなっていた）。
+ *   応答が無いことは画面に出せばよく、そのために全体を止める理由はない。
+ */
+const GAS_TIMEOUT_MS = 8000;
+
 async function gasGet(action: string, params: Record<string, string> = {}) {
   const cfg = gasConfig();
   if (!cfg) throw new Error("MMS_THREADS_GAS_URL / MMS_THREADS_GAS_KEY が未設定です");
   const q = new URLSearchParams({ action, key: cfg.key, ...params });
-  const res = await fetch(`${cfg.url}?${q}`, { cache: "no-store" });
+  const res = await fetch(`${cfg.url}?${q}`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(GAS_TIMEOUT_MS),
+  });
   const raw = await res.text();
   try {
     return JSON.parse(raw);

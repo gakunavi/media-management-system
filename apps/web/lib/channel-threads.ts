@@ -27,30 +27,28 @@ export type GoalCard = {
   label: string;
   /** そのゴールを狙った投稿数（リンク判定） */
   posts: number;
+  /** その投稿群の views。成果率の分母 */
+  views: number;
   /** 成果。null = 未計測（§3）。0 とは意味が違う */
   value: number | null;
   unit: string;
   /** 前期間の同じ値。増減用 */
   prev: number | null;
+  /**
+   * 成果率（成果 ÷ views・％）。
+   * ★母数が0、または成果が未計測なら null。0% と書かない（§16.5）
+   */
+  rate: number | null;
+  /** 1投稿あたりの成果。投稿数の違う期間・ゴールを比べるために要る */
+  perPost: number | null;
   /** その成果の次（記事側／選別の先）への案内 */
   note: string;
-  detailHref: string;
-};
-
-export type SideRoute = {
-  key: "lp" | "line";
-  label: string;
-  posts: number;
-  clicks: number | null;
-  /** 計測できない先がある場合の説明。空なら全段計測可能 */
-  limit: string;
   detailHref: string;
 };
 
 export type ThreadsGoals = {
   days: number;
   goals: GoalCard[];
-  side: SideRoute[];
   /** DM の階段（受信 → 選別 → 有効 → 契約） */
   dmFlow: StageFlow;
   /** メディア送客の階段（投稿 → 表示 → クリック） */
@@ -105,30 +103,37 @@ export async function getThreadsGoals(range: Range): Promise<ThreadsGoals> {
       }),
     ]);
 
-  // ★メディア送客の階段に載せる views は「送客を狙った投稿」のものだけ。
-  //   全投稿の views を載せると、リンクを貼っていない投稿の表示まで
-  //   「送客の母数」に見える（実測 141,473 が 0投稿の階段に並んでいた）。
-  const mediaPosts = await prisma.contentItem.findMany({
-    where: {
-      type: "post",
-      channel: { type: "threads" },
-      publishedAt: win,
-      url: { contains: "/r/soken/" },
-    },
-    select: { id: true },
-  });
-  const mediaViewRows = mediaPosts.length
-    ? await prisma.contentMetric.groupBy({
-        by: ["contentItemId"],
-        where: {
-          contentItemId: { in: mediaPosts.map((p) => p.id) },
-          metric: "threads_views",
-          date: { lt: range.until },
-        },
-        _max: { value: true },
-      })
-    : [];
-  const mediaViews = mediaViewRows.reduce((s2, r) => s2 + Math.round(r._max.value ?? 0), 0);
+  // ★ゴールごとの views は「そのゴールを狙った投稿」のものだけ。
+  //   全投稿の views を分母にすると、リンクを貼っていない投稿の表示まで
+  //   「送客の母数」に入り、クリック率が実際より低く出る。
+  const viewsOfPosts = async (where: object): Promise<number> => {
+    const posts = await prisma.contentItem.findMany({
+      where: { type: "post", channel: { type: "threads" }, publishedAt: win, ...where },
+      select: { id: true },
+    });
+    if (posts.length === 0) return 0;
+    const rows = await prisma.contentMetric.groupBy({
+      by: ["contentItemId"],
+      where: {
+        contentItemId: { in: posts.map((p) => p.id) },
+        metric: "threads_views",
+        date: { lt: range.until },
+      },
+      _max: { value: true },
+    });
+    return rows.reduce((s2, r) => s2 + Math.round(r._max.value ?? 0), 0);
+  };
+
+  const [mediaViews, dmViews] = await Promise.all([
+    viewsOfPosts({ url: { contains: "/r/soken/" } }),
+    viewsOfPosts({ targetLabel: "代理店候補" }),
+  ]);
+
+  /** 成果率（％）。分母0・成果未計測なら null（§16.5） */
+  const rateOf = (value: number | null, views: number) =>
+    value === null || views <= 0 ? null : Math.round((value / views) * 100000) / 1000;
+  const perPostOf = (value: number | null, posts: number) =>
+    value === null || posts <= 0 ? null : Math.round((value / posts) * 100) / 100;
 
   const covered = new Set(coverages.map((c) => c.metric));
   /** 期間内のクリック合計。★一度も計測していない経路は 0 ではなく null（§3） */
@@ -182,9 +187,12 @@ export async function getThreadsGoals(range: Range): Promise<ThreadsGoals> {
       key: "media",
       label: "① メディア送客",
       posts: postsOf("media"),
+      views: mediaViews,
       value: mediaClicks,
       unit: "クリック",
       prev: clicksOf("media", prevClickRows),
+      rate: rateOf(mediaClicks, mediaViews),
+      perPost: perPostOf(mediaClicks, postsOf("media")),
       note:
         mediaClicks === null
           ? "投稿に /r/soken/ のリンクが1本も無く、計測が始まっていない（0件ではない）"
@@ -195,32 +203,15 @@ export async function getThreadsGoals(range: Range): Promise<ThreadsGoals> {
       key: "dm",
       label: "② DM（問い合わせ）",
       posts: postsOf("dm"),
+      views: dmViews,
       value: dmCount,
       unit: "件",
       prev: prevDmLeads,
+      rate: rateOf(dmCount, dmViews),
+      perPost: perPostOf(dmCount, postsOf("dm")),
       // ★集客コンテンツからのDMは記録していない（dm-log.md は代理店DMのみ）
       note: "記録があるのは代理店募集トラックのDMのみ。集客コンテンツからのDMは未計測",
       detailHref: "/agency",
-    },
-  ];
-
-  const side: SideRoute[] = [
-    {
-      key: "lp",
-      label: "診断LPへの送客",
-      posts: postsOf("lp"),
-      clicks: clicksOf("lp", clickRows),
-      limit: "LP到達の先（送信）は /lp で計測",
-      detailHref: "/lp",
-    },
-    {
-      key: "line",
-      label: "公式LINEへの送客",
-      posts: postsOf("line"),
-      clicks: clicksOf("line", clickRows),
-      // ★測定不能と未計測を分ける。前者は直せない
-      limit: "登録の投稿別の帰属は測定不能（follow イベントに経路が載らない）",
-      detailHref: "/line",
     },
   ];
 
@@ -325,7 +316,6 @@ export async function getThreadsGoals(range: Range): Promise<ThreadsGoals> {
   return {
     days: range.days,
     goals,
-    side,
     dmFlow: buildFlow(dmStages),
     mediaFlow: buildFlow(mediaStages),
     unsetPosts: unset,

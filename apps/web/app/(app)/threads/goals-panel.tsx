@@ -31,6 +31,9 @@ export function GoalsPanel({ g }: { g: ThreadsGoals }) {
         <p className="mb-3 mt-0.5 text-[12px] text-[var(--faint)]">
           ★どちらも「問い合わせ」に向かうが、経路が別で打ち手も別。合算しない。
           投稿がどちらを狙ったかは<strong>貼ったリンク</strong>で判定している。
+          <br />
+          「率」は成果 ÷ そのゴールを狙った投稿の views。分母に他のゴールの
+          views を混ぜていないので、投稿数が変わっても比べられる。
         </p>
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -41,7 +44,7 @@ export function GoalsPanel({ g }: { g: ThreadsGoals }) {
             >
               <div className="flex items-baseline justify-between">
                 <span className="text-[13px] font-medium">{c.label}</span>
-                <span className="tnum text-[11px] text-[var(--faint)]">{c.posts}投稿</span>
+                <Delta now={c.value} prev={c.prev} />
               </div>
               <div className="mt-1.5 flex items-baseline gap-1.5">
                 {c.value === null ? (
@@ -55,39 +58,55 @@ export function GoalsPanel({ g }: { g: ThreadsGoals }) {
                   </>
                 )}
               </div>
-              <div className="mt-2 flex items-center justify-between gap-2">
-                <Link href={c.detailHref} className="text-[11px] text-[var(--accent)] hover:underline">
+
+              {/* ★何投稿でどれだけ効いたか。投稿数が違う期間・ゴールは
+                  実数だけでは比べられないので率も出す */}
+              <dl className="mt-3 grid grid-cols-4 gap-2 border-t border-[var(--border)] pt-2 text-[11px]">
+                <div>
+                  <dt className="text-[var(--faint)]">投稿</dt>
+                  <dd className="tnum font-medium">{c.posts}</dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--faint)]">views</dt>
+                  <dd className="tnum font-medium">
+                    {c.posts === 0 ? "—" : c.views.toLocaleString("ja-JP")}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--faint)]">率</dt>
+                  <dd className="tnum font-medium">
+                    {c.rate === null ? (
+                      <span className="text-[var(--faint)]">—</span>
+                    ) : (
+                      `${c.rate.toFixed(2)}%`
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--faint)]">1投稿</dt>
+                  <dd className="tnum font-medium">
+                    {c.perPost === null ? (
+                      <span className="text-[var(--faint)]">—</span>
+                    ) : (
+                      c.perPost.toFixed(2)
+                    )}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="mt-2">
+                <Link
+                  href={c.detailHref}
+                  className="text-[11px] text-[var(--accent)] hover:underline"
+                >
                   この先を見る →
                 </Link>
-                <Delta now={c.value} prev={c.prev} />
               </div>
-              <p className="mt-2 text-[11px] leading-snug text-[var(--faint)]">{c.note}</p>
+              <p className="mt-1.5 text-[11px] leading-snug text-[var(--faint)]">{c.note}</p>
             </div>
           ))}
         </div>
 
-        {/* ── 副次の送客先 ── */}
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          {g.side.map((s) => (
-            <div key={s.key} className="rounded-lg border border-dashed border-[var(--border)] p-3">
-              <div className="flex items-baseline justify-between">
-                <span className="text-[12px] font-medium text-[var(--muted)]">{s.label}</span>
-                <span className="tnum text-[11px] text-[var(--faint)]">{s.posts}投稿</span>
-              </div>
-              <div className="mt-1 flex items-baseline gap-1.5">
-                {s.clicks === null ? (
-                  <span className="text-[13px] font-medium text-[var(--warn)]">{NOT_MEASURED}</span>
-                ) : (
-                  <>
-                    <span className="tnum text-xl font-bold leading-none">{s.clicks}</span>
-                    <span className="text-[11px] text-[var(--faint)]">クリック</span>
-                  </>
-                )}
-              </div>
-              <p className="mt-1 text-[11px] leading-snug text-[var(--faint)]">{s.limit}</p>
-            </div>
-          ))}
-        </div>
       </section>
 
       {/* ── 狙いの内訳 ── */}
