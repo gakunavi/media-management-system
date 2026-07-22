@@ -41,6 +41,7 @@ export const NAV: NavGroup[] = [
   {
     title: "分析",
     items: [
+      { href: "/lp", label: "LP", ready: true, icon: "lp" },
       { href: "/market", label: "市場・競合", phase: "P6.8", ready: false, icon: "market" },
       { href: "/ads", label: "広告", phase: "P3.7", ready: false, icon: "ads" },
     ],

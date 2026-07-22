@@ -1050,6 +1050,33 @@ model AgencyLead {
   @@index([sourcePostId])
 }
 
+/// 代理店LP（外部ドメイン）の日次流入。配布URL `?ag=AG-XXXX` 単位。
+///
+/// ★なぜ MMS が持つのか
+///   代理店募集は Threads の4目的の1つだが、MMS が持っていたのは DM だけで、
+///   「配布した代理店コードから実際に何人来て何件問い合わせたか」が無かった。
+///   どの代理店が動いているかは、この数字でしか分からない。
+///
+/// ★PII は持ち込まない。取得元CSVには氏名・メールアドレスが含まれるが、
+///   MMS が必要なのは件数だけ。持たなければ守る必要も無い（§16.2）。
+model AgencyLpDaily {
+  id   String   @id @default(cuid())
+  /// LP識別子（例: bousai-bouhan-light）
+  lp   String
+  date DateTime @db.Date
+  /// AG-0096 など。コード無しの流入は "direct"
+  agencyCode String
+  visits     Int @default(0)
+  inquiries  Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([lp, date, agencyCode])
+  @@index([date])
+  @@index([agencyCode])
+}
+
 /// §3 ══6. 代理店（稼働しているかを追う）
 model Partner {
   id              String    @id @default(cuid())

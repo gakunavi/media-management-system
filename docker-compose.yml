@@ -136,6 +136,8 @@ services:
       GA4_PROPERTY_ID: ${GA4_PROPERTY_ID:-}
       MMS_GA4_LOOKBACK_DAYS: ${MMS_GA4_LOOKBACK_DAYS:-30}
       MMS_GA4_CREDENTIALS: /app/ga4-service-account.json
+      # 代理店LP（builtin/agency_lp_import.py・PRJ-034）。取得元定義は cowork が正本
+      MMS_AGENCY_LP_SOURCES: /app/agency-lp-sources.json
       # 代理店DMログ（builtin/dm_log_import.py・§3-6）。cowork の日次監視が書いている
       MMS_DM_LOG_PATH: /app/cowork-threads/sns-account-create/children/setsuzei-soken/05-sales/agency-recruitment/dm-log.md
     volumes:
@@ -153,6 +155,8 @@ services:
       - ${MMS_COWORK_THREADS_DIR_HOST:-./data/cowork-threads}:/app/cowork-threads:ro
       # ★GA4 のサービスアカウント鍵。メディア事業部側が正本なので複製せず読むだけ
       - ${MMS_GA4_CREDENTIALS_HOST:-./secrets/ga4-service-account.json}:/app/ga4-service-account.json:ro
+      # ★代理店LPの取得元定義。cowork 側が正本なので読むだけ（LPが増えたら向こうに足す）
+      - ${MMS_AGENCY_LP_SOURCES_HOST:-./data/agency_lp_sources.json}:/app/agency-lp-sources.json:ro
     depends_on:
       db:
         condition: service_healthy

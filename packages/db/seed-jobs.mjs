@@ -132,6 +132,15 @@ const JOBS = [
     note: "GA4日次取得: 記事別PVと診断LPのファネルを一次ソースから直接（Notion経由をやめた）",
   },
   {
+    name: "agency-lp-import-daily",
+    // 毎日 07:15。GA4取得(07:30)の前。外部LPの export.php から取る
+    schedule: "15 7 * * *",
+    kind: "builtin",
+    config: { script: "agency_lp_import.py", timeoutSeconds: 300 },
+    enabled: true,
+    note: "代理店LP取り込み: 配布コード別の訪問/問い合わせ（PRJ-034・PIIは保存しない）",
+  },
+  {
     name: "dm-log-import-daily",
     // 毎日 10:00。cowork の日次監視（DM検知・返信案作成）が終わった後に取り込む
     schedule: "0 10 * * *",
