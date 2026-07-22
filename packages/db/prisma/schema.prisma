@@ -1131,6 +1131,35 @@ model LineFriend {
   @@index([status])
 }
 
+/// 公式LINEに届いた**受信**メッセージ（LineMessage は配信＝送信側なので別）。
+///
+/// ★なぜ要るか
+///   2026-07-22、購入検討中の方から公式LINEに2件の問い合わせが来ていたが、
+///   誰も気づいていなかった。MMS は公式LINEを「未計測」として扱っており、
+///   通知経路も無かった。獲得3ゴールの③そのものが素通りしていた。
+///
+/// ★本文は AES-256-GCM で暗号化して保存する（§16.2）。平文では持たない。
+///   通知にも本文を載せない（§5.4 の通知は「来た」ことを伝えるためのもの）。
+model LineInbound {
+  id         String   @id @default(cuid())
+  lineUserId String
+  receivedAt DateTime
+  /// text / image / sticker / file …
+  kind       String
+  /// 本文の封筒（v1:iv:tag:ct）。text 以外は null
+  bodyEnc    String?
+  /// 対応済みにした日時。null は未対応（見落としの検知に使う）
+  handledAt  DateTime?
+  note       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([receivedAt])
+  @@index([lineUserId])
+  @@index([handledAt])
+}
+
 /// §3 ══7. LINE配信（LINE Messaging API で反応が取得可能）
 model LineMessage {
   id         String   @id @default(cuid())

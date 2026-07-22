@@ -63,6 +63,8 @@ services:
       MMS_SMTP_FROM: ${MMS_SMTP_FROM:-mms@localhost}
       # P2: 計測受口とリード（§8 / §16.2）
       MMS_INGEST_SECRET: ${MMS_INGEST_SECRET:-}
+      # 公式LINE Webhook（/api/ingest/line）の署名検証。未設定なら fail-closed で 503
+      MMS_LINE_CHANNEL_SECRET: ${MMS_LINE_CHANNEL_SECRET:-}
       MMS_PII_KEY: ${MMS_PII_KEY:-}
       MMS_INGEST_RATE_LIMIT: ${MMS_INGEST_RATE_LIMIT:-30}
       MMS_INGEST_ALLOWED_ORIGINS: ${MMS_INGEST_ALLOWED_ORIGINS:-}
