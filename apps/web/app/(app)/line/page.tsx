@@ -37,7 +37,7 @@ export default async function LinePage({
         <div>
           <h1 className="text-xl font-bold tracking-tight">公式LINE</h1>
           <p className="mt-0.5 text-[13px] text-[var(--muted)]">
-            {range.label}・送客 → 登録 → 反応 → 問い合わせ → 成約
+            {range.label}・登録 → 問い合わせ → 成約（送客は「入口」で別に見る）
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -104,7 +104,14 @@ export default async function LinePage({
       </div>
 
       {/* ── 階段 ── */}
-      <h2 className="mb-2 text-[14px] font-semibold">どこで落ちているか</h2>
+      <h2 className="mb-1 text-[14px] font-semibold">どこで落ちているか</h2>
+      <p className="mb-2 text-[12px] text-[var(--faint)]">
+        ★<strong>登録が最初に数えられる単位</strong>。上の「入口」（クリック）は別の計測系で、
+        同じ人だと確認する手段が無い（follow に経路情報が入らない）ので同じ階段に載せない。
+        <br />
+        ★階段は<strong>種別（見込み客／代理店見込み）で割らない</strong>。登録の時点では
+        相手がどちらか分からず、分母が割れないため。内訳は下の「種別」で見る。
+      </p>
       <Stages
         stages={ch.stages}
         transitions={ch.transitions}
@@ -112,7 +119,7 @@ export default async function LinePage({
         comparableSegments={ch.comparableSegments}
       />
 
-      {ch.stages[4].value !== null && ch.stages[4].value > 0 && (
+      {ch.stages[2].value !== null && ch.stages[2].value > 0 && (
         <div className="mb-5 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3.5">
           <div className="text-[12px] text-[var(--muted)]">成約金額</div>
           <div className="tnum mt-1 text-2xl font-bold leading-none text-[var(--accent)]">
@@ -127,9 +134,9 @@ export default async function LinePage({
         {/* ★桁が違うので送客だけ別軸。未計測は線を切る（0で繋がない） */}
         <TrendChart
           series={[
-            { label: "① 送客（クリック）", color: "#8aa0b8", points: ch.trends.sent },
-            { label: "② 登録", color: "var(--accent)", points: ch.trends.followed, axis: "right" },
-            { label: "④ 問い合わせ", color: "#1a7a2e", points: ch.trends.inquired, axis: "right" },
+            { label: "友だち数", color: "var(--accent)", points: ch.trends.followed },
+            { label: "問い合わせ", color: "#1a7a2e", points: ch.trends.inquired, axis: "right" },
+            { label: "送客クリック", color: "#8aa0b8", points: ch.trends.sent, axis: "right" },
           ]}
         />
       </div>

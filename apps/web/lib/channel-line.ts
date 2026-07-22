@@ -8,12 +8,26 @@
 // ★このシステムのゴールは問い合わせ数を増やすこと。
 //   PV・クリック・登録はそのための手前の数字で、どこで落ちているかを見る。
 //
-// ★公式LINEの階段は5段。段ごとに打つ手が違う:
-//     ① 送客   … 投稿の型・CTA文言       （/threads の →LINE 列と同じ数字）
-//     ② 登録   … LINE登録画面・登録の動機（軽オファー）
-//     ③ 反応   … あいさつメッセージ・初回の作り
-//     ④ 問い合わせ … 会話の質・返信テンプレ
-//     ⑤ 成約   … オファー・価格
+// ★階段は3段（2026-07-23 石井さんの指摘で作り直した）:
+//     ① 登録   … 登録画面・登録の動機（軽オファー）
+//     ② 問い合わせ … あいさつ・会話の質・返信テンプレ
+//     ③ 成約   … オファー・価格
+//
+//   旧実装は「送客 → 登録 → 反応 → 問い合わせ → 成約」の5段だったが、
+//   2つ誤りがあった:
+//
+//   1. 送客（クリック）を階段の1段目に置いていた。クリックと登録は
+//      **別の計測系で、同じ人だと確認する手段が無い**（LINE の follow に
+//      経路情報が入らない）。率を出しても意味が無く、
+//      「送ったのに登録されていない」という読み方は成立しない。
+//      送客は「入口」として別枠に出す（entrances）。
+//   2. 「反応」（受信メッセージ・スタンプを含む）を段にしていた。
+//      問い合わせと何が違うのかが運用上あいまいで、打ち手も同じ。
+//      見るのは問い合わせだけでよい。
+//
+// ★階段は種別（見込み客／代理店見込み）で割らない。
+//   登録の時点では相手がどちらか分からず、分母が割れないため。
+//   割れるのは問い合わせ以降だけなので、内訳は種別パネルで見る。
 //
 // ★段ごとに「未計測」を持つ。0 と混ぜると、壊れている計測が
 //   「成果ゼロ」に化ける（診断LPの lp_form_submit で実際に起きた）。
@@ -21,7 +35,7 @@ import { prisma } from "@mms/db";
 import { buildFlow, type Stage as SharedStage } from "./stages";
 import { dayKeys, jstDayKey, type Range } from "./period";
 
-export type StageKey = "sent" | "followed" | "replied" | "inquired" | "won";
+export type StageKey = "followed" | "inquired" | "won";
 
 /** 階段の1段。定義は lib/stages.ts（全画面で同じ形にそろえる） */
 export type Stage = SharedStage;
@@ -126,7 +140,7 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
   const tsWin = { gte: range.since, lt: range.until };
   const keys = dayKeys(range.since, range.until);
 
-  const [clickRows, friends, inbounds, leads, coverages, healthEnd, healthStart, healthDaily] =
+  const [clickRows, friends, leads, coverages, healthEnd, healthStart, healthDaily] =
     await Promise.all([
     prisma.contentMetric.findMany({
       where: { metric: "threads_link_clicks_line", date: win },
@@ -135,10 +149,6 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
     prisma.lineFriend.findMany({
       where: { addedAt: tsWin },
       select: { addedAt: true },
-    }),
-    prisma.lineInbound.findMany({
-      where: { receivedAt: tsWin },
-      select: { receivedAt: true },
     }),
     prisma.lead.findMany({
       where: { sourceType: "line", occurredAt: tsWin },
@@ -226,12 +236,17 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
   ];
   const measuredEntrances = entrances.filter((e) => e.clicks !== null);
 
+  // ── 友だち数（期末時点と期間内の増減）──
+  // ★階段の1段目はここ。登録が最初に数えられる単位で、
+  //   送客（クリック）とは計測系が違うので同じ階段に載せない
+  const friendsChange =
+    healthEnd && healthStart ? healthEnd.followers - healthStart.followers : null;
+
   // ── 段の値 ──
   // ★段①は入口の合計。測れている入口が1つも無ければ未計測（0 ではない）
   const sent = measuredEntrances.reduce((s, e) => s + (e.clicks ?? 0), 0);
   const sentMeasuredAny = measuredEntrances.length > 0;
   const followed = friends.length;
-  const replied = inbounds.length;
   const inquired = leads.length;
   // ★計測開始より前に起票した件数。②登録0なのに④問い合わせ2、という
   //   ファネルとして成立しない並びは、これが原因（Webhook設置前の遡及入力）。
@@ -247,46 +262,30 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
 
   const stages: Stage[] = [
     {
-      key: "sent",
-      label: "① 送客",
-      value: sentMeasuredAny ? sent : null,
-      pendingLabel: "—(未計装)",
-      hint: `入口 ${measuredEntrances.length}/3 を計測中`,
-      action: "生リンクを /r/line/… に変える（HP・記事）",
-    },
-    {
-      // ★計測開始より前は「0件」ではなく測っていない期間。
-      //   90日窓のうち Webhook 後だけが実測なのに 0 と出していた
       key: "followed",
-      label: "② 登録",
-      value: lineMeasured ? followed : null,
-      hint: lineStart
-        ? `友だち追加（${ymd(lineStart)}〜の実測）`
-        : "友だち追加（Webhook 未設置）",
+      label: "① 登録",
+      // ★期間内の増減（期末 − 期首）。webhook の follow 件数は設置以降しか
+      //   観測できないので使わない
+      value: friendsChange,
+      hint:
+        friendsChange === null
+          ? "期首の記録が無い期間（取り込み途中）"
+          : "友だち数の増減（Messaging API）",
       action: "登録画面と登録の動機（軽オファー）を作る",
     },
     {
-      key: "replied",
-      label: "③ 反応",
-      value: lineMeasured ? replied : null,
-      hint: lineStart
-        ? `受信したメッセージ（${ymd(lineStart)}〜の実測）`
-        : "受信したメッセージ（Webhook 未設置）",
-      action: "あいさつメッセージと初回の導線を作り直す",
-    },
-    {
       key: "inquired",
-      label: "④ 問い合わせ",
+      label: "② 問い合わせ",
       value: inquired,
       hint:
         retroactive > 0
           ? `起票した数（うち${retroactive}件は計測開始前の遡及入力）`
           : "商談になりうるものとして起票した数",
-      action: "会話の質・返信テンプレを見直す",
+      action: "あいさつメッセージ・会話の質・返信テンプレを見直す",
     },
     {
       key: "won",
-      label: "⑤ 成約",
+      label: "③ 成約",
       value: won,
       hint: "status=won",
       action: "オファー・価格を見直す",
@@ -330,10 +329,12 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
       `① 送客のうち ${unmeasuredEntrances.map((e) => e.label).join("・")} が未計装（送っていないのではなく測っていない）`,
     );
   }
-  if (!lineMeasured) notMeasured.push("② 登録・③ 反応（LINE Webhook が未設置）");
+  if (friendsChange === null) {
+    notMeasured.push("① 登録（この期間の期首に友だち数の記録が無い。履歴の取り込みは日次で進む）");
+  }
   if (retroactive > 0 && lineStart) {
     notMeasured.push(
-      `④ 問い合わせ ${inquired}件のうち ${retroactive}件は ${ymd(lineStart)} の計測開始より前の遡及入力（②③の実測期間に含まれない。段の上下は比較できない）`,
+      `② 問い合わせ ${inquired}件のうち ${retroactive}件は ${ymd(lineStart)} の計測開始より前の遡及入力`,
     );
   }
 
@@ -345,8 +346,7 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
       totalAsOf: healthEnd?.date ?? null,
       // ★期首が無い期間（取得開始前を含む期間）では増減を出さない。
       //   0 と書くと「増えていない」に見えるが、実際は比べる基準が無い（§3）
-      change:
-        healthEnd && healthStart ? healthEnd.followers - healthStart.followers : null,
+      change: friendsChange,
       note: healthEnd
         ? `Messaging API から日次取得（友だち数＝追加延べ − ブロック）。総数は ${ymd(healthEnd.date)} 時点。★どの入口から登録したかは LINE 仕様で取れない`
         : "★この期間の友だち数の記録がありません（取得開始は 2026-07-16）。webhook では総数が取れないため、Messaging API から日次で取り込んでいます。",
