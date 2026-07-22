@@ -68,6 +68,11 @@ services:
       MMS_INGEST_ALLOWED_ORIGINS: ${MMS_INGEST_ALLOWED_ORIGINS:-}
       MMS_DEFAULT_BUSINESS_SLUG: ${MMS_DEFAULT_BUSINESS_SLUG:-tax-saving-agency}
       MMS_PUBLIC_URL: ${MMS_PUBLIC_URL:-http://localhost:3000}
+      # Threads からの送客リンク（/r/<dest>/<投稿ID>）の遷移先。
+      # ★URLを引数で受けない。踏み台にされないため識別子→env の固定対応にする
+      MMS_LINK_DEST_SOKEN: ${MMS_LINK_DEST_SOKEN:-}
+      MMS_LINK_DEST_LP: ${MMS_LINK_DEST_LP:-}
+      MMS_LINK_DEST_LINE: ${MMS_LINK_DEST_LINE:-}
       # 投稿キューの補充画面（/threads）が GAS のシートを直接読み書きする
       MMS_THREADS_GAS_URL: ${MMS_THREADS_GAS_URL:-}
       MMS_THREADS_GAS_KEY: ${MMS_THREADS_GAS_KEY:-}
