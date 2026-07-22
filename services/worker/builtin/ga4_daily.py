@@ -188,6 +188,20 @@ def main() -> int:
             d = datetime.strptime(d_raw, "%Y%m%d").date()
             counts[(d, f"{ev}_{v}")] = counts.get((d, f"{ev}_{v}"), 0) + float(val)
 
+        # ── ③ LPの実人数（イベント数と人数は別物）──
+        # ★lp_view はイベント数。同じ人が再訪すれば増える。
+        #   ABCの判定に必要なのは「何人来たか」なので users も取る。
+        #   2026-07-22 の実測では30日で12イベントだったが、
+        #   これが12人なのか2〜3人の再訪なのかで意味が全く違う。
+        for dims, val in ga4_rows(prop, ["date", "pagePath"], "totalUsers", start, end):
+            d_raw, path = dims
+            v = path_to_variant.get(norm_path(path))
+            if not v:
+                continue
+            d = datetime.strptime(d_raw, "%Y%m%d").date()
+            key = (d, f"lp_users_{v}")
+            counts[key] = counts.get(key, 0) + float(val)
+
         for (d, metric), value in counts.items():
             # ★MetricSnapshot は channelId NULL だと一意制約が効かない（§13 記録済）。
             #   先に消してから入れる
@@ -205,7 +219,11 @@ def main() -> int:
         log(f"診断LPファネル: {len(counts)}行を保存")
 
         # ── 計測開始の記録（§3: 0 と未計測を区別する）──
-        for metric in ["pv"] + [f"{e}_{v}" for e in LP_EVENTS for v in LP_VARIANTS]:
+        for metric in (
+            ["pv"]
+            + [f"{e}_{v}" for e in LP_EVENTS for v in LP_VARIANTS]
+            + [f"lp_users_{v}" for v in LP_VARIANTS]
+        ):
             cur.execute('SELECT 1 FROM "MeasurementCoverage" WHERE metric=%s', (metric,))
             if cur.fetchone():
                 continue
