@@ -168,12 +168,26 @@ export type LineStats = {
   measured: boolean;
   days: number;
   daily: { date: string; value: number | null }[];
+
+  /**
+   * Threads から公式LINEへ送ったクリック数（期間内）。
+   *
+   * ★LINE の follow イベントには経路情報が入らない（LINE の仕様）。
+   *   「どの投稿がLINE登録を生んだか」は原理的に取れないので、
+   *   送客クリック数で近似する。登録数と並べて初めて意味を持つ:
+   *     クリック 40 → 登録 8  なら「送った人の2割が登録」
+   *   投稿別の内訳は /threads の「→LINE」列にある。
+   */
+  threadsClicks: number;
+  /** クリック → 登録 の到達率。どちらかが0なら null（§16.5） */
+  followPerClick: number | null;
 };
 
 export async function getLineStats(days = 30, now: Date = new Date()): Promise<LineStats> {
   const since = new Date(now.getTime() - days * 86400000);
 
-  const [friends, friendsInPeriod, inboundRows, unhandled, leads, coverage] = await Promise.all([
+  const [friends, friendsInPeriod, inboundRows, unhandled, leads, coverage, clickAgg] =
+    await Promise.all([
     prisma.lineFriend.count(),
     prisma.lineFriend.count({ where: { addedAt: { gte: since } } }),
     prisma.lineInbound.findMany({
@@ -186,6 +200,10 @@ export async function getLineStats(days = 30, now: Date = new Date()): Promise<L
       select: { status: true, closedAmount: true },
     }),
     prisma.measurementCoverage.findFirst({ where: { metric: "lead_line" }, select: { id: true } }),
+    prisma.contentMetric.aggregate({
+      _sum: { value: true },
+      where: { metric: "threads_link_clicks_line", date: { gte: since } },
+    }),
   ]);
 
   let won = 0;
@@ -210,9 +228,14 @@ export async function getLineStats(days = 30, now: Date = new Date()): Promise<L
     daily.push({ date: k, value: byDay.get(k) ?? 0 });
   }
 
+  const threadsClicks = Math.round(clickAgg._sum.value ?? 0);
+
   return {
     friends,
     friendsInPeriod,
+    threadsClicks,
+    // ★分母0で率を出さない。送客していないのに「到達率0%」は誤り
+    followPerClick: threadsClicks > 0 ? friendsInPeriod / threadsClicks : null,
     inbounds,
     inquiries,
     unhandled,

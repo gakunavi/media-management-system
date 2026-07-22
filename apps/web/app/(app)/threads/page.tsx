@@ -322,7 +322,10 @@ function Section({
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">返信/投稿</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">いいね</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">返信</th>
-                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">送客</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">送客計</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">→LINE</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">→記事</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">→LP</th>
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">総views</th>
               </tr>
             </thead>
@@ -390,10 +393,15 @@ function Section({
                     </td>
                     {/* ★送客は4つの目的のうち2つに直接対応する唯一の実測値。
                         リンクを貼っていないグループの 0 は「効かなかった」ではなく
-                        「導線が無い」。区別して出す */}
+                        「導線が無い」。区別して出す。
+                        ★遷移先を分ける。LINE登録は follow イベントに経路が
+                        入らないため、投稿別の貢献はこのクリック数でしか近似できない */}
                     <td className="tnum px-3 py-2 text-right font-medium">
-                      {g.linkedPosts === 0 ? (
-                        <span className="text-[11px] text-[var(--faint)]" title="この群にリンク付き投稿が1本も無い">
+                      {/* ★クリックが記録されているのに「導線なし」で隠さない。
+                          シートに article_link が無いままリンクが踏まれている
+                          （＝別経路で貼られている）ことに気づけなくなる */}
+                      {g.linkedPosts === 0 && g.clicks === 0 ? (
+                        <span className="text-[11px] text-[var(--faint)]" title="この群にリンク付き投稿が1本も無く、クリックも無い">
                           導線なし
                         </span>
                       ) : (
@@ -405,6 +413,11 @@ function Section({
                         </>
                       )}
                     </td>
+                    {(["line", "soken", "lp"] as const).map((d) => (
+                      <td key={d} className="tnum px-3 py-2 text-right text-[var(--muted)]">
+                        {g.linkedPosts === 0 && g.clicks === 0 ? "—" : (g.clicksByDest[d] ?? 0)}
+                      </td>
+                    ))}
                     <td className="tnum px-3 py-2 text-right text-[var(--muted)]">
                       {g.totalViews.toLocaleString("ja-JP")}
                     </td>

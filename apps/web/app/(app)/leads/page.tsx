@@ -222,7 +222,7 @@ function LinePanel({ line }: { line: LineStats }) {
         </p>
       )}
 
-      <div className="mb-3 grid gap-3 sm:grid-cols-6">
+      <div className="mb-3 grid gap-3 sm:grid-cols-4 lg:grid-cols-7">
         <Stat
           label="友だち登録"
           value={line.friends}
@@ -246,11 +246,30 @@ function LinePanel({ line }: { line: LineStats }) {
           value={`${pct(line.inquiryRate)} → ${pct(line.closeRate)}`}
           hint="登録→問い合わせ→成約。母数0なら—"
         />
+        <Stat
+          label="Threads送客"
+          value={line.threadsClicks}
+          hint={
+            line.followPerClick === null
+              ? "→LINEのクリック数（まだ送客なし）"
+              : `うち登録 ${pct(line.followPerClick)}`
+          }
+        />
       </div>
+
+      <p className="mb-2 text-[12px] leading-relaxed text-[var(--faint)]">
+        ★LINE の follow イベントには経路情報が入らない（LINE の仕様）。
+        「どの投稿がLINE登録を生んだか」は原理的に取れないため、
+        <strong>Threads送客のクリック数で近似する</strong>。投稿別の内訳は{" "}
+        <a className="text-[var(--accent)] underline" href="/threads">
+          Threads
+        </a>{" "}
+        の「→LINE」列にある。
+      </p>
 
       <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3.5">
         <div className="mb-1 text-[12px] font-medium text-[var(--muted)]">
-          問い合わせの推移
+          メッセージ受信の推移
         </div>
         <TrendChart
           series={[{ label: "問い合わせ", color: "var(--accent)", points: line.daily }]}

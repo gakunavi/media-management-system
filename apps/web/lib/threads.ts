@@ -22,15 +22,23 @@ type MetricKey = (typeof METRICS)[number];
 const AGENCY_TARGET = "代理店候補";
 
 /**
- * 送客クリックの指標名。
+ * 送客クリックの指標名（遷移先ごと）。
+ *
  * ★`threads_link_clicks_lp__setsuzei-diagnosis-a` のような変種別も
  *   同じ接頭辞を持つ。合計に足すと二重計上になるので、明示列挙する。
+ *
+ * ★遷移先を合算しない。目的が違うので、合計だけだと
+ *   「どの型がLINEに送ったか」が出ない。LINE登録は follow イベントに
+ *   経路情報が入らないため（LINE の仕様）、投稿別の貢献は
+ *   このクリック数でしか近似できない。
  */
-const LINK_CLICK_METRICS = [
-  "threads_link_clicks_soken",
-  "threads_link_clicks_lp",
-  "threads_link_clicks_line",
-];
+export const LINK_DESTS = [
+  { key: "soken", label: "節税総研", metric: "threads_link_clicks_soken" },
+  { key: "lp", label: "診断LP", metric: "threads_link_clicks_lp" },
+  { key: "line", label: "公式LINE", metric: "threads_link_clicks_line" },
+] as const;
+
+const LINK_CLICK_METRICS = LINK_DESTS.map((d) => d.metric);
 
 export type ThreadsPost = {
   id: string;
@@ -45,6 +53,8 @@ export type ThreadsPost = {
   engagement: number | null;
   /** 送客クリック（リンクを貼っていない投稿は 0） */
   clicks: number;
+  /** 遷移先ごとの内訳。soken / lp / line */
+  clicksByDest: Record<string, number>;
   /** 投稿に貼った送客リンク。null なら導線なし */
   linkUrl: string | null;
   /** 内訳。null は未計測（§3）。quotes は実測0が続いているので合計にのみ含める */
@@ -83,6 +93,8 @@ export type GroupStat = {
    *   「効かなかった」ではない。linkedPosts と併せて読むこと。
    */
   clicks: number;
+  /** 遷移先ごとの内訳。soken / lp / line */
+  clicksByDest: Record<string, number>;
   /** そのグループでリンクを貼った投稿数。0 なら clicks=0 は当然 */
   linkedPosts: number;
 };
@@ -150,13 +162,21 @@ export async function getThreadsData(): Promise<ThreadsData> {
   // ★送客クリックは views と違って日次で積み上がる（最大値ではなく合計）。
   //   変種別（__setsuzei-diagnosis-a 等）は内訳なので二重に数えない
   const clickRows = await prisma.contentMetric.groupBy({
-    by: ["contentItemId"],
-    where: {
-      metric: { in: LINK_CLICK_METRICS },
-    },
+    by: ["contentItemId", "metric"],
+    where: { metric: { in: LINK_CLICK_METRICS } },
     _sum: { value: true },
   });
-  const clicksByItem = new Map(clickRows.map((r) => [r.contentItemId, r._sum.value ?? 0]));
+  const clicksByItem = new Map<string, number>();
+  const destByItem = new Map<string, Record<string, number>>();
+  for (const r of clickRows) {
+    const dest = LINK_DESTS.find((d) => d.metric === r.metric)?.key;
+    if (!dest) continue;
+    const v = r._sum.value ?? 0;
+    clicksByItem.set(r.contentItemId, (clicksByItem.get(r.contentItemId) ?? 0) + v);
+    const cur = destByItem.get(r.contentItemId) ?? {};
+    cur[dest] = (cur[dest] ?? 0) + v;
+    destByItem.set(r.contentItemId, cur);
+  }
 
   const byItem = new Map<string, Partial<Record<MetricKey, number>>>();
   for (const m of metrics) {
@@ -185,6 +205,7 @@ export async function getThreadsData(): Promise<ThreadsData> {
       views,
       engagement,
       clicks: clicksByItem.get(it.id) ?? 0,
+      clicksByDest: destByItem.get(it.id) ?? {},
       linkUrl: it.url,
       likes: m?.likes ?? null,
       replies: m?.replies ?? null,
@@ -251,6 +272,12 @@ function groupBy(posts: ThreadsPost[], key: (p: ThreadsPost) => string): GroupSt
     const totalReposts = measured.reduce((s, p) => s + (p.reposts ?? 0), 0);
     // ★送客は未計測の概念が無い（クリックされなければ0）。measured で絞らない
     const clicks = arr.reduce((s, p) => s + p.clicks, 0);
+    const clicksByDest: Record<string, number> = {};
+    for (const p of arr) {
+      for (const [k, v] of Object.entries(p.clicksByDest)) {
+        clicksByDest[k] = (clicksByDest[k] ?? 0) + v;
+      }
+    }
     const linkedPosts = arr.filter((p) => p.linkUrl).length;
     out.push({
       name,
@@ -278,6 +305,7 @@ function groupBy(posts: ThreadsPost[], key: (p: ThreadsPost) => string): GroupSt
           ? Math.round((totalReplies / measured.length) * 100) / 100
           : null,
       clicks,
+      clicksByDest,
       linkedPosts,
     });
   }
