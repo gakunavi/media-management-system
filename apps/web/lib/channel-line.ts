@@ -63,16 +63,20 @@ export type LineChannel = {
    *   出せるのは「設置以降の追加・ブロック」だけ。総数は別で持つ必要がある。
    */
   friends: {
-    /** 総数。null = 未取得（基準値も API 接続も無い） */
-    total: number | null;
-    /** 設置以降に観測した追加（期間内） */
-    added: number;
     /**
-     * ブロック数。★画面には出さない（2026-07-23 石井さん）。
-     *   総数（API）が friends.total で取れるので、画面で見る値ではない。
-     *   ただし総数の算出（追加延べ − ブロック）には要るので保持する。
+     * 期末時点の総数。null = その時点のスナップショットが無い（未計測）。
+     * ★「常に最新」を出してはいけない。先月を見ているのに今日の値が出ると、
+     *   期間を変えても数字が動かず「ベタ書き」と区別がつかない（実際そうなっていた）。
      */
-    blocked: number;
+    total: number | null;
+    /** 期末時点のスナップショットの日付 */
+    totalAsOf: Date | null;
+    /**
+     * 期間内の増減（期末 − 期首）。null = 期首か期末のスナップショットが無い。
+     * ★webhook の follow 件数ではなくスナップショットの差分で出す。
+     *   webhook は設置（7/22）以降しか観測できず、それ以前の増減が0に見える。
+     */
+    change: number | null;
     note: string;
   };
   /** ②③の計測開始日。期間の途中から測り始めた場合に画面へ出す */
@@ -117,36 +121,50 @@ function series(
 
 export async function getLineChannel(range: Range): Promise<LineChannel> {
   // ★期間は画面（resolveRange）が決める。lib が勝手に「直近30日」を決めない
-  const win = { gte: range.since, lt: range.until };
+  // ★日付列（@db.Date）とタイムスタンプ列で境界が違う（lib/period.ts）
+  const win = range.dateWindow;
+  const tsWin = { gte: range.since, lt: range.until };
   const keys = dayKeys(range.since, range.until);
 
-  const [clickRows, friends, inbounds, leads, coverages, lineHealth, blockedCount] =
+  const [clickRows, friends, inbounds, leads, coverages, healthEnd, healthStart, healthDaily] =
     await Promise.all([
     prisma.contentMetric.findMany({
       where: { metric: "threads_link_clicks_line", date: win },
       select: { value: true, date: true, contentItem: { select: { note: true, id: true } } },
     }),
     prisma.lineFriend.findMany({
-      where: { addedAt: win },
+      where: { addedAt: tsWin },
       select: { addedAt: true },
     }),
     prisma.lineInbound.findMany({
-      where: { receivedAt: win },
+      where: { receivedAt: tsWin },
       select: { receivedAt: true },
     }),
     prisma.lead.findMany({
-      where: { sourceType: "line", occurredAt: win },
+      where: { sourceType: "line", occurredAt: tsWin },
       select: { occurredAt: true, status: true, closedAmount: true },
     }),
     prisma.measurementCoverage.findMany({ select: { metric: true, startedAt: true } }),
-    // ★友だち総数は SnsAccountHealth（channel=line）に入れる。
-    //   webhook では取れないので、API 接続か基準値の手入力で埋める
+    // ★友だち数は SnsAccountHealth（channel=line）に日次で入っている
+    //   （builtin/line_followers.py が Messaging API から取得）。
+    //   期末時点の値を出すため、期間の終わり以前で最新の1行を引く
     prisma.snsAccountHealth.findFirst({
-      where: { channel: { type: "line" } },
+      where: { channel: { type: "line" }, date: { lt: range.dateWindow.lt } },
       orderBy: { date: "desc" },
       select: { followers: true, date: true },
     }),
-    prisma.lineFriend.count({ where: { status: "blocked" } }),
+    // 期首（期間開始の前日以前で最新）。増減はこの差分で出す
+    prisma.snsAccountHealth.findFirst({
+      where: { channel: { type: "line" }, date: { lt: range.dateWindow.gte } },
+      orderBy: { date: "desc" },
+      select: { followers: true, date: true },
+    }),
+    // 推移用（期間内の日次スナップショット）
+    prisma.snsAccountHealth.findMany({
+      where: { channel: { type: "line" }, date: win },
+      orderBy: { date: "asc" },
+      select: { followers: true, date: true },
+    }),
   ]);
 
   const startedOf = new Map(coverages.map((c) => [c.metric, c.startedAt]));
@@ -323,12 +341,15 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
     days: range.days,
     entrances,
     friends: {
-      total: lineHealth?.followers ?? null,
-      added: friends.length,
-      blocked: blockedCount,
-      note: lineHealth
-        ? `総数は ${ymd(lineHealth.date)} 時点の記録`
-        : "★友だち総数は webhook では取れません（設置前の友だちには event が起きないため）。埋める方法は2つ: ①Messaging API のチャネルアクセストークンを設定して日次取得する ②LINE公式アカウント管理画面の友だち数を基準値として記録する。追加・ブロックは設置（2026-07-22）以降のみ観測しています。",
+      total: healthEnd?.followers ?? null,
+      totalAsOf: healthEnd?.date ?? null,
+      // ★期首が無い期間（取得開始前を含む期間）では増減を出さない。
+      //   0 と書くと「増えていない」に見えるが、実際は比べる基準が無い（§3）
+      change:
+        healthEnd && healthStart ? healthEnd.followers - healthStart.followers : null,
+      note: healthEnd
+        ? `Messaging API から日次取得（友だち数＝追加延べ − ブロック）。総数は ${ymd(healthEnd.date)} 時点。★どの入口から登録したかは LINE 仕様で取れない`
+        : "★この期間の友だち数の記録がありません（取得開始は 2026-07-16）。webhook では総数が取れないため、Messaging API から日次で取り込んでいます。",
     },
     webhookStartedAt: lineStart,
     stages,
@@ -337,7 +358,12 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
     comparableSegments,
     trends: {
       sent: series(sentByDay, keys, sentStart),
-      followed: series(followedByDay, keys, lineStart),
+      // ★webhook の follow 件数ではなく、API の日次スナップショットを描く。
+      //   webhook は設置以降しか観測できず、それ以前が「0」に見える
+      followed: keys.map((k) => {
+        const row = healthDaily.find((h) => ymd(h.date) === k);
+        return { date: k, value: row ? row.followers : null };
+      }),
       // 問い合わせは手入力でも入るので、期間全体を計測済みとして扱う
       inquired: series(inquiredByDay, keys, range.since),
     },

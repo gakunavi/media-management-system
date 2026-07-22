@@ -202,7 +202,7 @@ async function snapshotSum(
     prisma.metricSnapshot.aggregate({
       _sum: { value: true },
       _count: { _all: true },
-      where: { ...where, date: { gte: range.since, lt: range.until } },
+      where: { ...where, date: range.dateWindow },
     }),
     prisma.metricSnapshot.findFirst({
       where,
@@ -743,13 +743,14 @@ export async function getSiteTrend(range: Range): Promise<SiteTrend> {
     prisma.metricSnapshot.findMany({
       where: {
         metric: { in: ["clicks", "impressions", "position"] },
-        date: { gte: range.since, lt: range.until },
+        // ★@db.Date 列。JSTの0時を渡すと前日として扱われる（lib/period.ts）
+        date: range.dateWindow,
       },
       select: { metric: true, value: true, date: true },
     }),
     prisma.contentMetric.groupBy({
       by: ["date"],
-      where: { metric: "pv", date: { gte: range.since, lt: range.until } },
+      where: { metric: "pv", date: range.dateWindow },
       _sum: { value: true },
     }),
     prisma.lead.findMany({
@@ -822,7 +823,8 @@ export type SenderVolume = {
 };
 
 export async function getSenderVolumes(range: Range): Promise<SenderVolume[]> {
-  const win = { gte: range.since, lt: range.until };
+  // ★@db.Date 列（lib/period.ts）
+  const win = range.dateWindow;
   // ★期間内に行が無いことと、そもそも計測していないことは別。
   //   計測開始が記録されていれば「その期間は 0 だった」が実測（§3）。
   const measured = await measuredMetrics();

@@ -256,7 +256,8 @@ export async function getThreadsData(range: Range): Promise<ThreadsData> {
         where: {
           contentItemId: { in: ids },
           metric: { in: METRICS.map((m) => `threads_${m}`) },
-          date: { lt: range.until },
+          // ★@db.Date 列（lib/period.ts）
+          date: { lt: range.dateWindow.lt },
         },
         _max: { value: true },
       })
@@ -270,7 +271,7 @@ export async function getThreadsData(range: Range): Promise<ThreadsData> {
         where: {
           contentItemId: { in: ids },
           metric: { in: LINK_CLICK_METRICS },
-          date: { gte: range.since, lt: range.until },
+          date: range.dateWindow,
         },
         _sum: { value: true },
       })

@@ -322,6 +322,7 @@ export async function getSourceBreakdown(
   range: Range,
   kind: KindKey = "all",
 ): Promise<SourceBreakdown> {
+  // ★Lead.occurredAt / LineFriend.addedAt は DateTime（日付列ではない）
   const win = { gte: range.since, lt: range.until };
 
   const [leads, coverages, lineFollowObserved, clickAgg] = await Promise.all([
@@ -335,7 +336,8 @@ export async function getSourceBreakdown(
     prisma.lineFriend.count({ where: { addedAt: win } }),
     prisma.contentMetric.aggregate({
       _sum: { value: true },
-      where: { metric: "threads_link_clicks_line", date: win },
+      // ★ContentMetric.date は @db.Date（lib/period.ts）
+      where: { metric: "threads_link_clicks_line", date: range.dateWindow },
     }),
   ]);
 

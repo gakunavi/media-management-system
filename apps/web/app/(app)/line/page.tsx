@@ -14,6 +14,9 @@ import { LeadForm } from "../leads/lead-form";
 //   どの段で落ちているかを見る画面。落ちている段が分かれば打ち手が決まる。
 export const dynamic = "force-dynamic";
 
+const jaDate = (d: Date) =>
+  d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric" });
+
 export default async function LinePage({
   searchParams,
 }: {
@@ -54,7 +57,14 @@ export default async function LinePage({
       <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-4">
         <div className="flex flex-wrap items-center gap-6">
           <div>
-            <div className="text-[12px] text-[var(--muted)]">友だち総数</div>
+            <div className="text-[12px] text-[var(--muted)]">
+              友だち数
+              {ch.friends.totalAsOf && (
+                <span className="ml-1 text-[10px] text-[var(--faint)]">
+                  （{jaDate(ch.friends.totalAsOf)} 時点）
+                </span>
+              )}
+            </div>
             <div className="tnum mt-0.5 text-2xl font-bold leading-none">
               {ch.friends.total === null ? (
                 <span className="text-base font-medium text-[var(--warn)]">{NOT_MEASURED}</span>
@@ -63,10 +73,19 @@ export default async function LinePage({
               )}
             </div>
           </div>
-          {/* ★webhook で取れるのは設置以降の増減だけ。総数と混ぜない */}
+          {/* ★期首が無い期間では増減を出さない。0 は「増えていない」に見えるが
+              実際は比べる基準が無い（§3） */}
           <div>
-            <div className="text-[12px] text-[var(--muted)]">追加（期間内・観測分）</div>
-            <div className="tnum mt-0.5 text-2xl font-bold leading-none">{ch.friends.added}</div>
+            <div className="text-[12px] text-[var(--muted)]">期間内の増減</div>
+            <div className="tnum mt-0.5 text-2xl font-bold leading-none">
+              {ch.friends.change === null ? (
+                <span className="text-base font-medium text-[var(--warn)]">
+                  —(期首の記録なし)
+                </span>
+              ) : (
+                `${ch.friends.change > 0 ? "+" : ""}${ch.friends.change}`
+              )}
+            </div>
           </div>
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-[var(--faint)]">{ch.friends.note}</p>

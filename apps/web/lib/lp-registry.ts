@@ -107,7 +107,7 @@ async function leadStats(slug: string, range: Range) {
  *   0 を実測として出すと「LPが悪い」という誤った結論になる。
  */
 async function ga4Stats(prefix: string, range: Range) {
-  const win = { gte: range.since, lt: range.until };
+  const win = range.dateWindow;
   const [users, views, ctaClicks, submits, coverage, latest] = await Promise.all([
     prisma.metricSnapshot.aggregate({
       _sum: { value: true },
@@ -146,7 +146,7 @@ async function ga4Stats(prefix: string, range: Range) {
 
 /** 代理店コード付きLP（AgencyLpDaily）の集計 */
 async function agencyLpStats(slug: string, range: Range) {
-  const win = { gte: range.since, lt: range.until };
+  const win = range.dateWindow;
   const rows = await prisma.agencyLpDaily.findMany({
     where: { lp: slug, date: win },
     select: { agencyCode: true, visits: true, inquiries: true, date: true },
@@ -229,7 +229,7 @@ async function reachTrend(
   keys: string[],
   range: Range,
 ): Promise<{ date: string; value: number | null }[]> {
-  const win = { gte: range.since, lt: range.until };
+  const win = range.dateWindow;
   const byDay = new Map<string, number>();
 
   if (reg.metricPrefix) {
@@ -372,7 +372,7 @@ export async function getLpDetail(slug: string, range: Range): Promise<LpDetail 
 
   if (p.metricPrefix) {
     const prefix = p.metricPrefix;
-    const win = { gte: range.since, lt: range.until };
+    const win = range.dateWindow;
     const [snaps, coverage] = await Promise.all([
       prisma.metricSnapshot.findMany({
         where: { metric: { startsWith: `${prefix}_` }, date: win },

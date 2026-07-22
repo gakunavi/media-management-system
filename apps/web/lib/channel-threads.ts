@@ -77,8 +77,11 @@ const CLICK_METRIC: Record<string, string> = {
 };
 
 export async function getThreadsGoals(range: Range): Promise<ThreadsGoals> {
-  const win = { gte: range.since, lt: range.until };
-  const prevWin = { gte: range.prev.since, lt: range.prev.until };
+  // ★日付列（@db.Date）とタイムスタンプ列で境界が違う（lib/period.ts）
+  const win = range.dateWindow;
+  const prevWin = range.prevDateWindow;
+  const tsWin = { gte: range.since, lt: range.until };
+  const prevTsWin = { gte: range.prev.since, lt: range.prev.until };
 
   // ★getThreadsData は呼ばない。ここが要るのは「ゴールを狙った投稿」の数字だけで、
   //   全投稿の集計（重い）を引くと、使わない数字が混ざって誤用の元になる。
@@ -98,13 +101,13 @@ export async function getThreadsGoals(range: Range): Promise<ThreadsGoals> {
       // ★DM は受け皿として Lead にも入る（dm_log_import が両方に書く）。
       //   受け皿の実績は Lead が正（/leads・ダッシュボードと数字を合わせる）
       prisma.lead.findMany({
-        where: { sourceType: "threads_dm", occurredAt: win },
+        where: { sourceType: "threads_dm", occurredAt: tsWin },
         select: { occurredAt: true, status: true, closedAmount: true, type: true },
       }),
-      prisma.lead.count({ where: { sourceType: "threads_dm", occurredAt: prevWin } }),
+      prisma.lead.count({ where: { sourceType: "threads_dm", occurredAt: prevTsWin } }),
       // 選別の進み具合は AgencyLead（stage 遷移）が正
       prisma.agencyLead.findMany({
-        where: { receivedAt: win },
+        where: { receivedAt: tsWin },
         select: { stage: true },
       }),
     ]);
@@ -114,7 +117,8 @@ export async function getThreadsGoals(range: Range): Promise<ThreadsGoals> {
   //   「送客の母数」に入り、クリック率が実際より低く出る。
   const viewsOfPosts = async (where: object): Promise<number> => {
     const posts = await prisma.contentItem.findMany({
-      where: { type: "post", channel: { type: "threads" }, publishedAt: win, ...where },
+      // ★publishedAt は DateTime。日付列ではないのでタイムスタンプ境界を使う
+      where: { type: "post", channel: { type: "threads" }, publishedAt: tsWin, ...where },
       select: { id: true },
     });
     if (posts.length === 0) return 0;
@@ -159,7 +163,7 @@ export async function getThreadsGoals(range: Range): Promise<ThreadsGoals> {
   // getThreadsData は表を返すので、投稿単位の内訳は top ではなく件数から作る
   const goalCounts = await prisma.contentItem.groupBy({
     by: ["url", "targetLabel"],
-    where: { type: "post", channel: { type: "threads" }, publishedAt: win },
+    where: { type: "post", channel: { type: "threads" }, publishedAt: tsWin },
     _count: { _all: true },
   });
   for (const row of goalCounts) {

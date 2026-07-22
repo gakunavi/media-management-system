@@ -138,7 +138,9 @@ const SENDER_METRIC: Record<string, Record<string, string>> = {
 };
 
 export async function getAcquisitionMatrix(range: Range): Promise<AcquisitionMatrix> {
-  const win = { gte: range.since, lt: range.until };
+  // ★日付列（@db.Date）とタイムスタンプ列で境界が違う（lib/period.ts）
+  const win = range.dateWindow;
+  const tsWin = { gte: range.since, lt: range.until };
 
   const [clickAgg, lpViews, dmLeads, leads, manualLeads, coverages] = await Promise.all([
     prisma.contentMetric.groupBy({
@@ -150,16 +152,16 @@ export async function getAcquisitionMatrix(range: Range): Promise<AcquisitionMat
       _sum: { value: true },
       where: { metric: { startsWith: "lp_users_" }, date: win },
     }),
-    prisma.agencyLead.count({ where: { receivedAt: win } }),
+    prisma.agencyLead.count({ where: { receivedAt: tsWin } }),
     prisma.lead.groupBy({
       by: ["sourceType"],
-      where: { occurredAt: win },
+      where: { occurredAt: tsWin },
       _count: { _all: true },
     }),
     // ★手入力の受け皿（電話・info メール）を送客元別に埋める
     prisma.lead.groupBy({
       by: ["sourceType", "origin"],
-      where: { occurredAt: win, sourceType: { in: ["phone_manual", "email"] } },
+      where: { occurredAt: tsWin, sourceType: { in: ["phone_manual", "email"] } },
       _count: { _all: true },
     }),
     // ★「まだ1度も計測していない」と「計測しているが期間内0件」を分けるための材料。

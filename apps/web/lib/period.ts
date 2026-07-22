@@ -43,6 +43,19 @@ export function dayKeys(since: Date, until: Date): string[] {
   return out;
 }
 
+/**
+ * `@db.Date` 列に渡す境界。
+ *
+ * ★Prisma は `@db.Date` 列のフィルタ値を**日付に切り捨てる**。
+ *   JSTの0時（＝UTCでは前日15:00）をそのまま渡すと前日として扱われ、
+ *   期間の頭が1日多く入り、末尾は当日が丸ごと落ちる。
+ *   実測: `clicks` を「今月」で数えると 6/30 の1日が混入していた。
+ *   日付列には **UTCの0時で表した日付** を渡す。
+ */
+export function dateOnly(dayKey: string): Date {
+  return new Date(`${dayKey}T00:00:00Z`);
+}
+
 export type Range = {
   /** クエリに載る値（?range=）*/
   key: string;
@@ -58,6 +71,12 @@ export type Range = {
   period: string | null;
   /** 直前の同じ長さの期間（増減の比較用） */
   prev: { since: Date; until: Date };
+  /**
+   * `@db.Date` 列（MetricSnapshot.date / ContentMetric.date / SnsAccountHealth.date …）
+   * 用の境界。★タイムスタンプ列には使わない（意味がずれる）
+   */
+  dateWindow: { gte: Date; lt: Date };
+  prevDateWindow: { gte: Date; lt: Date };
 };
 
 export const RANGE_PRESETS = [
@@ -78,6 +97,7 @@ const jaSpan = (since: Date, until: Date) => {
 
 function build(key: string, label: string, since: Date, until: Date, period: string | null): Range {
   const span = until.getTime() - since.getTime();
+  const prevSince = new Date(since.getTime() - span);
   return {
     key,
     label: `${label}（${jaSpan(since, until)}）`,
@@ -85,7 +105,13 @@ function build(key: string, label: string, since: Date, until: Date, period: str
     until,
     days: Math.max(1, Math.round(span / DAY_MS)),
     period,
-    prev: { since: new Date(since.getTime() - span), until: new Date(since.getTime()) },
+    prev: { since: prevSince, until: new Date(since.getTime()) },
+    // ★日付列は JST の日付をそのまま（UTC0時で）渡す
+    dateWindow: { gte: dateOnly(jstDayKey(since)), lt: dateOnly(jstDayKey(until)) },
+    prevDateWindow: {
+      gte: dateOnly(jstDayKey(prevSince)),
+      lt: dateOnly(jstDayKey(since)),
+    },
   };
 }
 
