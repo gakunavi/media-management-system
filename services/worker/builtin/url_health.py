@@ -149,6 +149,10 @@ def main() -> int:
     token = now_ts.strftime("%Y%m%d%H%M")
 
     with psycopg.connect(normalize_dsn(dsn)) as conn:
+        # ★autocommit にする。対象URLを読んだ時点でトランザクションが開き、
+        #   **235回のHTTP（数分）のあいだ開いたまま**になっていた。
+        #   DDL のロック待ちと autovacuum の停滞を招く（§4-51）。
+        conn.autocommit = True
         with conn.cursor() as cur:
             cur.execute("SET TIME ZONE 'UTC'")
             # ★対象から外すもの（外さないと毎日「異常」が出続けて誰も見なくなる）

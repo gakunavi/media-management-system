@@ -124,6 +124,13 @@ def main() -> int:
     slug = os.environ.get("MMS_DEFAULT_BUSINESS_SLUG", "tax-saving-agency")
 
     with psycopg.connect(normalize_dsn(dsn)) as conn, conn.cursor() as cur:
+        # ★autocommit にする。LINE API を最大400日分（1回0.2秒間隔）叩くあいだ
+        #   トランザクションが開いたままになり、DDL のロック待ちと
+        #   autovacuum の停滞を招く（§4-51）。
+        #   書き込みは日次の upsert（ON CONFLICT）で冪等なので、
+        #   途中で落ちても部分的に入って困らない。むしろ**途中まで残るほうが良い**
+        #   （レート制限で中断したとき、次回はその続きから埋まる）。
+        conn.autocommit = True
         use_utc(conn)
         cur.execute('SELECT id FROM "Business" WHERE slug=%s', (slug,))
         row = cur.fetchone()

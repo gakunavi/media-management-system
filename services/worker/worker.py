@@ -368,6 +368,19 @@ def main() -> int:
     while not _shutdown:
         try:
             with psycopg.connect(DATABASE_URL) as conn:
+                # ★autocommit にする（2026-07-24）。
+                #   既定では最初の SELECT でトランザクションが開き、
+                #   **20秒の sleep のあいだ開いたまま**になる（idle in transaction）。
+                #   実害が2つある:
+                #     ① DDL がロック待ちで固まる。実際 ALTER TABLE "Job" が4分以上
+                #        ブロックされ、後続のクエリが全部詰まった
+                #     ② autovacuum が「最も古いトランザクション」より新しい行を
+                #        回収できず、テーブルが肥大する。ディスクは一度満杯にして
+                #        Postgres を落としている（§11.9）ので放置できない
+                #   書き込みは start_run / finish_run が個別に commit しており、
+                #   まとめて巻き戻す必要のある処理は無い。
+                #   ★autocommit 下でも conn.commit() は例外を出さない（検証済み）
+                conn.autocommit = True
                 while not _shutdown:
                     at = now()
                     for job_id, name, schedule, kind, config, last in fetch_due_jobs(
