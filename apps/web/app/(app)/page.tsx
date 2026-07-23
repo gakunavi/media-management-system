@@ -107,7 +107,7 @@ async function OverviewTab({ range }: { range: ReturnType<typeof resolveRange> }
     getResult(range),
     getFunnel(range),
     getSiteTrend(range),
-    getBuyerQuality(),
+    getBuyerQuality(range),
     getActionStats(),
   ]);
 
@@ -279,29 +279,123 @@ function NextActionsPanel({ stats }: { stats: ActionStats }) {
 /* ─────────────────────────── 段3 ─────────────────────────── */
 
 function BuyerPanel({ buyer }: { buyer: Awaited<ReturnType<typeof getBuyerQuality>> }) {
-  const tagged = buyer.taggedContentRatio;
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
   return (
     <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
-      <div className="mb-2 flex items-baseline gap-2.5">
+      <div className="mb-1 flex items-baseline gap-2.5">
         <span className="inline-flex h-5 items-center rounded-md bg-[var(--ink)] px-1.5 text-[11px] font-semibold text-white">
           段3
         </span>
         <h2 className="text-[15px] font-semibold">買い手の質</h2>
+        <Link href="/content" className="ml-auto text-[12px] text-[var(--accent)] hover:underline">
+          記事・投稿 →
+        </Link>
       </div>
-      {tagged && tagged.tagged > 0 ? (
-        <p className="text-sm">
-          買い手軸タグ付け済み{" "}
-          <span className="tnum font-bold">
-            {tagged.tagged} / {tagged.total}
-          </span>{" "}
-          記事
-        </p>
-      ) : (
-        <div>
-          <span className="font-medium text-[var(--warn)]">{NOT_MEASURED}</span>
-          <p className="mt-1 text-[12px] leading-relaxed text-[var(--faint)]">{buyer.note}</p>
+      <p className="mb-3 text-[12px] text-[var(--faint)]">
+        ★「PVが増えた」ではなく<strong>「買い手が増えた」</strong>で判断するための段。
+        買い手＝予算規模が高・中の記事に来た人。低（個人事業主・小規模）は買い手ではないが、
+        狙いが違うだけで悪いわけではない。
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-[var(--accent)]/40 bg-[var(--accent-weak)] p-4">
+          <div className="text-[13px] text-[var(--muted)]">買い手適合クリック</div>
+          {buyer.buyerClicks === null ? (
+            <div className="mt-1 text-lg font-medium text-[var(--warn)]">{NOT_MEASURED}</div>
+          ) : (
+            <>
+              <div className="mt-1 flex items-baseline gap-1.5">
+                <span className="tnum text-3xl font-bold leading-none">
+                  {pct(buyer.buyerClicks.ratio)}
+                </span>
+              </div>
+              <div className="mt-1 text-[11px] text-[var(--faint)]">
+                {buyer.buyerClicks.fit.toLocaleString("ja-JP")} /{" "}
+                {buyer.buyerClicks.total.toLocaleString("ja-JP")} クリック
+              </div>
+            </>
+          )}
         </div>
-      )}
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-4">
+          <div className="text-[13px] text-[var(--muted)]">比較段階の流入</div>
+          {buyer.comparisonClicks === null ? (
+            <div className="mt-1 text-lg font-medium text-[var(--warn)]">{NOT_MEASURED}</div>
+          ) : (
+            <>
+              <div className="mt-1 flex items-baseline gap-1.5">
+                <span className="tnum text-3xl font-bold leading-none">
+                  {pct(buyer.comparisonClicks.ratio)}
+                </span>
+              </div>
+              <div className="mt-1 text-[11px] text-[var(--faint)]">
+                {buyer.comparisonClicks.value.toLocaleString("ja-JP")} クリック・
+                買う前に比べている人
+              </div>
+            </>
+          )}
+        </div>
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] p-4">
+          <div className="text-[13px] text-[var(--muted)]">買い手からの問い合わせ</div>
+          {buyer.buyerLeads === null ? (
+            <div className="mt-1 text-lg font-medium text-[var(--faint)]">—</div>
+          ) : (
+            <>
+              <div className="mt-1 flex items-baseline gap-1.5">
+                <span className="tnum text-3xl font-bold leading-none">{buyer.buyerLeads.fit}</span>
+                <span className="tnum text-[13px] text-[var(--faint)]">
+                  / {buyer.buyerLeads.total}件
+                </span>
+              </div>
+              <div className="mt-1 text-[11px] text-[var(--faint)]">
+                経路が特定できたリードのうち
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* 予算帯別の内訳 */}
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-[var(--border)] text-left text-[11px] text-[var(--muted)]">
+              <th className="py-1.5 pr-2 font-medium">予算規模</th>
+              <th className="py-1.5 pr-2 text-right font-medium">クリック</th>
+              <th className="py-1.5 pr-2 text-right font-medium">構成比</th>
+              <th className="py-1.5 text-right font-medium">問い合わせ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {buyer.byBudget.map((b) => {
+              const total = buyer.buyerClicks?.total ?? 0;
+              return (
+                <tr key={b.key} className="border-b border-[var(--border)]/60">
+                  <td className="py-1.5 pr-2">
+                    {b.label}
+                    {b.key === "unknown" && b.clicks > 0 && (
+                      <span className="ml-1 text-[10px] text-[var(--warn)]">要分類</span>
+                    )}
+                  </td>
+                  <td className="tnum py-1.5 pr-2 text-right">
+                    {b.clicks.toLocaleString("ja-JP")}
+                  </td>
+                  <td className="tnum py-1.5 pr-2 text-right text-[var(--faint)]">
+                    {total > 0 ? `${Math.round((b.clicks / total) * 100)}%` : "—"}
+                  </td>
+                  <td className="tnum py-1.5 text-right">{b.leads || "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mt-2 text-[12px] text-[var(--faint)]">
+        タグ付け: 予算規模 {buyer.tagged.budget}/{buyer.tagged.total}・ファネル段階{" "}
+        {buyer.tagged.funnel}/{buyer.tagged.total}
+        {buyer.note && <span className="text-[var(--warn)]">　★{buyer.note}</span>}
+      </p>
     </section>
   );
 }
+

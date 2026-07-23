@@ -786,6 +786,7 @@ model ContentItem {
   channel Channel @relation(fields: [channelId], references: [id])
 
   metrics             ContentMetric[]
+  aioCitations        AioCitation[]
   ctas                Cta[]
   reviews             ArticleReview[]
   keywordAssignments  KeywordAssignment[]
@@ -891,6 +892,49 @@ model ContentMetric {
   @@index([contentItemId, metric, date])
   @@index([date])
   @@index([metric, date])
+}
+
+/// AIO計測で「誰が引用されたか」を残す（2026-07-23 追加・低優先の生データ保存）
+///
+/// ★なぜ ContentMetric に入れないか
+///   ContentMetric は (contentItemId, metric, date) → Float の器で、
+///   ドメイン名を metric 文字列に埋めると名前空間が無制限に肥大する
+///   （aio_competitor_moneyforward … のように増え続ける）。
+///
+/// ★なぜ ChatGPT だけか
+///   実測（2026-05〜06 の3353試行）で Gemini は自社0% / 競合0.2% と、
+///   そもそも特定サイトを引用する挙動をほぼ持たない。保存しても読む価値がない。
+///     chatgpt 1971試行 自社74(3.8%) 競合90(4.6%)
+///     gemini  1382試行 自社 0(0.0%) 競合 3(0.2%)
+///
+/// ★何に使うか（今は保存だけ。画面もアラートも作らない）
+///   現状 ChatGPT の被引用は中小企業庁など公的機関が中心で、
+///   民間競合には負けていない。**民間競合が現れた時点**が打ち手の分岐なので、
+///   その瞬間を後から辿れるように生データだけ残す。
+model AioCitation {
+  id            String   @id @default(cuid())
+  contentItemId String
+  /// 現状 "chatgpt" のみ（上記の理由で gemini は保存しない）
+  engine        String
+  date          DateTime @db.Date
+
+  /// 実際に引用されたURLのホスト。既知リストに無い競合もここで見つかる
+  citedDomains     String[]
+  /// COMPETITOR_PATTERNS で検出した既知キー（moneyforward / chusho_gov 等）
+  citedCompetitors String[]
+  /// ★民間競合が1つでも出たか。公的機関(.go.jp)だけなら false。
+  ///   「民間競合が現れた」検知をこの1列で済ませるために持つ
+  hasPrivateCompetitor Boolean @default(false)
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([contentItemId, engine, date])
+  @@index([date])
+  @@index([hasPrivateCompetitor])
 }
 
 /// §3 ══3. 記事内CTA（位置別に効果を測る）

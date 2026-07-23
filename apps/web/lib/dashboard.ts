@@ -311,24 +311,130 @@ export async function getFunnel(range: Range): Promise<FunnelView> {
 }
 
 // ── 段3: 買い手の質 ────────────────────────────────────────────
+//
+// ★このシステムの根幹（§1）。「PVが増えた」ではなく「**買い手が増えた**」で
+//   判断できるようにする。PVが倍になっても、読んでいるのが買えない層なら
+//   問い合わせは増えない。実際そうなっていないかを見る。
+//
+// ★買い手＝budgetTier が high / mid の記事に来た人。
+//   low（個人事業主・小規模）は買い手ではないが、**捨てない**。
+//   その層向けの記事が悪いのではなく、狙いが違うだけ。割合として出す。
+//
+// ★2026-07-23 に P4.9（一括タグ付け）で159記事に軸が入り、算出可能になった。
+//   それまでは「タグ付け済み n件」しか出せていなかった。
+
 export type BuyerQuality = {
-  taggedContentRatio: { tagged: number; total: number } | null;
+  /** タグ付けの充足。分母が欠けていると率が信用できない */
+  tagged: { budget: number; funnel: number; total: number };
+  /** 買い手適合クリック。null = 実測が無い期間 */
+  buyerClicks: { fit: number; total: number; ratio: number } | null;
+  /** 比較段階（funnelStage=comparison）の流入 */
+  comparisonClicks: { value: number; total: number; ratio: number } | null;
+  /** 買い手記事からの問い合わせ（firstTouch が high/mid の記事） */
+  buyerLeads: { fit: number; total: number } | null;
+  /** budgetTier 別のクリック内訳 */
+  byBudget: { key: string; label: string; clicks: number; leads: number }[];
+  /** 読み方の注意。空なら問題なし */
   note: string;
 };
 
-export async function getBuyerQuality(): Promise<BuyerQuality> {
-  // budgetTier / funnelStage は P4.9 の一括タグ付けで埋まる。現状は未タグ。
-  const [total, tagged] = await Promise.all([
-    prisma.contentItem.count({ where: { type: "article" } }),
-    prisma.contentItem.count({
-      where: { type: "article", budgetTier: { not: "unknown" } },
+const BUDGET_LABEL_JA: Record<string, string> = {
+  high: "高（1,000万〜）",
+  mid: "中（300〜1,000万）",
+  low: "低（〜300万）",
+  unknown: "未分類",
+};
+
+/** 買い手とみなす予算帯 */
+const BUYER_TIERS = ["high", "mid"];
+
+export async function getBuyerQuality(range: Range): Promise<BuyerQuality> {
+  const articles = await prisma.contentItem.findMany({
+    where: { type: { in: ["article", "article_unlinked"] } },
+    select: { id: true, budgetTier: true, funnelStage: true },
+  });
+  const total = articles.length;
+  const tierOf = new Map(articles.map((a) => [a.id, a.budgetTier]));
+  const stageOf = new Map(articles.map((a) => [a.id, a.funnelStage]));
+
+  const [clickRows, leadRows] = await Promise.all([
+    prisma.contentMetric.groupBy({
+      by: ["contentItemId"],
+      // ★@db.Date 列（§4-15）
+      where: { metric: "clicks", date: range.dateWindow },
+      _sum: { value: true },
+    }),
+    prisma.lead.groupBy({
+      by: ["firstTouchContentId"],
+      where: {
+        firstTouchContentId: { not: null },
+        occurredAt: { gte: range.since, lt: range.until },
+      },
+      _count: { _all: true },
     }),
   ]);
+
+  const clicksBy = new Map<string, number>();
+  for (const r of clickRows) clicksBy.set(r.contentItemId, Math.round(r._sum.value ?? 0));
+  const leadsBy = new Map<string, number>();
+  for (const r of leadRows) {
+    if (r.firstTouchContentId) leadsBy.set(r.firstTouchContentId, r._count._all);
+  }
+
+  let totalClicks = 0;
+  let fitClicks = 0;
+  let comparison = 0;
+  let totalLeads = 0;
+  let fitLeads = 0;
+  const byBudgetMap = new Map<string, { clicks: number; leads: number }>();
+
+  for (const [id, clicks] of clicksBy) {
+    const tier = tierOf.get(id);
+    if (tier === undefined) continue; // 記事以外（サイトページ等）
+    totalClicks += clicks;
+    if (BUYER_TIERS.includes(tier)) fitClicks += clicks;
+    if (stageOf.get(id) === "comparison") comparison += clicks;
+    const a = byBudgetMap.get(tier) ?? { clicks: 0, leads: 0 };
+    a.clicks += clicks;
+    byBudgetMap.set(tier, a);
+  }
+  for (const [id, n] of leadsBy) {
+    const tier = tierOf.get(id);
+    if (tier === undefined) continue;
+    totalLeads += n;
+    if (BUYER_TIERS.includes(tier)) fitLeads += n;
+    const a = byBudgetMap.get(tier) ?? { clicks: 0, leads: 0 };
+    a.leads += n;
+    byBudgetMap.set(tier, a);
+  }
+
+  const taggedBudget = articles.filter((a) => a.budgetTier !== "unknown").length;
+  const taggedFunnel = articles.filter((a) => a.funnelStage !== null).length;
+  const untagged = total - taggedBudget;
+
   return {
-    taggedContentRatio: total > 0 ? { tagged, total } : null,
+    tagged: { budget: taggedBudget, funnel: taggedFunnel, total },
+    // ★母数0なら率を出さない（§16.5）
+    buyerClicks:
+      totalClicks > 0
+        ? { fit: fitClicks, total: totalClicks, ratio: fitClicks / totalClicks }
+        : null,
+    comparisonClicks:
+      totalClicks > 0
+        ? { value: comparison, total: totalClicks, ratio: comparison / totalClicks }
+        : null,
+    buyerLeads: totalLeads > 0 ? { fit: fitLeads, total: totalLeads } : null,
+    byBudget: ["high", "mid", "low", "unknown"].map((k) => ({
+      key: k,
+      label: BUDGET_LABEL_JA[k] ?? k,
+      clicks: byBudgetMap.get(k)?.clicks ?? 0,
+      leads: byBudgetMap.get(k)?.leads ?? 0,
+    })),
+    // ★未分類が残っている分だけ率が甘くなることを明示する。
+    //   「未分類＝買い手でない」ではないので、分母から外さず注記で伝える
     note:
-      tagged === 0
-        ? "買い手軸（budgetTier / funnelStage）は未タグ付け。P4.9 で一括付与すると「買い手適合クリック」を算出できる"
+      untagged > 0
+        ? `${untagged}記事が未分類（ルールで判定できなかった分）。その記事のクリックは「買い手適合」に数えていないため、実際の適合率はこれより高い可能性があります`
         : "",
   };
 }
