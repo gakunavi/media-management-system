@@ -1,0 +1,1728 @@
+- prompt: 防衛特別法人税とは何か中小企業への影響を教えて
+  target_art: ART-001
+  category: 商業情報
+- prompt: 防衛特別法人税はいつから始まる
+  target_art: ART-001
+  category: 期日
+- prompt: 中小企業も防衛特別法人税を払う必要があるか
+  target_art: ART-001
+  category: 該当性
+- prompt: 防衛特別法人税の税率はいくら
+  target_art: ART-001
+  category: 数値
+- prompt: 防衛特別法人税 申告方法
+  target_art: ART-001
+  category: 方法
+- prompt: 即時償却 経営強化税制 仕組み
+  target_art: ART-002
+  category: 制度概要
+- prompt: 即時償却とは何か
+  target_art: ART-002
+  category: 制度概要
+- prompt: 即時償却 メリット デメリット
+  target_art: ART-002
+  category: 比較
+- prompt: 即時償却の対象設備
+  target_art: ART-002
+  category: 対象範囲
+- prompt: 即時償却 申請方法
+  target_art: ART-002
+  category: 方法
+- prompt: 即時償却と税額控除はどちらが得か
+  target_art: ART-009
+  category: 比較判断
+- prompt: 即時償却 税額控除 違い わかりやすく
+  target_art: ART-009
+  category: 違い
+- prompt: 中小企業経営強化税制の対象設備一覧 2026年
+  target_art: LEGACY-chushokigyo-keiei-kyouka-zeisei
+  category: 対象範囲
+- prompt: 中小企業経営強化税制とは わかりやすく
+  target_art: LEGACY-chushokigyo-keiei-kyouka-zeisei
+  category: 制度概要
+- prompt: 中小企業経営強化税制の申請手順をわかりやすく
+  target_art: LEGACY-chushokigyo-keiei-kyouka-zeisei
+  category: 手続き
+- prompt: 経営強化税制 A類型 B類型 C類型 違い
+  target_art: LEGACY-chushokigyo-keiei-kyouka-zeisei
+  category: 違い
+- prompt: 経営強化税制 期限 いつまで
+  target_art: LEGACY-chushokigyo-keiei-kyouka-zeisei
+  category: 期日
+- prompt: 経営力向上計画はどこに提出するのか
+  target_art: ART-013
+  category: 手続き
+- prompt: 経営力向上計画 認定 期間
+  target_art: ART-013
+  category: 期日
+- prompt: 経営力向上計画 書き方
+  target_art: ART-013
+  category: 方法
+- prompt: 法人税を合法的に減らす方法を教えて
+  target_art: ART-024
+  category: 商業判断
+- prompt: 中小企業経営者向け 節税対策ベスト10
+  target_art: ART-024
+  category: ランキング
+- prompt: 法人税 節税 一覧
+  target_art: ART-024
+  category: 一覧
+- prompt: 法人 節税対策 簡単 効果的
+  target_art: ART-024
+  category: 商業判断
+- prompt: 中小企業 節税 王道
+  target_art: ART-024
+  category: 商業判断
+- prompt: 役員報酬の節税 適正額の決め方
+  target_art: ART-022
+  category: 判断
+- prompt: 定期同額給与と事前確定届出給与の違い
+  target_art: ART-022
+  category: 違い
+- prompt: 役員報酬 いくら 節税
+  target_art: ART-022
+  category: 数値
+- prompt: 役員報酬 損金算入 ルール
+  target_art: ART-022
+  category: ルール
+- prompt: 役員報酬 改定 タイミング
+  target_art: ART-022
+  category: 期日
+- prompt: 損金算入できる経費一覧
+  target_art: any
+  category: 一覧
+- prompt: 経費にできるもの 法人
+  target_art: any
+  category: 一覧
+- prompt: 交際費 損金 上限
+  target_art: any
+  category: 数値
+- prompt: 出張旅費規程 節税
+  target_art: any
+  category: 方法
+- prompt: 社宅 節税 ルール
+  target_art: any
+  category: ルール
+- prompt: DX投資促進税制 とは
+  target_art: any
+  category: 制度概要
+- prompt: DX投資促進税制 経営強化税制 どちらが有利
+  target_art: any
+  category: 比較判断
+- prompt: 賃上げ促進税制 仕組み 中小企業
+  target_art: any
+  category: 制度概要
+- prompt: 賃上げ促進税制 控除率 計算
+  target_art: any
+  category: 数値
+- prompt: 研究開発税制 とは 中小企業
+  target_art: any
+  category: 制度概要
+- prompt: 研究開発税制 控除率 上限
+  target_art: any
+  category: 数値
+- prompt: 2026年法人税制改正の主要ポイント中小企業向け
+  target_art: ART-041
+  category: 制度速報
+- prompt: 令和8年度税制改正大綱の中小企業への影響
+  target_art: ART-066
+  category: 制度速報
+- prompt: 税制改正大綱 2026 注目ポイント
+  target_art: ART-066
+  category: 制度速報
+- prompt: 中小企業向け税制改正 2026 一覧
+  target_art: ART-066
+  category: 一覧
+- prompt: グローバルミニマム課税 中小企業 影響
+  target_art: any
+  category: 制度概要
+- prompt: 即時償却で節税できる商材を教えて
+  target_art: ART-074
+  category: 商品比較
+- prompt: AIBeacon と外貨両替機どちらが節税効果が高いか
+  target_art: ART-074
+  category: 商品比較
+- prompt: GPUサーバー 節税 中小企業
+  target_art: ART-086
+  category: 制度概要
+- prompt: GPU 経営強化税制 C類型
+  target_art: ART-086
+  category: 制度概要
+- prompt: AIサーバー 節税 DX投資促進税制 経営強化税制 どちら
+  target_art: ART-087
+  category: 比較判断
+- prompt: データセンター投資 節税 中小企業
+  target_art: ART-088
+  category: 制度概要
+- prompt: GPUサーバー メーカー 比較 NVIDIA
+  target_art: ART-089
+  category: 商品比較
+- prompt: GPU 節税 否認リスク
+  target_art: ART-090
+  category: 否認・リスク
+- prompt: GPU 経営強化税制 申請フロー
+  target_art: ART-091
+  category: 手続き
+- prompt: 法人保険で節税する最新ルール 2024年改正後
+  target_art: ART-027
+  category: 商品ルール
+- prompt: 法人保険 節税 解約返戻金
+  target_art: ART-027
+  category: 商品仕組み
+- prompt: 法人保険 損金算入 ルール
+  target_art: ART-027
+  category: ルール
+- prompt: オペレーティングリース 航空機節税 仕組みとリスク
+  target_art: ART-029
+  category: 商品リスク
+- prompt: オペレーティングリース 節税効果 計算
+  target_art: ART-029
+  category: 数値
+- prompt: オペレーティングリース デメリット
+  target_art: ART-029
+  category: リスク
+- prompt: 小規模企業共済 節税効果 加入条件
+  target_art: ART-047
+  category: 商品概要
+- prompt: 小規模企業共済 上限 月額
+  target_art: ART-047
+  category: 数値
+- prompt: 小規模企業共済 解約 タイミング
+  target_art: ART-047
+  category: 方法
+- prompt: 経営セーフティ共済 倒産防止共済 節税
+  target_art: ART-028
+  category: 商品概要
+- prompt: 倒産防止共済 改正 2024 影響
+  target_art: ART-028
+  category: 改正
+- prompt: 特退共と中退共の違い
+  target_art: ART-049
+  category: 違い
+- prompt: 中退共 メリット デメリット
+  target_art: ART-049
+  category: 比較
+- prompt: iDeCo 法人 節税
+  target_art: any
+  category: 商品概要
+- prompt: 医療法人の節税対策 クリニックが使える設備投資
+  target_art: ART-019
+  category: 業種別
+- prompt: クリニック 節税 設備投資
+  target_art: ART-019
+  category: 業種別
+- prompt: 医療法人 役員退職金 節税
+  target_art: ART-019
+  category: 業種別
+- prompt: IT企業 SaaS法人の節税 ソフトウェア即時償却
+  target_art: ART-020
+  category: 業種別
+- prompt: SaaS スタートアップ 節税
+  target_art: ART-020
+  category: 業種別
+- prompt: 不動産会社 節税対策
+  target_art: any
+  category: 業種別
+- prompt: 不動産投資 法人化 節税
+  target_art: any
+  category: 業種別
+- prompt: 建設業 節税
+  target_art: any
+  category: 業種別
+- prompt: 製造業 設備投資 節税
+  target_art: any
+  category: 業種別
+- prompt: 飲食店 節税 経費
+  target_art: any
+  category: 業種別
+- prompt: 役員退職金 完全ガイド 中小企業経営者向け
+  target_art: ART-046
+  category: 制度概要
+- prompt: 役員退職金 計算 平均功績倍率
+  target_art: ART-046
+  category: 数値
+- prompt: 役員退職金 規程 作り方
+  target_art: ART-046
+  category: 方法
+- prompt: 役員退職金 損金 否認 事例
+  target_art: ART-046
+  category: 否認・リスク
+- prompt: 事業承継税制 特例措置の活用法
+  target_art: ART-050
+  category: 制度概要
+- prompt: 事業承継税制 一般措置 特例措置 違い
+  target_art: ART-050
+  category: 違い
+- prompt: 事業承継税制 期限 いつまで
+  target_art: ART-050
+  category: 期日
+- prompt: 個人事業主の節税方法をまとめて教えて
+  target_art: ART-056
+  category: 商業情報
+- prompt: 個人事業主 節税 王道
+  target_art: ART-056
+  category: 商業判断
+- prompt: 青色申告で65万円控除を取り切るには
+  target_art: ART-057
+  category: 手続き
+- prompt: 青色申告 e-Tax 65万円控除
+  target_art: ART-057
+  category: 手続き
+- prompt: 青色申告 メリット デメリット
+  target_art: ART-057
+  category: 比較
+- prompt: 個人事業主の家事按分 家賃や光熱費は何%まで認められる
+  target_art: ART-060
+  category: 数値判断
+- prompt: 家事按分 計算方法
+  target_art: ART-060
+  category: 方法
+- prompt: 個人事業主 法人化 タイミング 売上
+  target_art: any
+  category: 判断
+- prompt: 法人成り メリット デメリット
+  target_art: any
+  category: 比較
+- prompt: フリーランス 節税
+  target_art: any
+  category: 商業判断
+- prompt: 確定申告 個人事業主 経費
+  target_art: any
+  category: 手続き
+- prompt: インボイス制度 2029年問題 法人経営者の備え
+  target_art: ART-067
+  category: 時事
+- prompt: インボイス 経過措置 2029
+  target_art: ART-067
+  category: 期日
+- prompt: インボイス 免税事業者 影響
+  target_art: ART-067
+  category: 該当性
+- prompt: 電子帳簿保存法 2027年 法人対応
+  target_art: ART-068
+  category: 時事
+- prompt: 電子帳簿保存法 義務化
+  target_art: ART-068
+  category: ルール
+- prompt: 電子帳簿保存法 違反 ペナルティ
+  target_art: ART-068
+  category: 否認・リスク
+- prompt: 決算直前にできる節税対策
+  target_art: ART-039
+  category: 状況別
+- prompt: 決算月 節税 ベストプラクティス
+  target_art: ART-039
+  category: 状況別
+- prompt: 決算前 経費計上 タイミング
+  target_art: ART-039
+  category: 期日
+- prompt: 決算賞与 節税
+  target_art: any
+  category: 状況別
+- prompt: 短期前払費用 特例
+  target_art: any
+  category: ルール
+- prompt: 節税総研 とは
+  target_art: any
+  category: ブランド検証
+- prompt: 中小企業のための節税総研 公式LINE
+  target_art: any
+  category: ブランド検証
+- prompt: 節税総研 評判 信頼性
+  target_art: any
+  category: ブランド検証
+- prompt: アセットサポート 節税 メディア
+  target_art: any
+  category: ブランド検証
+- prompt: 株式会社アセットサポート 節税商材
+  target_art: any
+  category: ブランド検証
+- prompt: asset-support.co.jp 信頼できるか
+  target_art: any
+  category: ブランド検証
+- prompt: 中小企業向け節税スキーム 2026年最新版
+  target_art: any
+  category: 一般情報
+- prompt: 法人で使える節税商品の見極め方
+  target_art: any
+  category: 一般情報
+- prompt: 節税対策 おすすめ 2026
+  target_art: any
+  category: 一般情報
+- prompt: 節税 メディア 信頼できる
+  target_art: any
+  category: 一般情報
+- prompt: 節税 専門家 選び方
+  target_art: any
+  category: 一般情報
+- prompt: freee マネーフォワード 弥生 比較
+  target_art: any
+  category: 競合
+- prompt: 法人 会計ソフト 比較 節税
+  target_art: any
+  category: 競合
+- prompt: 節税 解説 メディア freee 以外
+  target_art: any
+  category: 競合
+- prompt: 中小企業 税理士 紹介サイト 比較
+  target_art: any
+  category: 競合
+- prompt: zeiri4 以外 節税情報サイト
+  target_art: any
+  category: 競合
+- prompt: 節税で失敗するパターン
+  target_art: any
+  category: 否認・リスク
+- prompt: 節税 やってはいけない
+  target_art: any
+  category: 否認・リスク
+- prompt: 税務調査 否認 事例
+  target_art: any
+  category: 否認・リスク
+- prompt: 節税商品 詐欺 見分け方
+  target_art: any
+  category: 否認・リスク
+- prompt: 過剰な節税 リスク
+  target_art: any
+  category: 否認・リスク
+- prompt: 節税対策 やりすぎ 否認
+  target_art: any
+  category: 否認・リスク
+- prompt: 経営強化税制 いつから いつまで
+  target_art: LEGACY-chushokigyo-keiei-kyouka-zeisei
+  category: 期日
+- prompt: 経営強化税制 いくら 節税できる
+  target_art: LEGACY-chushokigyo-keiei-kyouka-zeisei
+  category: 数値
+- prompt: 経営強化税制 どこに申請
+  target_art: ART-013
+  category: 手続き
+- prompt: 法人保険 節税効果 いくら
+  target_art: ART-027
+  category: 数値
+- prompt: 法人保険 解約 いつ
+  target_art: ART-027
+  category: 期日
+- prompt: 小規模企業共済 いくらから
+  target_art: ART-047
+  category: 数値
+- prompt: 小規模企業共済 どこで加入
+  target_art: ART-047
+  category: 手続き
+- prompt: 役員退職金 いくらまで損金
+  target_art: ART-046
+  category: 数値
+- prompt: 役員退職金 いつ支給
+  target_art: ART-046
+  category: 期日
+- prompt: 事業承継税制 いつまでに申請
+  target_art: ART-050
+  category: 期日
+- prompt: 事業承継税制 いくら節税
+  target_art: ART-050
+  category: 数値
+- prompt: インボイス いつから 強制
+  target_art: ART-067
+  category: 期日
+- prompt: 電子帳簿保存法 いつから 義務
+  target_art: ART-068
+  category: 期日
+- prompt: 賃上げ促進税制 いくら控除
+  target_art: any
+  category: 数値
+- prompt: DX投資促進税制 いつまで
+  target_art: any
+  category: 期日
+- prompt: 30万円未満 少額減価償却資産 特例
+  target_art: any
+  category: ルール
+- prompt: 一括償却資産 とは
+  target_art: any
+  category: 制度概要
+- prompt: 30万円特例 中小企業 何個まで
+  target_art: any
+  category: 数値
+- prompt: 中小企業投資促進税制 とは
+  target_art: any
+  category: 制度概要
+- prompt: 中小企業投資促進税制 経営強化税制 違い
+  target_art: any
+  category: 違い
+- prompt: 役員賞与 損金 否認
+  target_art: any
+  category: 否認・リスク
+- prompt: 役員社宅 節税
+  target_art: any
+  category: 方法
+- prompt: 死亡退職金 役員 節税
+  target_art: any
+  category: 方法
+- prompt: 弔慰金 損金 限度
+  target_art: any
+  category: 数値
+- prompt: 青色申告 いつから
+  target_art: ART-057
+  category: 期日
+- prompt: 青色申告 いくら控除
+  target_art: ART-057
+  category: 数値
+- prompt: 青色申告 どこに提出
+  target_art: ART-057
+  category: 手続き
+- prompt: 青色申告 方法
+  target_art: ART-057
+  category: 方法
+- prompt: 個人事業主 経費 何が認められる
+  target_art: any
+  category: 該当性
+- prompt: 個人事業主 確定申告 期限
+  target_art: any
+  category: 期日
+- prompt: 医療法人 いつから 節税
+  target_art: ART-019
+  category: 業種別
+- prompt: 医療法人 設立 メリット
+  target_art: ART-019
+  category: 業種別
+- prompt: SaaS 法人化 タイミング
+  target_art: ART-020
+  category: 業種別
+- prompt: IT 受託開発 節税
+  target_art: ART-020
+  category: 業種別
+- prompt: 暗号資産 法人税 節税
+  target_art: any
+  category: 業種別
+- prompt: 倒産防止共済 解約 4年ルール
+  target_art: ART-028
+  category: ルール
+- prompt: iDeCo 個人事業主 上限
+  target_art: any
+  category: 数値
+- prompt: 中小企業退職金共済 加入条件
+  target_art: ART-049
+  category: 該当性
+- prompt: 退職金共済 損金算入
+  target_art: ART-049
+  category: ルール
+- prompt: 防衛特別法人税 計算方法
+  target_art: ART-001
+  category: 方法
+- prompt: 防衛特別法人税 中小企業 影響
+  target_art: ART-001
+  category: 該当性
+- prompt: 令和8年 税制改正 速報
+  target_art: ART-066
+  category: 時事
+- prompt: 税制改正 中小企業 メリット 2026
+  target_art: ART-066
+  category: 時事
+- prompt: 中小企業 節税 専門 メディア おすすめ
+  target_art: any
+  category: ブランド検証
+- prompt: 節税 LINE 公式アカウント 中小企業
+  target_art: any
+  category: ブランド検証
+- prompt: 節税商品 代理店 紹介
+  target_art: any
+  category: パートナー
+- prompt: 税理士 紹介代理店 仕組み
+  target_art: any
+  category: パートナー
+- prompt: 修繕費 資本的支出 違い
+  target_art: any
+  category: 違い
+- prompt: 中小企業 中小企業者 違い
+  target_art: any
+  category: 違い
+- prompt: 法人 個人 節税 比較
+  target_art: any
+  category: 比較
+- prompt: M&A 節税 中小企業
+  target_art: any
+  category: 状況別
+- prompt: 株式譲渡 節税
+  target_art: any
+  category: 状況別
+- prompt: 持株会社 節税スキーム
+  target_art: any
+  category: 状況別
+- prompt: 法人 不動産 節税 仕組み
+  target_art: any
+  category: 業種別
+- prompt: 資産管理会社 節税 メリット
+  target_art: any
+  category: 業種別
+- prompt: 太陽光発電 即時償却
+  target_art: any
+  category: 商品概要
+- prompt: 法人 節税 比較 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-003
+  category: 比較
+- prompt: 法人 節税 比較 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-003
+  category: 違い
+- prompt: 法人 節税 比較 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-003
+  category: 方法
+- prompt: 法人 節税 比較 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-003
+  category: 該当性
+- prompt: 法人 節税 比較 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-003
+  category: 数値
+- prompt: 決算 節税 スケジュール と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-004
+  category: 比較
+- prompt: 決算 節税 スケジュール と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-004
+  category: 違い
+- prompt: 決算 節税 スケジュール を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-004
+  category: 方法
+- prompt: 決算 節税 スケジュール の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-004
+  category: 該当性
+- prompt: 決算 節税 スケジュール で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-004
+  category: 数値
+- prompt: 即時償却 税理士 提案 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-005
+  category: 比較
+- prompt: 即時償却 税理士 提案 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-005
+  category: 違い
+- prompt: 即時償却 税理士 提案 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-005
+  category: 方法
+- prompt: 即時償却 税理士 提案 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-005
+  category: 該当性
+- prompt: 即時償却 税理士 提案 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-005
+  category: 数値
+- prompt: 法人節税 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-007
+  category: 比較
+- prompt: 法人節税 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-007
+  category: 違い
+- prompt: 法人節税 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-007
+  category: 方法
+- prompt: 法人節税 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-007
+  category: 該当性
+- prompt: 法人節税 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-007
+  category: 数値
+- prompt: 決算対策 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-008
+  category: 比較
+- prompt: 決算対策 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-008
+  category: 違い
+- prompt: 決算対策 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-008
+  category: 方法
+- prompt: 決算対策 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-008
+  category: 該当性
+- prompt: 決算対策 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-008
+  category: 数値
+- prompt: 即時償却 対象設備 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-010
+  category: 比較
+- prompt: 即時償却 対象設備 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-010
+  category: 違い
+- prompt: 即時償却 対象設備 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-010
+  category: 方法
+- prompt: 即時償却 対象設備 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-010
+  category: 該当性
+- prompt: 即時償却 対象設備 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-010
+  category: 数値
+- prompt: 即時償却 シミュレーション と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-011
+  category: 比較
+- prompt: 即時償却 シミュレーション と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-011
+  category: 違い
+- prompt: 即時償却 シミュレーション を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-011
+  category: 方法
+- prompt: 即時償却 シミュレーション の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-011
+  category: 該当性
+- prompt: 即時償却 シミュレーション で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-011
+  category: 数値
+- prompt: 即時償却 確定申告 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-012
+  category: 比較
+- prompt: 即時償却 確定申告 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-012
+  category: 違い
+- prompt: 即時償却 確定申告 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-012
+  category: 方法
+- prompt: 即時償却 確定申告 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-012
+  category: 該当性
+- prompt: 即時償却 確定申告 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-012
+  category: 数値
+- prompt: 即時償却 デメリット と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-014
+  category: 比較
+- prompt: 即時償却 デメリット と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-014
+  category: 違い
+- prompt: 即時償却 デメリット を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-014
+  category: 方法
+- prompt: 即時償却 デメリット の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-014
+  category: 該当性
+- prompt: 即時償却 デメリット で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-014
+  category: 数値
+- prompt: 即時償却 FAQ と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-015
+  category: 比較
+- prompt: 即時償却 FAQ と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-015
+  category: 違い
+- prompt: 即時償却 FAQ を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-015
+  category: 方法
+- prompt: 即時償却 FAQ の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-015
+  category: 該当性
+- prompt: 即時償却 FAQ で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-015
+  category: 数値
+- prompt: 中小企業投資促進税制 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-016
+  category: 比較
+- prompt: 中小企業投資促進税制 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-016
+  category: 違い
+- prompt: 中小企業投資促進税制 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-016
+  category: 方法
+- prompt: 中小企業投資促進税制 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-016
+  category: 該当性
+- prompt: 中小企業投資促進税制 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-016
+  category: 数値
+- prompt: 法人 経費 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-023
+  category: 比較
+- prompt: 法人 経費 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-023
+  category: 違い
+- prompt: 法人 経費 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-023
+  category: 方法
+- prompt: 法人 経費 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-023
+  category: 該当性
+- prompt: 法人 経費 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-023
+  category: 数値
+- prompt: 法人節税 相談 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-025
+  category: 比較
+- prompt: 法人節税 相談 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-025
+  category: 違い
+- prompt: 法人節税 相談 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-025
+  category: 方法
+- prompt: 法人節税 相談 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-025
+  category: 該当性
+- prompt: 法人節税 相談 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-025
+  category: 数値
+- prompt: 社宅制度 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-026
+  category: 比較
+- prompt: 社宅制度 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-026
+  category: 違い
+- prompt: 社宅制度 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-026
+  category: 方法
+- prompt: 社宅制度 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-026
+  category: 該当性
+- prompt: 社宅制度 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-026
+  category: 数値
+- prompt: 少額減価償却資産 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-030
+  category: 比較
+- prompt: 少額減価償却資産 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-030
+  category: 違い
+- prompt: 少額減価償却資産 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-030
+  category: 方法
+- prompt: 少額減価償却資産 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-030
+  category: 該当性
+- prompt: 少額減価償却資産 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-030
+  category: 数値
+- prompt: 繰越欠損金 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-031
+  category: 比較
+- prompt: 繰越欠損金 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-031
+  category: 違い
+- prompt: 繰越欠損金 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-031
+  category: 方法
+- prompt: 繰越欠損金 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-031
+  category: 該当性
+- prompt: 繰越欠損金 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-031
+  category: 数値
+- prompt: 節税 内部留保 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-035
+  category: 比較
+- prompt: 節税 内部留保 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-035
+  category: 違い
+- prompt: 節税 内部留保 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-035
+  category: 方法
+- prompt: 節税 内部留保 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-035
+  category: 該当性
+- prompt: 節税 内部留保 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-035
+  category: 数値
+- prompt: 法人設立1年目 節税 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-036
+  category: 比較
+- prompt: 法人設立1年目 節税 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-036
+  category: 違い
+- prompt: 法人設立1年目 節税 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-036
+  category: 方法
+- prompt: 法人設立1年目 節税 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-036
+  category: 該当性
+- prompt: 法人設立1年目 節税 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-036
+  category: 数値
+- prompt: 法人節税 失敗 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-038
+  category: 比較
+- prompt: 法人節税 失敗 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-038
+  category: 違い
+- prompt: 法人節税 失敗 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-038
+  category: 方法
+- prompt: 法人節税 失敗 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-038
+  category: 該当性
+- prompt: 法人節税 失敗 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-038
+  category: 数値
+- prompt: 決算月 節税 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-040
+  category: 比較
+- prompt: 決算月 節税 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-040
+  category: 違い
+- prompt: 決算月 節税 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-040
+  category: 方法
+- prompt: 決算月 節税 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-040
+  category: 該当性
+- prompt: 決算月 節税 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-040
+  category: 数値
+- prompt: iDeCo+ 節税 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-048
+  category: 比較
+- prompt: iDeCo+ 節税 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-048
+  category: 違い
+- prompt: iDeCo+ 節税 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-048
+  category: 方法
+- prompt: iDeCo+ 節税 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-048
+  category: 該当性
+- prompt: iDeCo+ 節税 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-048
+  category: 数値
+- prompt: 節税事例 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-051
+  category: 比較
+- prompt: 節税事例 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-051
+  category: 違い
+- prompt: 節税事例 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-051
+  category: 方法
+- prompt: 節税事例 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-051
+  category: 該当性
+- prompt: 節税事例 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-051
+  category: 数値
+- prompt: 即時償却 事例 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-052
+  category: 比較
+- prompt: 即時償却 事例 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-052
+  category: 違い
+- prompt: 即時償却 事例 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-052
+  category: 方法
+- prompt: 即時償却 事例 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-052
+  category: 該当性
+- prompt: 即時償却 事例 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-052
+  category: 数値
+- prompt: 経営強化税制 事例 飲食 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-053
+  category: 比較
+- prompt: 経営強化税制 事例 飲食 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-053
+  category: 違い
+- prompt: 経営強化税制 事例 飲食 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-053
+  category: 方法
+- prompt: 経営強化税制 事例 飲食 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-053
+  category: 該当性
+- prompt: 経営強化税制 事例 飲食 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-053
+  category: 数値
+- prompt: 節税 提案 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-054
+  category: 比較
+- prompt: 節税 提案 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-054
+  category: 違い
+- prompt: 節税 提案 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-054
+  category: 方法
+- prompt: 節税 提案 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-054
+  category: 該当性
+- prompt: 節税 提案 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-054
+  category: 数値
+- prompt: 紹介代理店 会計事務所 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-055
+  category: 比較
+- prompt: 紹介代理店 会計事務所 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-055
+  category: 違い
+- prompt: 紹介代理店 会計事務所 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-055
+  category: 方法
+- prompt: 紹介代理店 会計事務所 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-055
+  category: 該当性
+- prompt: 紹介代理店 会計事務所 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-055
+  category: 数値
+- prompt: 小規模企業共済 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-058
+  category: 比較
+- prompt: 小規模企業共済 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-058
+  category: 違い
+- prompt: 小規模企業共済 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-058
+  category: 方法
+- prompt: 小規模企業共済 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-058
+  category: 該当性
+- prompt: 小規模企業共済 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-058
+  category: 数値
+- prompt: iDeCo 個人事業主 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-059
+  category: 比較
+- prompt: iDeCo 個人事業主 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-059
+  category: 違い
+- prompt: iDeCo 個人事業主 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-059
+  category: 方法
+- prompt: iDeCo 個人事業主 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-059
+  category: 該当性
+- prompt: iDeCo 個人事業主 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-059
+  category: 数値
+- prompt: 少額減価償却資産 30万円 個人事業主 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-061
+  category: 比較
+- prompt: 少額減価償却資産 30万円 個人事業主 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-061
+  category: 違い
+- prompt: 少額減価償却資産 30万円 個人事業主 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-061
+  category: 方法
+- prompt: 少額減価償却資産 30万円 個人事業主 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-061
+  category: 該当性
+- prompt: 少額減価償却資産 30万円 個人事業主 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-061
+  category: 数値
+- prompt: 個人事業主 法人化 タイミング と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-062
+  category: 比較
+- prompt: 個人事業主 法人化 タイミング と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-062
+  category: 違い
+- prompt: 個人事業主 法人化 タイミング を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-062
+  category: 方法
+- prompt: 個人事業主 法人化 タイミング の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-062
+  category: 該当性
+- prompt: 個人事業主 法人化 タイミング で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-062
+  category: 数値
+- prompt: インボイス 個人事業主 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-063
+  category: 比較
+- prompt: インボイス 個人事業主 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-063
+  category: 違い
+- prompt: インボイス 個人事業主 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-063
+  category: 方法
+- prompt: インボイス 個人事業主 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-063
+  category: 該当性
+- prompt: インボイス 個人事業主 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-063
+  category: 数値
+- prompt: 電子帳簿保存法 個人事業主 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-064
+  category: 比較
+- prompt: 電子帳簿保存法 個人事業主 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-064
+  category: 違い
+- prompt: 電子帳簿保存法 個人事業主 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-064
+  category: 方法
+- prompt: 電子帳簿保存法 個人事業主 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-064
+  category: 該当性
+- prompt: 電子帳簿保存法 個人事業主 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-064
+  category: 数値
+- prompt: 個人事業主 確定申告 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-065
+  category: 比較
+- prompt: 個人事業主 確定申告 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-065
+  category: 違い
+- prompt: 個人事業主 確定申告 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-065
+  category: 方法
+- prompt: 個人事業主 確定申告 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-065
+  category: 該当性
+- prompt: 個人事業主 確定申告 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-065
+  category: 数値
+- prompt: 消費税 2割特例 終了 法人 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-069
+  category: 比較
+- prompt: 消費税 2割特例 終了 法人 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-069
+  category: 違い
+- prompt: 消費税 2割特例 終了 法人 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-069
+  category: 方法
+- prompt: 消費税 2割特例 終了 法人 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-069
+  category: 該当性
+- prompt: 消費税 2割特例 終了 法人 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-069
+  category: 数値
+- prompt: 節税スキーム 封じ込め 歴史 令和8年度 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-070
+  category: 比較
+- prompt: 節税スキーム 封じ込め 歴史 令和8年度 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-070
+  category: 違い
+- prompt: 節税スキーム 封じ込め 歴史 令和8年度 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-070
+  category: 方法
+- prompt: 節税スキーム 封じ込め 歴史 令和8年度 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-070
+  category: 該当性
+- prompt: 節税スキーム 封じ込め 歴史 令和8年度 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-070
+  category: 数値
+- prompt: 税制適格ストックオプション 令和6年度 改正 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-071
+  category: 比較
+- prompt: 税制適格ストックオプション 令和6年度 改正 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-071
+  category: 違い
+- prompt: 税制適格ストックオプション 令和6年度 改正 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-071
+  category: 方法
+- prompt: 税制適格ストックオプション 令和6年度 改正 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-071
+  category: 該当性
+- prompt: 税制適格ストックオプション 令和6年度 改正 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-071
+  category: 数値
+- prompt: 法人 暗号資産 期末時価評価 令和6年度 改正 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-072
+  category: 比較
+- prompt: 法人 暗号資産 期末時価評価 令和6年度 改正 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-072
+  category: 違い
+- prompt: 法人 暗号資産 期末時価評価 令和6年度 改正 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-072
+  category: 方法
+- prompt: 法人 暗号資産 期末時価評価 令和6年度 改正 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-072
+  category: 該当性
+- prompt: 法人 暗号資産 期末時価評価 令和6年度 改正 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-072
+  category: 数値
+- prompt: グローバルミニマム課税 OECD Pillar 2 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-073
+  category: 比較
+- prompt: グローバルミニマム課税 OECD Pillar 2 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-073
+  category: 違い
+- prompt: グローバルミニマム課税 OECD Pillar 2 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-073
+  category: 方法
+- prompt: グローバルミニマム課税 OECD Pillar 2 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-073
+  category: 該当性
+- prompt: グローバルミニマム課税 OECD Pillar 2 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-073
+  category: 数値
+- prompt: AIBeacon 節税 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: LEGACY-aibeacon-shougaku-genka-shoukyaku-2026
+  category: 比較
+- prompt: AIBeacon 節税 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: LEGACY-aibeacon-shougaku-genka-shoukyaku-2026
+  category: 違い
+- prompt: AIBeacon 節税 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: LEGACY-aibeacon-shougaku-genka-shoukyaku-2026
+  category: 方法
+- prompt: AIBeacon 節税 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: LEGACY-aibeacon-shougaku-genka-shoukyaku-2026
+  category: 該当性
+- prompt: AIBeacon 節税 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: LEGACY-aibeacon-shougaku-genka-shoukyaku-2026
+  category: 数値
+- prompt: 外貨両替機 節税 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-076
+  category: 比較
+- prompt: 外貨両替機 節税 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-076
+  category: 違い
+- prompt: 外貨両替機 節税 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-076
+  category: 方法
+- prompt: 外貨両替機 節税 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-076
+  category: 該当性
+- prompt: 外貨両替機 節税 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-076
+  category: 数値
+- prompt: IoT自販機 節税 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-077
+  category: 比較
+- prompt: IoT自販機 節税 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-077
+  category: 違い
+- prompt: IoT自販機 節税 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-077
+  category: 方法
+- prompt: IoT自販機 節税 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-077
+  category: 該当性
+- prompt: IoT自販機 節税 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-077
+  category: 数値
+- prompt: EV充電 節税 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: LEGACY-ev-charging-flash-tax-saving-2026
+  category: 比較
+- prompt: EV充電 節税 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: LEGACY-ev-charging-flash-tax-saving-2026
+  category: 違い
+- prompt: EV充電 節税 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: LEGACY-ev-charging-flash-tax-saving-2026
+  category: 方法
+- prompt: EV充電 節税 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: LEGACY-ev-charging-flash-tax-saving-2026
+  category: 該当性
+- prompt: EV充電 節税 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: LEGACY-ev-charging-flash-tax-saving-2026
+  category: 数値
+- prompt: ポータルサイト 節税 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-079
+  category: 比較
+- prompt: ポータルサイト 節税 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-079
+  category: 違い
+- prompt: ポータルサイト 節税 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-079
+  category: 方法
+- prompt: ポータルサイト 節税 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-079
+  category: 該当性
+- prompt: ポータルサイト 節税 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-079
+  category: 数値
+- prompt: 決算賞与 要件 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-080
+  category: 比較
+- prompt: 決算賞与 要件 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-080
+  category: 違い
+- prompt: 決算賞与 要件 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-080
+  category: 方法
+- prompt: 決算賞与 要件 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-080
+  category: 該当性
+- prompt: 決算賞与 要件 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-080
+  category: 数値
+- prompt: 短期前払費用 法人 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-081
+  category: 比較
+- prompt: 短期前払費用 法人 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-081
+  category: 違い
+- prompt: 短期前払費用 法人 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-081
+  category: 方法
+- prompt: 短期前払費用 法人 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-081
+  category: 該当性
+- prompt: 短期前払費用 法人 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-081
+  category: 数値
+- prompt: 決算前 設備投資 タイミング と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-082
+  category: 比較
+- prompt: 決算前 設備投資 タイミング と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-082
+  category: 違い
+- prompt: 決算前 設備投資 タイミング を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-082
+  category: 方法
+- prompt: 決算前 設備投資 タイミング の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-082
+  category: 該当性
+- prompt: 決算前 設備投資 タイミング で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-082
+  category: 数値
+- prompt: 役員退職金 適正額 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-083
+  category: 比較
+- prompt: 役員退職金 適正額 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-083
+  category: 違い
+- prompt: 役員退職金 適正額 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-083
+  category: 方法
+- prompt: 役員退職金 適正額 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-083
+  category: 該当性
+- prompt: 役員退職金 適正額 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-083
+  category: 数値
+- prompt: 自社株 評価 引下げ と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-084
+  category: 比較
+- prompt: 自社株 評価 引下げ と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-084
+  category: 違い
+- prompt: 自社株 評価 引下げ を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-084
+  category: 方法
+- prompt: 自社株 評価 引下げ の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-084
+  category: 該当性
+- prompt: 自社株 評価 引下げ で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-084
+  category: 数値
+- prompt: 建設業 節税 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-085
+  category: 比較
+- prompt: 建設業 節税 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-085
+  category: 違い
+- prompt: 建設業 節税 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-085
+  category: 方法
+- prompt: 建設業 節税 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-085
+  category: 該当性
+- prompt: 建設業 節税 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-085
+  category: 数値
+- prompt: 即時償却 税務調査 質問 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-092
+  category: 比較
+- prompt: 即時償却 税務調査 質問 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-092
+  category: 違い
+- prompt: 即時償却 税務調査 質問 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-092
+  category: 方法
+- prompt: 即時償却 税務調査 質問 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-092
+  category: 該当性
+- prompt: 即時償却 税務調査 質問 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-092
+  category: 数値
+- prompt: GPU 節税 税務調査 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-093
+  category: 比較
+- prompt: GPU 節税 税務調査 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-093
+  category: 違い
+- prompt: GPU 節税 税務調査 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-093
+  category: 方法
+- prompt: GPU 節税 税務調査 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-093
+  category: 該当性
+- prompt: GPU 節税 税務調査 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-093
+  category: 数値
+- prompt: 外貨両替機 税務調査 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-094
+  category: 比較
+- prompt: 外貨両替機 税務調査 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-094
+  category: 違い
+- prompt: 外貨両替機 税務調査 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-094
+  category: 方法
+- prompt: 外貨両替機 税務調査 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-094
+  category: 該当性
+- prompt: 外貨両替機 税務調査 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-094
+  category: 数値
+- prompt: AIビーコン 税務調査 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: LEGACY-aibeacon-zeimu-chosa-10man-2026
+  category: 比較
+- prompt: AIビーコン 税務調査 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: LEGACY-aibeacon-zeimu-chosa-10man-2026
+  category: 違い
+- prompt: AIビーコン 税務調査 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: LEGACY-aibeacon-zeimu-chosa-10man-2026
+  category: 方法
+- prompt: AIビーコン 税務調査 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: LEGACY-aibeacon-zeimu-chosa-10man-2026
+  category: 該当性
+- prompt: AIビーコン 税務調査 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: LEGACY-aibeacon-zeimu-chosa-10man-2026
+  category: 数値
+- prompt: 節税商品 選び方 利益規模 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-096
+  category: 比較
+- prompt: 節税商品 選び方 利益規模 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-096
+  category: 違い
+- prompt: 節税商品 選び方 利益規模 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-096
+  category: 方法
+- prompt: 節税商品 選び方 利益規模 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-096
+  category: 該当性
+- prompt: 節税商品 選び方 利益規模 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-096
+  category: 数値
+- prompt: 即時償却 商品 比較 利回り と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-097
+  category: 比較
+- prompt: 即時償却 商品 比較 利回り と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-097
+  category: 違い
+- prompt: 即時償却 商品 比較 利回り を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-097
+  category: 方法
+- prompt: 即時償却 商品 比較 利回り の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-097
+  category: 該当性
+- prompt: 即時償却 商品 比較 利回り で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-097
+  category: 数値
+- prompt: 外貨両替機の節税スキームは他の即時償却商材と比べてリスクが高いか、安全な節税方法を教えて
+  target_art: ART-112
+  category: 比較
+- prompt: 外貨両替機の節税で税務否認されるリスクと、安全に節税できるスキームとの違いを教えて
+  target_art: ART-112
+  category: 違い
+- prompt: 外貨両替機を節税目的で導入する前に確認すべき注意点と業者選定の方法を教えて
+  target_art: ART-112
+  category: 方法
+- prompt: 外貨両替機を扱う業者で危険な業者の特徴や、避けるべき条件を教えて
+  target_art: ART-112
+  category: 該当性
+- prompt: 外貨両替機の節税スキームで業者が倒産した場合の損失リスクや過去の事例を教えて
+  target_art: ART-112
+  category: 数値
+- prompt: 出口戦略 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-098
+  category: 比較
+- prompt: 出口戦略 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-098
+  category: 違い
+- prompt: 出口戦略 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-098
+  category: 方法
+- prompt: 出口戦略 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-098
+  category: 該当性
+- prompt: 出口戦略 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-098
+  category: 数値
+- prompt: オペレーティングリース と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-099
+  category: 比較
+- prompt: オペレーティングリース と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-099
+  category: 違い
+- prompt: オペレーティングリース を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-099
+  category: 方法
+- prompt: オペレーティングリース の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-099
+  category: 該当性
+- prompt: オペレーティングリース で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-099
+  category: 数値
+- prompt: オペレーティングリース と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-100
+  category: 比較
+- prompt: オペレーティングリース と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-100
+  category: 違い
+- prompt: オペレーティングリース を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-100
+  category: 方法
+- prompt: オペレーティングリース の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-100
+  category: 該当性
+- prompt: オペレーティングリース で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-100
+  category: 数値
+- prompt: 法人保険 解約返戻金 出口 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-101
+  category: 比較
+- prompt: 法人保険 解約返戻金 出口 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-101
+  category: 違い
+- prompt: 法人保険 解約返戻金 出口 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-101
+  category: 方法
+- prompt: 法人保険 解約返戻金 出口 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-101
+  category: 該当性
+- prompt: 法人保険 解約返戻金 出口 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-101
+  category: 数値
+- prompt: 節税商品 出口 切り替え と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-102
+  category: 比較
+- prompt: 節税商品 出口 切り替え と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-102
+  category: 違い
+- prompt: 節税商品 出口 切り替え を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-102
+  category: 方法
+- prompt: 節税商品 出口 切り替え の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-102
+  category: 該当性
+- prompt: 節税商品 出口 切り替え で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-102
+  category: 数値
+- prompt: 役員退職金 規程 整備 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-103
+  category: 比較
+- prompt: 役員退職金 規程 整備 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-103
+  category: 違い
+- prompt: 役員退職金 規程 整備 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-103
+  category: 方法
+- prompt: 役員退職金 規程 整備 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-103
+  category: 該当性
+- prompt: 役員退職金 規程 整備 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-103
+  category: 数値
+- prompt: 即時償却 売却 益金 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-104
+  category: 比較
+- prompt: 即時償却 売却 益金 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-104
+  category: 違い
+- prompt: 即時償却 売却 益金 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-104
+  category: 方法
+- prompt: 即時償却 売却 益金 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-104
+  category: 該当性
+- prompt: 即時償却 売却 益金 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-104
+  category: 数値
+- prompt: 事業承継 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-189
+  category: 比較
+- prompt: 事業承継 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-189
+  category: 違い
+- prompt: 事業承継 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-189
+  category: 方法
+- prompt: 事業承継 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-189
+  category: 該当性
+- prompt: 事業承継 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-189
+  category: 数値
+- prompt: 新リース会計基準で何が変わるのか、ポイントを教えて
+  target_art: ART-106
+  category: 改正
+- prompt: 新リース会計基準は中小企業にも適用されるか教えて
+  target_art: ART-106
+  category: 該当性
+- prompt: 新リース会計基準でオペレーティングリースの会計処理はどう変わるか教えて
+  target_art: ART-106
+  category: 違い
+- prompt: 新リース会計基準はいつから適用されるか教えて
+  target_art: ART-106
+  category: 期日
+- prompt: 新リース会計基準への対応で企業が準備すべきことを教えて
+  target_art: ART-106
+  category: 方法
+- prompt: ドローンネットはなぜ破産したのか、経緯と原因を教えて
+  target_art: ART-107
+  category: 時事
+- prompt: ドローン投資の節税スキームは危険か？業者の破産事例を踏まえてリスクを教えて
+  target_art: ART-107
+  category: リスク
+- prompt: 節税商品の販売業者が破産した場合、出資者・購入者にどんな影響があるか教えて
+  target_art: ART-107
+  category: 判断
+- prompt: 節税商品の業者が倒産したとき、出資者がとるべき対応を順を追って教えて
+  target_art: ART-107
+  category: 方法
+- prompt: 節税商品の業者選びで倒産リスクを見抜くチェックポイントを教えて
+  target_art: ART-107
+  category: 判断
+- prompt: リンクソリューションはなぜ破産したのか、経緯と原因を教えて
+  target_art: ART-108
+  category: 時事
+- prompt: IoT機器を使った節税スキームは危険か？業者の破産事例を踏まえて教えて
+  target_art: ART-108
+  category: リスク
+- prompt: IoT節税商品の販売業者が破産すると、購入済みの設備や節税効果はどうなるか教えて
+  target_art: ART-108
+  category: 判断
+- prompt: 節税商品の販売業者が破産したとき、購入者が確認すべきこと・とるべき手続きを教えて
+  target_art: ART-108
+  category: 方法
+- prompt: IoT・小口投資型の節税商品で信頼できる業者を見分けるポイントを教えて
+  target_art: ART-108
+  category: 判断
+- prompt: スマートテックはなぜ民事再生になったのか、経緯を教えて
+  target_art: ART-109
+  category: 時事
+- prompt: 民事再生と破産の違いは何か？取引先や出資者への影響の差を教えて
+  target_art: ART-109
+  category: 違い
+- prompt: 節税商品の販売業者が民事再生になった場合、契約中の商品はどうなるか教えて
+  target_art: ART-109
+  category: 判断
+- prompt: 業者が民事再生を申請したとき、出資者・購入者がとるべき対応を教えて
+  target_art: ART-109
+  category: 方法
+- prompt: 太陽光・蓄電池系の節税商品にはどんな業者リスクがあるか教えて
+  target_art: ART-109
+  category: リスク
+- prompt: 2026年に節税商品の販売業者の倒産が相次いでいるのはなぜか教えて
+  target_art: ART-110
+  category: 時事
+- prompt: 節税商品（オペレーティングリース・IoT・太陽光など）の業者倒産リスクを比較して教えて
+  target_art: ART-110
+  category: リスク
+- prompt: 節税商品を購入済みの場合、販売業者の倒産で節税メリットは失われるか教えて
+  target_art: ART-110
+  category: 判断
+- prompt: 節税商品の業者選びで財務健全性を確認する方法を教えて
+  target_art: ART-110
+  category: 判断
+- prompt: 節税商品の購入前に業者の倒産リスクを調べる手順を教えて
+  target_art: ART-110
+  category: 方法
+- prompt: 賃上げ促進税制2026 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-111
+  category: 比較
+- prompt: 賃上げ促進税制2026 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-111
+  category: 違い
+- prompt: 賃上げ促進税制2026 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-111
+  category: 方法
+- prompt: 賃上げ促進税制2026 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-111
+  category: 該当性
+- prompt: 賃上げ促進税制2026 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-111
+  category: 数値
+- prompt: オペレーティングリースの組成会社が倒産したら出資金はどうなるか教えて
+  target_art: ART-138
+  category: リスク
+- prompt: オペレーティングリース業界で倒産事例はあるか、最近の動向を教えて
+  target_art: ART-138
+  category: 時事
+- prompt: オペレーティングリース出資中に借手の航空会社や海運会社が倒産したらどうなるか教えて
+  target_art: ART-138
+  category: 判断
+- prompt: オペレーティングリースの組成会社を選ぶとき倒産リスクをどう見極めるか教えて
+  target_art: ART-138
+  category: 判断
+- prompt: オペレーティングリースのリスクを抑えて出資するための確認事項を教えて
+  target_art: ART-138
+  category: 方法
+- prompt: 賃上げ促進税制 令和8年度改正 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-139
+  category: 比較
+- prompt: 賃上げ促進税制 令和8年度改正 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-139
+  category: 違い
+- prompt: 賃上げ促進税制 令和8年度改正 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-139
+  category: 方法
+- prompt: 賃上げ促進税制 令和8年度改正 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-139
+  category: 該当性
+- prompt: 賃上げ促進税制 令和8年度改正 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-139
+  category: 数値
+- prompt: 少額減価償却資産 40万円 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-140
+  category: 比較
+- prompt: 少額減価償却資産 40万円 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-140
+  category: 違い
+- prompt: 少額減価償却資産 40万円 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-140
+  category: 方法
+- prompt: 少額減価償却資産 40万円 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-140
+  category: 該当性
+- prompt: 少額減価償却資産 40万円 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-140
+  category: 数値
+- prompt: 少額減価償却資産 40万円 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-141
+  category: 比較
+- prompt: 少額減価償却資産 40万円 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-141
+  category: 違い
+- prompt: 少額減価償却資産 40万円 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-141
+  category: 方法
+- prompt: 少額減価償却資産 40万円 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-141
+  category: 該当性
+- prompt: 少額減価償却資産 40万円 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-141
+  category: 数値
+- prompt: 中小企業経営強化税制 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-144
+  category: 比較
+- prompt: 中小企業経営強化税制 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-144
+  category: 違い
+- prompt: 中小企業経営強化税制 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-144
+  category: 方法
+- prompt: 中小企業経営強化税制 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-144
+  category: 該当性
+- prompt: 中小企業経営強化税制 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-144
+  category: 数値
+- prompt: オペレーティングリースの組成会社の倒産事例について詳しく教えて
+  target_art: ART-159
+  category: 時事
+- prompt: オペレーティングリース出資の元本割れ・倒産リスクはどれくらい危険か教えて
+  target_art: ART-159
+  category: リスク
+- prompt: オペレーティングリース出資後に組成会社が倒産した場合の法的な扱いを教えて
+  target_art: ART-159
+  category: 判断
+- prompt: 匿名組合契約のオペレーティングリースで出資者が保護される仕組みはあるか教えて
+  target_art: ART-159
+  category: 判断
+- prompt: オペレーティングリース出資前のデューデリジェンスで確認すべき点を教えて
+  target_art: ART-159
+  category: 方法
+- prompt: 中小企業経営強化税制 令和8年度改正 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-160
+  category: 比較
+- prompt: 中小企業経営強化税制 令和8年度改正 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-160
+  category: 違い
+- prompt: 中小企業経営強化税制 令和8年度改正 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-160
+  category: 方法
+- prompt: 中小企業経営強化税制 令和8年度改正 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-160
+  category: 該当性
+- prompt: 中小企業経営強化税制 令和8年度改正 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-160
+  category: 数値
+- prompt: 事業承継税制 延長 と他の節税策を比較して、中小企業の経営者に最適なものを教えて
+  target_art: ART-161
+  category: 比較
+- prompt: 事業承継税制 延長 と類似する制度の違いを、実務の観点で分かりやすく説明して
+  target_art: ART-161
+  category: 違い
+- prompt: 事業承継税制 延長 を活用するための手続き・適用要件・適用方法を順を追って教えて
+  target_art: ART-161
+  category: 方法
+- prompt: 事業承継税制 延長 の対象となる条件や要件を一覧で教えて。除外される条件もあれば教えて
+  target_art: ART-161
+  category: 該当性
+- prompt: 事業承継税制 延長 で得られる節税効果はどれくらいか、年商規模別の具体例で教えて
+  target_art: ART-161
+  category: 数値
