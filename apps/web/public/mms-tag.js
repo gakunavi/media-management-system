@@ -255,8 +255,10 @@
       var href = a.getAttribute("href") || "";
       try {
         var u2 = new URL(a.href, location.href);
-        // ★クエリは落とす。UTM や個人を含みうる値を溜めない
-        if (/^https?:$/.test(u2.protocol)) href = u2.host + u2.pathname;
+        // ★クエリは落とす。UTM や個人を含みうる値を溜めない。
+        //   ★#断片は残す。目次リンクはこれが無いと全部同じ href になり、
+        //     「どの見出しへ飛んだか」が分からない（実測で最初の2件がこれだった）。
+        if (/^https?:$/.test(u2.protocol)) href = u2.host + u2.pathname + (u2.hash || "");
       } catch (e2) {}
 
       track("link_click", { meta: { kind: kind, area: linkArea(a), href: href, text: text } });

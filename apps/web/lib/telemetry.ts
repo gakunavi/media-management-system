@@ -113,14 +113,17 @@ function normalizeHref(raw: string): string {
   if (/^https?:\/\//i.test(href)) {
     try {
       const u = new URL(href);
-      href = `${u.host}${u.pathname}`;
+      href = `${u.host}${u.pathname}${u.hash}`;
     } catch {
       /* 壊れた絶対URLは下の素朴な切り出しに任せる */
     }
   }
-  // tel: / mailto: はそのまま残す（何を踏んだかが消える）
+  // ★クエリだけ落とす。#断片は残す（目次リンクの飛び先が消えるため）。
+  //   tel: / mailto: はそのまま（何を踏んだかが消える）
   if (!/^(tel|mailto):/i.test(href)) {
-    href = href.split("?")[0].split("#")[0];
+    const [head, ...rest] = href.split("#");
+    const hash = rest.length > 0 ? `#${rest.join("#")}` : "";
+    href = head.split("?")[0] + hash;
   }
   return href.slice(0, MAX_HREF);
 }
