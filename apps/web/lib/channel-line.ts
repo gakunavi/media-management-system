@@ -207,7 +207,10 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
       clicks: siteStart ? Math.round(siteBy.hp) : null,
       note: siteStart
         ? "/r/line/hp-… のクリック"
-        : "テーマの lin.ee が生リンク（/contact/ 7箇所）。/r/line/hp-… に変えれば測れる",
+        // ★2026-07-23 に張り替え済み（v175）。踏まれれば実数になる。
+        //   HP面のLINE導線は4本しかない（contact・トップ2・判定ツール）。
+        //   header/footer はメディア面専用テンプレなのでHPには出ない
+        : "計装済み（4本: contact・トップ2・判定ツール）。まだ踏まれていない",
     },
     {
       key: "media",
@@ -215,7 +218,7 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
       clicks: siteStart ? Math.round(siteBy.media) : null,
       note: siteStart
         ? "/r/line/media-… のクリック"
-        : "記事内の lin.ee が生リンク（/media/ 9箇所）。/r/line/media-… に変えれば測れる",
+        : "計装済み（記事末2本・ヘッダ/フッタ6本・一覧5本）。まだ踏まれていない",
     },
     {
       key: "threads",
@@ -223,7 +226,7 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
       clicks: sentStart ? Math.round(threadsClicks) : null,
       note: sentStart
         ? "/r/line/<投稿ID> のクリック"
-        : "投稿にLINEへのリンクが1本も無い（cowork が22本を投入済み・投稿待ち）",
+        : "投稿キューに22本を投入済み（投稿待ち）",
     },
     {
       key: "unknown",

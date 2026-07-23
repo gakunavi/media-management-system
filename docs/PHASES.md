@@ -402,11 +402,11 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 | **U37** | **主キーの型・生成方式が設計書に無い**（`id` とだけ記載） | `String @id @default(cuid())` に統一した（schema 冒頭 C-1） |
 | **U38** | **金額列の精度が設計書に無い** | `Decimal @db.Decimal(14, 2)` に統一した（C-5）。240万円・480万円規模のため桁数は十分 |
 | **U39** | **リレーションの逆側フィールドが設計書に無い** | Prisma は双方向リレーションが必須のため機械的に追加した（C-2）。**データ構造の追加ではない** |
-| **U61** | **記事詳細（`single-media.php`）にLINE CTAが1本も無い**（2026-07-23 判明） | メディア側の9本はすべてトップ・カテゴリ一覧・タグ一覧。いちばん温まっている読者に出口が無い。**計測ではなく設計の穴**。cowork に記事詳細へのCTA追加を依頼中 |
+| **U61** | ~~記事詳細にLINE CTAが1本も無い~~ | ✅ **2026-07-23 解決（テーマ v175）**。`media-article-bottom`（本文直後）と `media-article-sidebar`（PC）を追加。記事を読み切った人の出口ができた |
 | **U62** | ~~ヘッダ/フッタのLINEリンクが常に `hp-` 計上~~ | ✅ **2026-07-23 対応済み**（cowork）。ページ文脈で接頭辞を出し分ける方式に変更。★MMS が渡した判定式 `is_singular('post')` は誤りで、この案件の記事は `post_type=blog`。cowork が `is_singular('blog')` ＋ `is_search()` に修正。**本番反映（zip→FTP）待ち** |
 | **U63** | ~~LINEの遷移先URLが未確定~~ | ✅ **2026-07-23 解決**。実測で確認したところ `lin.ee/5NVLBXA` と `lin.ee/szd8e1x` は**同じアカウント**（`@898ubeoo`）の短縮URLが2本あるだけ。MMSのトークンも同アカウント。石井判断で承認済み canonical `szd8e1x` に統一（2026-07-22）。`MMS_LINK_DEST_LINE` を `lin.ee/szd8e1x` に変更済・**反映は MMS コンテナ再起動待ち**（env は起動時注入） |
 | **U64** | **LINE友だち数の履歴取り込みが途中** | insight/followers はレート制限（約60回/時）があり、初回は 5/20 までしか遡れていない。日次実行で順次埋まる。それ以前を含む期間は「期首の記録なし」と表示される |
-| **U66** | **`/media/` トップだけヘッダ/フッタが `hp-` のまま**（2026-07-23 実測） | `/media/` は**固定ページではなく `blog` のポストタイプアーカイブ**（body class に `post-type-archive-blog`）。そのため `is_page_template('page-media.php')`（v171）も `is_page('media')`（v173）も **どちらも false**。正しい判定は **`is_post_type_archive('blog')`**。cowork へ連絡済み。★MMS が2回とも誤った判定式を渡した。**画面のHTMLで実物を確認してから式を渡すべきだった** |
+| **U66** | ~~`/media/` トップだけヘッダ/フッタが `hp-` のまま~~ | ✅ **2026-07-23 解決（テーマ v175）**。`/media/` は固定ページではなく `blog` のポストタイプアーカイブで、`is_page_template('page-media.php')`（v171）も `is_page('media')`（v173）も false だった。正しい判定は `is_post_type_archive('blog')`。★MMS が2回とも誤った式を渡した。**判定式は本番HTMLの body class で裏取りしてから渡す**（教訓） |
 | **U65** | **`Target` に `inquiries_total` が無い** | 段1のゴール（問い合わせ総数）に対する月次目標が未設定。現状は `direct_inquiry=2` のみで、種別内訳にしか出ない |
 
 ---

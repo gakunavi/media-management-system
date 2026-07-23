@@ -94,8 +94,8 @@ export default async function LinePage({
       {/* ── 入口 ── */}
       <h2 className="mb-1 text-[14px] font-semibold">入口（どこから送っているか）</h2>
       <p className="mb-2 text-[12px] text-[var(--faint)]">
-        ★「未計装」は<strong>送っていない</strong>のではなく<strong>測っていない</strong>。
-        HP・記事の lin.ee は生リンクのままで、踏まれても記録されない。
+        ★<strong>2026-07-23 に全21本の計装が完了</strong>（テーマ v175）。まだ踏まれていない
+        入口は「—(未計装)」ではなく<strong>実測ゼロ待ち</strong>。1回踏まれた時点で実数に変わる。
       </p>
       <div className="mb-5 grid gap-2 sm:grid-cols-4">
         {ch.entrances.map((e) => (
