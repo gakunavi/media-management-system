@@ -869,6 +869,7 @@ model ContentItem {
   provenances         GenerationProvenance[]
   versions            ContentVersion[]
   queries             ContentQuery[]
+  urlChecks           UrlHealthCheck[]
   redirectsTo         ContentItem?  @relation("ContentRedirect", fields: [redirectsToId], references: [id])
   redirectedFrom      ContentItem[] @relation("ContentRedirect")
 
@@ -950,6 +951,41 @@ model ContentMetric {
   @@index([contentItemId, metric, date])
   @@index([date])
   @@index([metric, date])
+}
+
+/// 登録URLが本当に生きているかの日次チェック（2026-07-24 追加）
+///
+/// ★なぜ要るか
+///   台帳の突合だけでは「登録は正しいが本番が壊れている」を拾えない。
+///   実際 2026-07-23 に P1 ピラー(ART-142) が **301の無限ループ**で到達不能だったが、
+///   台帳・config・MMS の三者は一致していたため誰も気づけなかった。
+///   3日で3件（ループ / カテゴリ404 / breadcrumb 404）踏んでいる。
+///
+/// ★合格条件は「最大1ホップで200・ループ無し」。
+///   2ホップ以上は評価が減衰し、ループは到達不能を意味する。
+model UrlHealthCheck {
+  id            String   @id @default(cuid())
+  contentItemId String?
+  url           String
+  /// 最終的な HTTP ステータス。ループで打ち切った場合は最後に見た値
+  finalStatus   Int
+  /// リダイレクト回数
+  hops          Int
+  /// 同じURLを2度踏んだ＝ループ
+  loop          Boolean  @default(false)
+  /// 実際にたどったURL列（原因の特定に要る）
+  chain         Json?
+  checkedAt     DateTime @db.Date
+
+  contentItem ContentItem? @relation(fields: [contentItemId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([url, checkedAt])
+  @@index([checkedAt, loop])
+  @@index([contentItemId])
 }
 
 /// 記事が**実際に何で検索されて表示されたか**（GSC page×query・2026-07-23 追加）

@@ -119,6 +119,11 @@ services:
       MMS_GSC_SITE_URL: ${MMS_GSC_SITE_URL:-}
       # GSC page×query の集計期間（builtin/gsc_queries.py）
       MMS_GSC_QUERY_WINDOW_DAYS: ${MMS_GSC_QUERY_WINDOW_DAYS:-90}
+      # 台帳3点照合のリポジトリ（builtin/ledger_check.py）。未設定なら黙って何もしない
+      MMS_LEDGER_REPO: ${MMS_LEDGER_REPO:-}
+      # 登録URLの実地チェック（builtin/url_health.py）
+      MMS_URL_HEALTH_TIMEOUT: ${MMS_URL_HEALTH_TIMEOUT:-20}
+      MMS_URL_HEALTH_CONCURRENCY: ${MMS_URL_HEALTH_CONCURRENCY:-6}
       # WordPress 同期（読み取りのみ・§3.9.1）
       MMS_WP_BASE_URL: ${MMS_WP_BASE_URL:-}
       MMS_WP_USER: ${MMS_WP_USER:-}
@@ -158,6 +163,9 @@ services:
       #   コピーすると本体と乖離するため、元のディレクトリを **読み取り専用でマウント**する。
       #   これにより メディア事業部側で更新されたスクリプトが即座に worker に反映される。
       - ${MMS_LEGACY_SCRIPTS_DIR:-./services/worker/legacy}:/app/legacy:ro
+      # 台帳3点照合（builtin/ledger_check.py）。★読み取り専用でマウントする。
+      #   コピーすると本体と乖離し「直したのに worker は古いまま」が起きる（§D17 と同じ判断）
+      - ${MMS_LEDGER_REPO_HOST:-/dev/null}:/app/ledger-repo:ro
       # ★認証鍵は読み取り専用でマウント（イメージに焼き込まない）
       - ./secrets:/app/secrets:ro
       # ★ラッコのエクスポートはメディア事業部側が正本（rakko-required.md の規約）。
