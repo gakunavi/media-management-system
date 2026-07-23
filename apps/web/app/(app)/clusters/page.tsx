@@ -1,12 +1,22 @@
 import Link from "next/link";
-import { getLinkAnalysis, linkTypeLabel, type HubRow } from "@/lib/clusters";
+import {
+  getLinkAnalysis,
+  getClusters,
+  linkTypeLabel,
+  CLUSTER_STATE_LABEL,
+  PILLAR_TYPE_LABEL,
+  type HubRow,
+  type ClusterRow,
+} from "@/lib/clusters";
 
 // トピッククラスタ（設計書 §4.2 /clusters・§3.5.2 リンク構造）
-// ★ツリー表示はクラスタ割当（P4.5/P4.9）後。今は内部リンク構造の分析を出す。
+//
+// ★2026-07-23: クラスタ割当が入った。メディア事業部側で管理されていたものを
+//   cowork 経由で受け取り 17クラスタ・101本を投入した（未割当は61本）。
 export const dynamic = "force-dynamic";
 
 export default async function ClustersPage() {
-  const { stats, hubs } = await getLinkAnalysis();
+  const [{ stats, hubs }, clusters] = await Promise.all([getLinkAnalysis(), getClusters()]);
   const maxIncoming = hubs[0]?.incoming ?? 1;
   const weakPillars = hubs.filter((h) => h.flag === "weak_pillar");
   const hubCandidates = hubs.filter((h) => h.flag === "hub_candidate");
@@ -32,6 +42,8 @@ export default async function ClustersPage() {
           hint={stats.orphans === 0 ? "全記事がリンクを持つ" : "リンクが1本も無い"}
         />
       </div>
+
+      <ClusterTable clusters={clusters} />
 
       {/* リンク種別 */}
       <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
@@ -135,6 +147,115 @@ function HubBar({ h, max }: { h: HubRow; max: number }) {
         <span className="text-[var(--faint)]"> ← / {h.outgoing} →</span>
       </span>
     </div>
+  );
+}
+
+/**
+ * クラスタ一覧。
+ *
+ * ★見たいのは「ハブが機能しているか」であって記事数ではない（§3.5.2）。
+ *   ・ピラー無し → 評価を集める先が無い
+ *   ・ピラーよりクリックを集めている子がいる → ハブが実態と合っていない
+ *   どちらも記事を増やしても直らない。構造の問題として出す。
+ */
+function ClusterTable({ clusters }: { clusters: ClusterRow[] }) {
+  const noPillar = clusters.filter((c) => c.pillar === null);
+  const mismatched = clusters.filter(
+    (c) => c.pillar !== null && c.top !== null && c.top.externalId !== c.pillar.externalId,
+  );
+  return (
+    <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
+      <h2 className="text-[15px] font-semibold">クラスタ（{clusters.length}）</h2>
+      <p className="mb-3 mt-0.5 text-[12px] text-[var(--faint)]">
+        クリック・表示は<strong>検索の実測</strong>（GSC・直近90日）。
+        {noPillar.length > 0 && (
+          <>
+            {" "}
+            ★<strong className="text-[var(--warn)]">{noPillar.length}クラスタにピラーが無い</strong>
+            （評価を集める先が無い）。
+          </>
+        )}
+        {mismatched.length > 0 && (
+          <>
+            {" "}
+            ★<strong className="text-[var(--warn)]">{mismatched.length}クラスタで、ピラーより
+            クリックの多い子記事がある</strong>（ハブが実態と合っていない）。
+          </>
+        )}
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-[var(--border)] text-left text-[11px] text-[var(--muted)]">
+              <th className="py-1.5 pr-2 font-medium">クラスタ</th>
+              <th className="py-1.5 pr-2 font-medium">柱</th>
+              <th className="py-1.5 pr-2 text-right font-medium">記事</th>
+              <th className="py-1.5 pr-2 font-medium">ピラー</th>
+              <th className="py-1.5 pr-2 text-right font-medium">クリック</th>
+              <th className="py-1.5 pr-2 text-right font-medium">表示</th>
+              <th className="py-1.5 text-right font-medium">問い合わせ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {clusters.map((c) => {
+              const mismatch =
+                c.pillar !== null && c.top !== null && c.top.externalId !== c.pillar.externalId;
+              return (
+                <tr key={c.id} className="border-b border-[var(--border)]/60 align-top">
+                  <td className="py-2 pr-2">
+                    <div className="font-medium">{c.name}</div>
+                    {c.state !== "healthy" && (
+                      <span className="mt-0.5 inline-block rounded bg-[var(--warn)]/20 px-1 py-0.5 text-[10px] text-[#9a6a00]">
+                        {CLUSTER_STATE_LABEL[c.state] ?? c.state}
+                      </span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-2 text-[11px] text-[var(--muted)]">
+                    {PILLAR_TYPE_LABEL[c.pillarType] ?? c.pillarType}
+                  </td>
+                  <td className="tnum py-2 pr-2 text-right">{c.articles}</td>
+                  <td className="max-w-[20rem] py-2 pr-2">
+                    {c.pillar === null ? (
+                      <span className="text-[12px] text-[var(--warn)]">★指定なし</span>
+                    ) : (
+                      <>
+                        <Link
+                          href={`/content/${c.pillar.externalId}`}
+                          className="block truncate text-[12px] hover:text-[var(--accent)] hover:underline"
+                          title={c.pillar.title}
+                        >
+                          {c.pillar.title}
+                        </Link>
+                        <span className="text-[11px] text-[var(--faint)]">
+                          {c.pillar.clicks}クリック
+                          {c.pillarIncoming !== null && `・被リンク${c.pillarIncoming}`}
+                        </span>
+                      </>
+                    )}
+                    {mismatch && c.top && (
+                      <div className="mt-1 rounded bg-[var(--warn)]/[0.12] px-1.5 py-1 text-[11px] text-[#9a6a00]">
+                        ★実際の最多は{" "}
+                        <Link href={`/content/${c.top.externalId}`} className="underline">
+                          {c.top.externalId}
+                        </Link>{" "}
+                        （{c.top.clicks}クリック）
+                      </div>
+                    )}
+                  </td>
+                  <td className="tnum py-2 pr-2 text-right font-medium">{c.clicks}</td>
+                  <td className="tnum py-2 pr-2 text-right text-[var(--muted)]">
+                    {c.impressions.toLocaleString("ja-JP")}
+                  </td>
+                  <td className="tnum py-2 text-right font-medium">
+                    {c.leads > 0 ? <span className="text-[var(--accent)]">{c.leads}</span> : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 

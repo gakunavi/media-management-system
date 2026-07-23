@@ -98,3 +98,127 @@ export async function getLinkAnalysis(): Promise<{
     hubs,
   };
 }
+
+// ── トピッククラスタ（2026-07-23 追加）────────────────────────
+//
+// ★これまで「クラスタ割当が済むまでツリーは描けない」としていたが、
+//   割当は**メディア事業部側で管理されていた**（MMSへ移行されていなかっただけ）。
+//   cowork から台帳を受け取り 17クラスタ・101本を投入した。
+//
+// ★見たいのは「数」ではなく「ハブが機能しているか」（§3.5.2）。
+//   ・ピラーが指定されていない → 評価の受け皿が無い（state=pillar_missing）
+//   ・ピラーよりクリックを集めている子がいる → ハブが実態と合っていない
+//   どちらも「記事を増やす」では直らない。構造の問題として出す。
+
+export type ClusterRow = {
+  id: string;
+  name: string;
+  slug: string;
+  state: string;
+  pillarType: string;
+  articles: number;
+  clicks: number;
+  impressions: number;
+  leads: number;
+  pillar: { externalId: string; title: string; clicks: number } | null;
+  /** クリック最多の記事。ピラーと違うならハブが実態と合っていない */
+  top: { externalId: string; title: string; clicks: number } | null;
+  /** クラスタ内で被リンクが集まっている先（ピラーに集まっているのが健全） */
+  pillarIncoming: number | null;
+};
+
+export const CLUSTER_STATE_LABEL: Record<string, string> = {
+  healthy: "正常",
+  pillar_missing: "ピラー無し",
+  thin: "記事が少ない",
+  cannibalized: "カニバリ",
+  orphan: "孤立",
+};
+
+export const PILLAR_TYPE_LABEL: Record<string, string> = {
+  A_standard: "A 通常",
+  B_news: "B 時事",
+  C_risk: "C リスク中立",
+};
+
+export async function getClusters(): Promise<ClusterRow[]> {
+  const [clusters, incomingRaw] = await Promise.all([
+    prisma.topicCluster.findMany({
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        state: true,
+        pillarType: true,
+        pillarContentId: true,
+        members: {
+          select: {
+            role: true,
+            contentItem: {
+              select: {
+                id: true,
+                externalId: true,
+                title: true,
+                _count: { select: { firstTouchLeads: true } },
+              },
+            },
+          },
+        },
+      },
+    }),
+    prisma.internalLink.groupBy({ by: ["dstContentId"], _count: { _all: true } }),
+  ]);
+
+  const memberIds = clusters.flatMap((c) => c.members.map((m) => m.contentItem.id));
+  // ★クリックは最新の集計期間（ContentQuery）から取る。
+  //   ContentMetric の日次を期間なしで合算すると、古い記事ほど有利になる。
+  const latest = await prisma.contentQuery.findFirst({
+    orderBy: { periodEnd: "desc" },
+    select: { periodStart: true, periodEnd: true },
+  });
+  const perArticle = latest
+    ? await prisma.contentQuery.groupBy({
+        by: ["contentItemId"],
+        where: {
+          contentItemId: { in: memberIds },
+          periodStart: latest.periodStart,
+          periodEnd: latest.periodEnd,
+        },
+        _sum: { clicks: true, impressions: true },
+      })
+    : [];
+  const clicksBy = new Map(perArticle.map((r) => [r.contentItemId, r._sum.clicks ?? 0]));
+  const imprBy = new Map(perArticle.map((r) => [r.contentItemId, r._sum.impressions ?? 0]));
+  const incomingBy = new Map(incomingRaw.map((r) => [r.dstContentId, r._count._all]));
+
+  const rows: ClusterRow[] = clusters.map((c) => {
+    const members = c.members.map((m) => ({
+      id: m.contentItem.id,
+      externalId: m.contentItem.externalId,
+      title: decodeEntities(m.contentItem.title),
+      clicks: clicksBy.get(m.contentItem.id) ?? 0,
+      leads: m.contentItem._count.firstTouchLeads,
+    }));
+    const sorted = [...members].sort((a, b) => b.clicks - a.clicks);
+    const pillarMember = members.find((m) => m.id === c.pillarContentId) ?? null;
+    return {
+      id: c.id,
+      name: c.name,
+      slug: c.slug,
+      state: c.state,
+      pillarType: c.pillarType,
+      articles: members.length,
+      clicks: members.reduce((s, m) => s + m.clicks, 0),
+      impressions: members.reduce((s, m) => s + (imprBy.get(m.id) ?? 0), 0),
+      leads: members.reduce((s, m) => s + m.leads, 0),
+      pillar: pillarMember
+        ? { externalId: pillarMember.externalId, title: pillarMember.title, clicks: pillarMember.clicks }
+        : null,
+      top: sorted[0] ?? null,
+      pillarIncoming: c.pillarContentId ? (incomingBy.get(c.pillarContentId) ?? 0) : null,
+    };
+  });
+
+  // 記事数の多い順（＝影響の大きい順）
+  return rows.sort((a, b) => b.articles - a.articles);
+}
