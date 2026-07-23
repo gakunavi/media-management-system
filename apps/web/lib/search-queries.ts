@@ -27,6 +27,20 @@ const LOW_CTR_MIN_IMPRESSIONS = 100;
 const LOW_CTR_MAX_POSITION = 10;
 
 /**
+ * 「CTR不全」＝ 実運用でリライト着手の最多トリガ（cowork 実績・2026-07-23）。
+ *
+ * ★"順位が落ちた" ではなく **"順位は取れているのにクリック0"** が主トリガ。
+ *   intervention 9件の実績がこの形だった。PRJ-026 の判定は「順位11〜25位帯×
+ *   表示あり×低CTR」で、cowork の実感は 10〜14位。
+ *   ここは**両方を含む 10〜25位**にし、表示があってクリック0のものを拾う。
+ *   狭くすると取りこぼし、広くすると処理能力（週2〜3本）を超える。
+ */
+export const CTR_FAIL_MIN_POSITION = 10;
+export const CTR_FAIL_MAX_POSITION = 25;
+/** 表示がこれ未満だと「押されていない」と言えない（§16.5 母数） */
+export const CTR_FAIL_MIN_IMPRESSIONS = 20;
+
+/**
  * 公的機関を名指しした検索語。
  *
  * ★これを分けないと打ち手を誤る。実測（2026-07-23）で「押されていない」上位は
@@ -190,6 +204,45 @@ export async function getQueryInsights(): Promise<QueryInsights> {
     lowCtrNavigational: lowCtr.filter((r) => r.navigational).length,
     cannibals: cannibals.slice(0, 15),
   };
+}
+
+/**
+ * CTR不全の記事ID → 根拠（最も表示の多い該当検索語）。
+ *
+ * ★鮮度の期限「だけ」で督促すると、処理能力を超えた瞬間に誰も見なくなる。
+ *   期限は境界に留め、**CTR不全と重なった記事を先に出す**（二段構え）。
+ */
+export async function getCtrFailures(): Promise<
+  Map<string, { query: string; position: number; impressions: number }>
+> {
+  const latest = await prisma.contentQuery.findFirst({
+    orderBy: { periodEnd: "desc" },
+    select: { periodStart: true, periodEnd: true },
+  });
+  if (!latest) return new Map();
+  const rows = await prisma.contentQuery.findMany({
+    where: {
+      periodStart: latest.periodStart,
+      periodEnd: latest.periodEnd,
+      clicks: 0,
+      impressions: { gte: CTR_FAIL_MIN_IMPRESSIONS },
+      position: { gte: CTR_FAIL_MIN_POSITION, lte: CTR_FAIL_MAX_POSITION },
+    },
+    orderBy: { impressions: "desc" },
+    select: { contentItemId: true, query: true, position: true, impressions: true },
+  });
+  const out = new Map<string, { query: string; position: number; impressions: number }>();
+  for (const r of rows) {
+    // 表示の多い順に見るので、最初に入ったものが最も強い根拠
+    if (!out.has(r.contentItemId)) {
+      out.set(r.contentItemId, {
+        query: r.query,
+        position: r.position ?? 0,
+        impressions: r.impressions,
+      });
+    }
+  }
+  return out;
 }
 
 /** 記事詳細用。その記事が実際に来ている検索語（クリックの多い順） */

@@ -159,7 +159,9 @@ function HubBar({ h, max }: { h: HubRow; max: number }) {
  *   どちらも記事を増やしても直らない。構造の問題として出す。
  */
 function ClusterTable({ clusters }: { clusters: ClusterRow[] }) {
-  const noPillar = clusters.filter((c) => c.pillar === null);
+  // ★設計上ピラーを置かないクラスタ（横串）は「欠けている」に数えない
+  const noPillar = clusters.filter((c) => c.pillar === null && !c.pillarByDesign);
+  const byDesign = clusters.filter((c) => c.pillarByDesign);
   const mismatched = clusters.filter(
     (c) => c.pillar !== null && c.top !== null && c.top.externalId !== c.pillar.externalId,
   );
@@ -180,6 +182,13 @@ function ClusterTable({ clusters }: { clusters: ClusterRow[] }) {
             {" "}
             ★<strong className="text-[var(--warn)]">{mismatched.length}クラスタで、ピラーより
             クリックの多い子記事がある</strong>（ハブが実態と合っていない）。
+          </>
+        )}
+        {byDesign.length > 0 && (
+          <>
+            {" "}
+            なお{byDesign.length}クラスタ（横串）は<strong>設計上ピラーを置かない</strong>ので
+            欠陥ではない。
           </>
         )}
       </p>
@@ -204,6 +213,9 @@ function ClusterTable({ clusters }: { clusters: ClusterRow[] }) {
                 <tr key={c.id} className="border-b border-[var(--border)]/60 align-top">
                   <td className="py-2 pr-2">
                     <div className="font-medium">{c.name}</div>
+                    {c.note && (
+                      <div className="mt-0.5 text-[11px] text-[var(--faint)]">{c.note}</div>
+                    )}
                     {c.state !== "healthy" && (
                       <span className="mt-0.5 inline-block rounded bg-[var(--warn)]/20 px-1 py-0.5 text-[10px] text-[#9a6a00]">
                         {CLUSTER_STATE_LABEL[c.state] ?? c.state}
@@ -216,7 +228,13 @@ function ClusterTable({ clusters }: { clusters: ClusterRow[] }) {
                   <td className="tnum py-2 pr-2 text-right">{c.articles}</td>
                   <td className="max-w-[20rem] py-2 pr-2">
                     {c.pillar === null ? (
-                      <span className="text-[12px] text-[var(--warn)]">★指定なし</span>
+                      c.pillarByDesign ? (
+                        <span className="text-[12px] text-[var(--faint)]">
+                          置かない（設計）
+                        </span>
+                      ) : (
+                        <span className="text-[12px] text-[var(--warn)]">★指定なし</span>
+                      )
                     ) : (
                       <>
                         <Link

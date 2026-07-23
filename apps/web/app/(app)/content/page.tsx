@@ -21,6 +21,12 @@ import {
   LINK_KIND_LABEL,
   type LinkClickSummary,
 } from "@/lib/link-clicks";
+import {
+  getReviewQueue,
+  FRESHNESS_LABEL,
+  type ReviewQueue,
+  type ReviewRow,
+} from "@/lib/review-queue";
 import { resolveRange } from "@/lib/period";
 import { RangePicker } from "@/components/range-picker";
 
@@ -58,6 +64,8 @@ export default async function ContentPage({
   const stats = tagStats(data.rows);
   // ★記事内のどのリンクが踏まれたか。リダイレクタは記事を持たないのでここで補う
   const links = await getLinkClicks(range);
+  // ★リライト督促。期限だけで出すと処理能力を超えて誰も見なくなる（二段構え）
+  const review = await getReviewQueue();
 
   const href = (extra: Record<string, string>) => {
     const p = new URLSearchParams();
@@ -90,6 +98,8 @@ export default async function ContentPage({
           }}
         />
       </div>
+
+      <ReviewPanel q={review} />
 
       <TagStatsPanel
         title="読者別（誰に向けた記事が効いているか）"
@@ -182,6 +192,132 @@ export default async function ContentPage({
         <span className="text-[var(--warn)]"> 未接続</span> は記事レコードが無いが実測がある
         URL（§3.2.2）。
       </p>
+    </div>
+  );
+}
+
+/**
+ * リライト督促。
+ *
+ * ★期限切れを全部並べない。処理能力は週2〜3本（cowork 実績）で、
+ *   件数がそれを超えると誰も見なくなる。**期限切れ×CTR不全**を先に出す。
+ * ★CTR不全＝「順位は取れているのにクリック0」。実運用で着手理由の最多。
+ */
+function ReviewPanel({ q }: { q: ReviewQueue }) {
+  const total = q.priority.length + q.overdue.length;
+  if (total === 0 && q.dueSoon.length === 0 && q.ctrOnly.length === 0) return null;
+  return (
+    <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-4">
+      <div className="flex flex-wrap items-baseline gap-3">
+        <h2 className="text-[14px] font-semibold">見直しが要る記事</h2>
+        <span className="text-[12px] text-[var(--muted)]">
+          期限切れ {total}・まもなく {q.dueSoon.length}
+        </span>
+        <span className="ml-auto text-[12px] text-[var(--faint)]">
+          処理能力の目安 週{q.weeklyCapacity}本
+        </span>
+      </div>
+      <p className="mb-2 mt-0.5 text-[12px] text-[var(--faint)]">
+        ★<strong>期限だけで並べない</strong>。実運用の着手理由で最も多いのは
+        「順位は取れているのにクリック0」なので、期限切れのうち
+        <strong>それに当たるものを先に出す</strong>。
+        {q.noBaseline > 0 && (
+          <>
+            {" "}
+            <span className="text-[var(--warn)]">
+              最終レビュー日が無く期限を出せない記事が{q.noBaseline}本
+            </span>
+            （未計測ではなく未入力）。
+          </>
+        )}
+      </p>
+
+      {q.priority.length > 0 && (
+        <ReviewList
+          title="① 先に直す（期限切れ ＋ 表示はあるのにクリック0）"
+          note="★タイトル・説明文を読者の質問への即答型に書き換える。キーワードを並べ足すのは実測で効いていない。"
+          rows={q.priority}
+          tone="bad"
+        />
+      )}
+      {q.ctrOnly.length > 0 && (
+        <ReviewList
+          title="② 期限前だが、表示はあるのにクリック0"
+          note="★期限を待つ理由が無い。取り逃している表示が多い順。"
+          rows={q.ctrOnly.slice(0, 10)}
+          tone="warn"
+        />
+      )}
+      {q.overdue.length > 0 && (
+        <ReviewList
+          title="③ 期限切れ（クリックは出ている）"
+          note="★急がない。順位・クリックが動いていないかだけ確認する。"
+          rows={q.overdue}
+          tone="warn"
+        />
+      )}
+      {q.dueSoon.length > 0 && (
+        <ReviewList
+          title="④ まもなく期限"
+          note=""
+          rows={q.dueSoon.slice(0, 8)}
+          tone="faint"
+        />
+      )}
+    </section>
+  );
+}
+
+function ReviewList({
+  title,
+  note,
+  rows,
+  tone,
+}: {
+  title: string;
+  note: string;
+  rows: ReviewRow[];
+  tone: "bad" | "warn" | "faint";
+}) {
+  const color =
+    tone === "bad" ? "text-[var(--bad)]" : tone === "warn" ? "text-[#9a6a00]" : "text-[var(--faint)]";
+  return (
+    <div className="mt-3">
+      <h3 className={`text-[13px] font-medium ${color}`}>{title}</h3>
+      {note && <p className="mb-1 mt-0.5 text-[11px] text-[var(--faint)]">{note}</p>}
+      <table className="w-full text-[13px]">
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.externalId} className="border-b border-[var(--border)]/60">
+              <td className="py-1.5 pr-2">
+                <Link
+                  href={`/content/${r.externalId}`}
+                  className="block truncate hover:text-[var(--accent)] hover:underline"
+                  title={r.title}
+                >
+                  {r.title}
+                </Link>
+                {r.ctrFail && (
+                  <span className="text-[11px] text-[var(--faint)]">
+                    「{r.ctrFail.query}」{r.ctrFail.position.toFixed(1)}位・
+                    {r.ctrFail.impressions.toLocaleString("ja-JP")}表示でクリック0
+                  </span>
+                )}
+              </td>
+              <td className="w-24 whitespace-nowrap py-1.5 pr-2 text-right text-[11px] text-[var(--muted)]">
+                {r.freshnessTier ? (FRESHNESS_LABEL[r.freshnessTier] ?? r.freshnessTier) : "—"}
+              </td>
+              <td className="tnum w-20 whitespace-nowrap py-1.5 text-right text-[11px] text-[var(--faint)]">
+                {r.daysOver === null
+                  ? "—"
+                  : r.daysOver >= 0
+                    ? `${r.daysOver}日超過`
+                    : `あと${-r.daysOver}日`}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

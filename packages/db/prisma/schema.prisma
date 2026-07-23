@@ -1509,6 +1509,11 @@ model TopicCluster {
   /// クラスタが狙う中心KW
   targetKeywordId String?
   state           ClusterState @default(healthy)
+  /// 由来・判断の根拠（2026-07-23 追加）。
+  /// ★「ピラーが無い」には2種類ある。**欠けている**（P1〜P3）のと
+  ///   **設計上置かない**（横串）のを state だけでは区別できないため、
+  ///   理由をここに残す。区別できないと、直す必要の無いものを直そうとする。
+  note            String?
 
   business      Business       @relation(fields: [businessId], references: [id])
   parent        TopicCluster?  @relation("ClusterTree", fields: [parentId], references: [id])

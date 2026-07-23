@@ -125,7 +125,18 @@ export type ClusterRow = {
   top: { externalId: string; title: string; clicks: number } | null;
   /** クラスタ内で被リンクが集まっている先（ピラーに集まっているのが健全） */
   pillarIncoming: number | null;
+  /** 由来・判断の根拠 */
+  note: string | null;
+  /**
+   * ピラーが無いのが**設計どおり**か。
+   * ★「欠けている」と「置かない」を区別しないと、直す必要の無いものを直そうとする。
+   *   横串クラスタはクラスタ横断のため Pillar-Cluster 構造を取らない（cowork 2026-07-23）。
+   */
+  pillarByDesign: boolean;
 };
+
+/** note に記録した「設計上ピラーを置かない」の目印 */
+const BY_DESIGN = "ピラーを置かないのが設計";
 
 export const CLUSTER_STATE_LABEL: Record<string, string> = {
   healthy: "正常",
@@ -151,6 +162,7 @@ export async function getClusters(): Promise<ClusterRow[]> {
         state: true,
         pillarType: true,
         pillarContentId: true,
+        note: true,
         members: {
           select: {
             role: true,
@@ -216,6 +228,8 @@ export async function getClusters(): Promise<ClusterRow[]> {
         : null,
       top: sorted[0] ?? null,
       pillarIncoming: c.pillarContentId ? (incomingBy.get(c.pillarContentId) ?? 0) : null,
+      note: c.note,
+      pillarByDesign: (c.note ?? "").includes(BY_DESIGN),
     };
   });
 
