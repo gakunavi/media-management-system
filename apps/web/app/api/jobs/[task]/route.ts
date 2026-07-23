@@ -43,6 +43,12 @@ async function sendHealthAlerts(): Promise<{ sent: number; alerts: string[] }> {
     // ★投稿が出ていることと、その結果が測れていることは別の障害
     alerts.push(`Threads 計測: ${health.insights.reason}`);
   }
+  // ★満杯になると Postgres がチェックポイントを書けず全部が同時に止まる。
+  //   ジョブの成否では気づけない（ジョブ自体が動けないので記録も残らない）。
+  //   2026-07-23 に実際に起き、「画面が開かない」で初めて気づいた
+  if (health.storage.alert === "red" || health.storage.alert === "warn") {
+    alerts.push(`ストレージ: ${health.storage.reason}`);
+  }
   // ★ジョブが成功していても、書くはずのデータが入っていないことがある。
   //   実際 pv は全ジョブ緑のまま9日間止まっていた。
   const stale = (await getMetricFreshness()).filter((m) => m.alert !== "ok");

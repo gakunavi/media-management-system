@@ -394,6 +394,25 @@ nextReviewDue = lastReviewedAt + FreshnessRule.intervalDays
 
 ---
 
+## 11.9 ★ストレージの空きを監視する（2026-07-23 追加）
+
+**2026-07-23 にディスクが99%まで埋まり、Postgres がチェックポイントを書けず
+クラッシュループした。**
+
+```
+PANIC: could not write to file "pg_logical/replorigin_checkpoint.tmp": No space left on device
+→ checkpointer 強制終了 → 自動再起動 → また満杯 → 無限ループ
+```
+
+| # | 規約 |
+|---|---|
+| **11.9-1** | **ジョブの成否ではストレージ枯渇に気づけない。** DBが落ちればジョブ自体が動けず、失敗の記録すら残らない。段7に**独立した監視項目**として持つ（`getStorageHealth()`） |
+| **11.9-2** | 閾値は**残り容量ではなく使用率**で持つ（90%で警告・95%で赤）。ディスク総容量は環境で違い、残りGBで決めると環境ごとに閾値を変えることになる |
+| **11.9-3** | **掃除を人手に頼らない。** `scripts/docker-gc.sh` を日次 04:30（`com.mms.docker-gc`）で回す。日次ジョブ（05:00〜）より前に済ませ、ジョブが動く時点で空きを確保する |
+| **11.9-4** | **消してよいのはタグ無しイメージとビルドキャッシュだけ。** `docker image prune` に `-a` を付けない（停止中コンテナのイメージまで消え、起動できなくなる）。`docker volume prune` は**絶対に使わない**（DBのデータが消える） |
+
+---
+
 ## 12. セキュリティ
 
 ### 12.0 ★認可は `lib/session.ts` の `currentUser()` / `isOwner()` を通す（2026-07-23）

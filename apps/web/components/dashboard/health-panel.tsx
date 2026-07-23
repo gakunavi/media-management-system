@@ -57,6 +57,8 @@ export function healthAlerts(health: JobHealth, stale: MetricFreshness[]): strin
         : `Threads キュー残り${health.threads.queuePending}本`,
     );
   if (health.insights.alert === "red") out.push("Threads 実績の回収が止まっている");
+  // ★満杯になると DB が止まり、全部が同時に落ちる。最優先で気づきたい
+  if (health.storage.alert === "red") out.push(health.storage.reason);
   for (const t of health.tools) out.push(t.message);
   const red = stale.filter((s) => s.alert === "red");
   if (red.length > 0) out.push(`${red.length}指標が更新停止`);
@@ -118,6 +120,12 @@ export function HealthPanel({
           {/* ★配信が出ていることと、その結果が測れていることは別の障害 */}
           <Box alert={health.insights.alert} title="Threads 実績の回収">
             {health.insights.reason}
+          </Box>
+
+          {/* ★2026-07-23 にディスク99%で Postgres がクラッシュループした。
+              ジョブの成否では分からない（ジョブ自体が動けない） */}
+          <Box alert={health.storage.alert} title="ディスクの空き">
+            {health.storage.reason}
           </Box>
 
           <Box alert={stale.some((s) => s.alert === "red") ? "red" : stale.length ? "warn" : "ok"} title="指標の鮮度">

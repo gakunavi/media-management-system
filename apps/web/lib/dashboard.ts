@@ -344,7 +344,35 @@ export type JobHealth = {
   tools: { kind: string; message: string }[];
   /** Threads Insights の回収が生きているか（cowork 日次 Step1 から移管） */
   insights: InsightsHealth;
+  /** ★DBの置き場が埋まっていないか。満杯だと全部が同時に止まる */
+  storage: StorageHealth;
 };
+
+/**
+ * ストレージの空き。
+ *
+ * ★なぜ要るか（2026-07-23 に実際に起きた）
+ *   ディスクが99%になり Postgres がチェックポイントを書けずクラッシュループした。
+ *     PANIC: could not write to file "..." : No space left on device
+ *   DBが落ちれば web も worker も同時に止まる。**ジョブが緑かどうかでは分からない**
+ *   （ジョブ自体が動けないので、失敗の記録すら残らない）。
+ *   気づいたのは「画面が開かない」という最悪の入口だった。
+ *
+ * ★閾値は「残り容量」ではなく「使用率」で見る。ディスクの総容量は環境で違い、
+ *   残りGBで決めると環境ごとに閾値を変えることになる。
+ */
+export type StorageHealth = {
+  /** 使用率（0〜1）。null = 取得できない環境 */
+  usedRatio: number | null;
+  freeBytes: number | null;
+  totalBytes: number | null;
+  alert: "ok" | "warn" | "red" | "unknown";
+  reason: string;
+};
+
+/** ここを超えたら手を打つ。90%で警告、95%で赤（実際に99%で停止した） */
+const STORAGE_WARN_RATIO = 0.9;
+const STORAGE_RED_RATIO = 0.95;
 
 /**
  * Insights の回収が止まっていないか。
@@ -436,7 +464,71 @@ export async function getJobHealth(now: Date = new Date()): Promise<JobHealth> {
     threads: await getThreadsDelivery(now),
     tools: await getToolAlerts(now),
     insights: await getInsightsHealth(now),
+    storage: await getStorageHealth(),
   };
+}
+
+/**
+ * DBが置かれているディスクの空きを見る。
+ *
+ * ★Postgres 自身に聞く。web コンテナのディスクを見ても意味がない
+ *   （DBは別コンテナ・別ボリュームで、埋まって困るのは DB 側）。
+ */
+async function getStorageHealth(): Promise<StorageHealth> {
+  // ★Node から見る。docker compose の named volume はホストの同じディスク上に
+  //   あるので、web コンテナから見た空きが DB の空きと一致する
+  try {
+    const { statfs } = await import("node:fs/promises");
+    const st = await statfs("/");
+    const total = Number(st.blocks) * Number(st.bsize);
+    const free = Number(st.bavail) * Number(st.bsize);
+    if (!Number.isFinite(total) || total <= 0) {
+      return {
+        usedRatio: null,
+        freeBytes: null,
+        totalBytes: null,
+        alert: "unknown",
+        reason: "ディスク情報を取得できません",
+      };
+    }
+    const usedRatio = 1 - free / total;
+    const gb = (n: number) => `${(n / 1024 ** 3).toFixed(1)}GB`;
+    const pct = Math.round(usedRatio * 100);
+
+    if (usedRatio >= STORAGE_RED_RATIO) {
+      return {
+        usedRatio,
+        freeBytes: free,
+        totalBytes: total,
+        alert: "red",
+        reason: `ディスク使用率 ${pct}%（残り ${gb(free)}）。満杯になると Postgres がチェックポイントを書けず全体が止まります`,
+      };
+    }
+    if (usedRatio >= STORAGE_WARN_RATIO) {
+      return {
+        usedRatio,
+        freeBytes: free,
+        totalBytes: total,
+        alert: "warn",
+        reason: `ディスク使用率 ${pct}%（残り ${gb(free)}）。docker のビルドキャッシュと未使用イメージを削れます`,
+      };
+    }
+    return {
+      usedRatio,
+      freeBytes: free,
+      totalBytes: total,
+      alert: "ok",
+      reason: `ディスク使用率 ${pct}%（残り ${gb(free)}）`,
+    };
+  } catch (e) {
+    return {
+      usedRatio: null,
+      freeBytes: null,
+      totalBytes: null,
+      alert: "unknown",
+      reason: `ディスク情報を取得できません（${e instanceof Error ? e.message : String(e)}）`,
+    };
+  }
 }
 
 async function getInsightsHealth(now: Date): Promise<InsightsHealth> {
