@@ -1,5 +1,6 @@
 import { getJobs, getRecentRuns, type JobRow } from "@/lib/jobs";
 import { getMetricFreshness, type MetricFreshness } from "@/lib/dashboard";
+import { JOB_HEALTH_LABEL } from "@/lib/jobs";
 import { JobControls } from "./job-controls";
 
 // ジョブ監視（設計書 §4.2 /jobs・§4.1 段7）
@@ -29,8 +30,17 @@ export default async function JobsPage() {
     getRecentRuns(),
     getMetricFreshness(),
   ]);
-  const failing = jobs.filter((j) => j.lastStatus === "failed").length;
-  const enabled = jobs.filter((j) => j.enabled).length;
+  // ★出すのは「気づくべき件数」。有効数を出しても打ち手にならない。
+  //   停止中は意図して止めたものなので警告に混ぜない（混ぜると常時赤になる）。
+  const stalled = jobs.filter((j) => j.health === "stalled");
+  const failed = jobs.filter((j) => j.health === "failed");
+  const waiting = jobs.filter((j) => j.health === "waiting");
+  const disabled = jobs.filter((j) => j.health === "disabled");
+  // 問題のあるものを先頭に出す（21枚を目で追わせない）
+  const order: Record<string, number> = { stalled: 0, failed: 1, waiting: 2, ok: 3, disabled: 4 };
+  const sorted = [...jobs].sort(
+    (a, b) => (order[a.health] ?? 9) - (order[b.health] ?? 9) || a.name.localeCompare(b.name),
+  );
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -41,11 +51,23 @@ export default async function JobsPage() {
         </p>
       </div>
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-3">
-        <Stat label="登録ジョブ" value={jobs.length} />
-        <Stat label="有効" value={enabled} accent />
-        <Stat label="直近が失敗" value={failing} tone={failing > 0 ? "bad" : "ok"} />
+      <div className="mb-2 grid gap-3 sm:grid-cols-4">
+        <Stat
+          label="止まっている"
+          value={stalled.length}
+          tone={stalled.length > 0 ? "bad" : "ok"}
+        />
+        <Stat label="失敗" value={failed.length} tone={failed.length > 0 ? "bad" : "ok"} />
+        <Stat label="初回待ち" value={waiting.length} />
+        <Stat label="停止中（意図的）" value={disabled.length} />
       </div>
+      <p className="mb-4 text-[12px] text-[var(--faint)]">
+        ★<strong>「一度も動いていない」を異常にしない</strong>。週次ジョブは登録した曜日に
+        よって最初の予定がまだ来ていないことがあり（実測: 火・木に登録した3本の初回は翌月曜）、
+        これを赤で出すと意味のない警告を毎日見ることになる。
+        <strong>「予定を過ぎたのに動いていない」だけを「止まっている」</strong>とする。
+        停止中は意図して止めたものなので警告に混ぜない。
+      </p>
 
       {/* ジョブ一覧 */}
       <section className="mb-6 grid gap-3">
@@ -55,7 +77,7 @@ export default async function JobsPage() {
             立案（週次）・判定（日次）を登録します。
           </div>
         ) : (
-          jobs.map((j) => <JobCard key={j.id} job={j} />)
+          sorted.map((j) => <JobCard key={j.id} job={j} />)
         )}
       </section>
 
@@ -204,24 +226,37 @@ function MetricFreshnessPanel({ rows }: { rows: MetricFreshness[] }) {
   );
 }
 
+const HEALTH_MARK: Record<string, string> = {
+  ok: "🟢",
+  failed: "🔴",
+  stalled: "🚨",
+  waiting: "⏳",
+  disabled: "⏸",
+};
+
 function JobCard({ job }: { job: JobRow }) {
-  const failed = job.lastStatus === "failed";
+  const bad = job.health === "failed" || job.health === "stalled";
   return (
     <div
       className={`rounded-xl border bg-[var(--panel)] p-4 ${
-        failed ? "border-[var(--bad)]/40" : "border-[var(--border)]"
+        bad ? "border-[var(--bad)]/40" : "border-[var(--border)]"
       }`}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span aria-hidden>{statusMark(job.lastStatus)}</span>
+            <span aria-hidden>{HEALTH_MARK[job.health] ?? "🟢"}</span>
             <span className="font-mono text-[13px] font-medium">{job.name}</span>
-            {!job.enabled && (
-              <span className="rounded bg-[var(--panel-2)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">
-                停止中
-              </span>
-            )}
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] ${
+                bad
+                  ? "bg-[var(--bad)]/15 font-medium text-[var(--bad)]"
+                  : "bg-[var(--panel-2)] text-[var(--muted)]"
+              }`}
+            >
+              {JOB_HEALTH_LABEL[job.health]}
+              {job.health === "stalled" && `（予定${job.missedRuns}回分）`}
+            </span>
             <span className="rounded bg-[var(--accent-weak)] px-1.5 py-0.5 text-[10px] text-[var(--accent)]">
               {job.kind}
             </span>
@@ -234,14 +269,23 @@ function JobCard({ job }: { job: JobRow }) {
               </span>
             </span>
             <span>次回: {jaDateTime(job.nextRunAt)}</span>
-            <span>最終: {jaDateTime(job.lastRunAt)}</span>
+            <span>
+              最終: {job.lastRunAt ? jaDateTime(job.lastRunAt) : "まだ実行なし"}
+            </span>
             <span className="text-[var(--faint)]">
               成功 {job.successCount} / 失敗 {job.failedCount}
             </span>
           </div>
+          {/* ★停止理由・用途を先に出す。無いと「直すべき障害」に見えて、
+              誰かが再有効化して同じ失敗を繰り返す（aio-* は OpenAI クォータ枯渇で意図的に停止） */}
+          {job.note && (
+            <p className="mt-1.5 rounded bg-[var(--panel-2)] px-2 py-1 text-[11px] text-[var(--muted)]">
+              {job.note}
+            </p>
+          )}
           {job.lastLog && (
             <p
-              className={`mt-1.5 max-w-[520px] truncate text-[11px] ${failed ? "text-[var(--bad)]" : "text-[var(--faint)]"}`}
+              className={`mt-1.5 max-w-[520px] truncate text-[11px] ${bad ? "text-[var(--bad)]" : "text-[var(--faint)]"}`}
               title={job.lastLog}
             >
               {job.lastLog}

@@ -2330,6 +2330,11 @@ model Job {
   kind     String
   config   Json?
   enabled  Boolean @default(true)
+  /// 何のためのジョブか／止めているなら理由（2026-07-24 追加）。
+  /// ★停止中の理由が画面に無いと、誰かが再有効化して同じ失敗を繰り返す。
+  ///   実際 aio-* 3本は OpenAI のクォータ枯渇で意図的に止めているが、
+  ///   画面には巨大なスタックトレースしか出ておらず「直すべき障害」に見えていた。
+  note     String?
 
   runs JobRun[]
 
