@@ -191,6 +191,83 @@
   }
   if (LP) window.addEventListener("scroll", onScroll, { passive: true });
 
+  // ── 記事内リンクの自動計測（data 属性が無くても拾う）──
+  //
+  // ★なぜ自動にするか（2026-07-23）
+  //   data-mms を貼った要素しか見ていなかったため、記事159本のどこにも
+  //   data-mms が無く、**受け口はあるのにイベントが1件も来ていなかった**。
+  //   159本にひとつずつ属性を貼らせるのは現実的でなく、貼り漏れも見えない。
+  //   記事には既に data-article が入っているので、タグ側で a[href] を
+  //   拾えば WordPress を触らずに記事別のリンク実績が取れる。
+  //
+  // ★どこを踏んだかは href だけでは足りない（同じ /r/line/ が本文にも
+  //   フッタにもある）。祖先要素から area を出して一緒に送る。
+  var LINK_CAP = parseInt(script.getAttribute("data-link-cap") || "12", 10);
+  var linkCount = 0;
+
+  function linkArea(el) {
+    // 明示指定が最優先
+    var marked = el.closest ? el.closest("[data-mms-area]") : null;
+    if (marked) return marked.getAttribute("data-mms-area");
+    if (!el.closest) return "unknown";
+    if (el.closest("footer, .footer, #footer")) return "footer";
+    if (el.closest("header, .site-header, #masthead")) return "header";
+    if (el.closest("nav, .nav, .breadcrumb")) return "nav";
+    if (el.closest("aside, .sidebar, #sidebar, .widget-area")) return "sidebar";
+    if (el.closest("article, .entry-content, .post-content, main")) return "body";
+    return "unknown";
+  }
+
+  function linkKind(a) {
+    var href = a.getAttribute("href") || "";
+    if (href.charAt(0) === "#") return "anchor";
+    if (/^tel:/i.test(href)) return "tel";
+    if (/^mailto:/i.test(href)) return "mail";
+    var u;
+    try {
+      u = new URL(a.href, location.href);
+    } catch (e) {
+      return "outbound";
+    }
+    if (!/^https?:$/.test(u.protocol)) return null; // javascript: 等は数えない
+    // 自前のリダイレクタ＝送客の本命。ホストが違っても redirect として扱う
+    if (/^\/r\/[^/]+\//.test(u.pathname)) return "redirect";
+    if (u.host === location.host) {
+      return u.pathname === location.pathname ? "anchor" : "internal";
+    }
+    return "outbound";
+  }
+
+  document.addEventListener(
+    "click",
+    function (e) {
+      if (!e.target || !e.target.closest) return;
+      var a = e.target.closest("a[href]");
+      if (!a) return;
+      // data-mms が付いている要素は下のハンドラが担当する（二重に数えない）
+      if (a.closest("[data-mms]")) return;
+      if (linkCount >= LINK_CAP) return; // ページ内で数えるリンク数の上限
+      var kind = linkKind(a);
+      if (!kind) return;
+      linkCount++;
+
+      var text = (a.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60);
+      var href = a.getAttribute("href") || "";
+      try {
+        var u2 = new URL(a.href, location.href);
+        // ★クエリは落とす。UTM や個人を含みうる値を溜めない
+        if (/^https?:$/.test(u2.protocol)) href = u2.host + u2.pathname;
+      } catch (e2) {}
+
+      track("link_click", { meta: { kind: kind, area: linkArea(a), href: href, text: text } });
+
+      // ★target=_blank や tel: は pagehide が起きない。取りこぼすので即送る。
+      //   sendBeacon なので遷移はブロックしない。
+      flush();
+    },
+    true,
+  );
+
   // ── CTA・フォームの自動計測（data 属性で宣言）──
   // <a data-mms="cta_click" data-cta-id="hero"> のようにマークするだけで送れる。
   document.addEventListener(

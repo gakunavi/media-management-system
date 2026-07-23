@@ -51,6 +51,48 @@ enum TargetTier {
   guardrail
 }
 
+/// 記事の読者（2026-07-23 石井さん）。
+///
+/// ★`budgetTier` を記事に流用したのは誤りだった。あれは商談相手の予算を表す区分で、
+///   記事から読者の予算規模は決まらない（同じ両替機の記事を1台350万で買う人と
+///   数千万分買う人が読む）。記事について確実に言えるのは「誰に向けて書いたか」だけ。
+///
+/// ★これで「法人向け記事のPVは伸びているか」「個人事業主向けからの送客は多いか」を
+///   分けて見られる。主力商材（ML 240万・両替機 350万）の買い手は法人なので、
+///   corporate と both が買い手に繋がる読者。
+enum ContentAudience {
+  /// 法人・経営者向け（設備投資・制度活用）
+  corporate
+  /// 個人事業主・フリーランス向け
+  sole_proprietor
+  /// 両方が読む（税制改正・法改正など読者を選ばないもの）
+  both
+  /// 税理士・代理店向け。★商材の買い手ではない（買い手の分母から外す）
+  partner
+}
+
+/// 記事の型（2026-07-23 石井さん）。★既存 ArticleType（pillar/cluster/news…）は
+/// サイト構造上の役割で、こちらは**内容の型**。どちらも要るので別軸で持つ。
+///
+/// ★これで「どの型がPVを稼ぐか」「どの型が送客に効くか」を分けて見られる。
+/// 実測（2026-07-23）では唯一の成約が comparison（主力5商材の比較）から出ている。
+enum ContentFormat {
+  /// 特定商材の解説（GPU・外貨両替機・航空機リース…）
+  product
+  /// 複数の選択肢を比べる。★買う直前の読者が来る
+  comparison
+  /// 税制・制度の解説（経営強化税制・少額減価償却…）
+  system
+  /// 時事・法改正・速報
+  news
+  /// 実務手順（申請フロー・書き方・チェックリスト）
+  howto
+  /// リスク・否認・失敗・倒産事例。★買う前の不安を潰す
+  risk
+  /// 導入事例・インタビュー
+  case_study
+}
+
 /// §3 ContentItem.articleType
 enum ArticleType {
   pillar
@@ -153,6 +195,8 @@ enum FunnelStep {
   form_field
   submit
   phone_click
+  /// 記事内リンクのクリック（内部回遊・外部送客の両方）。meta に href/kind/area/text を残す
+  link_click
 }
 
 /// §3 Lead.type — 獲得3ゴール（§14.0）
@@ -730,6 +774,8 @@ model ContentItem {
 
   // ── 分類（旧Notion 記事パフォーマンス管理DB から移行・§7.1）──
   articleType   ArticleType? /// ★P1 移行時点では未確定のため Nullable（C-7）。P3.5/P4.9 で確定させる
+  /// 内容の型（商材 / 比較 / 制度 / 時事 / 実務 / リスク / 事例）。2026-07-23 追加
+  contentFormat ContentFormat?
   isPillar      Boolean      @default(false)
   category      String?
   /// ★KeywordAssignment(role=main) と二重の正になりうる（§13 記録済）
@@ -776,8 +822,10 @@ model ContentItem {
   funnelStage   FunnelStage? /// ★P1 移行時点では未確定のため Nullable（C-7）。P3.5/P4.9 で確定させる
   /// ML | IoTビーコン | 外貨両替機 | EV充電 | GPU …
   productFit    String[]
-  /// 参考: corporate | sole_proprietor | tax_accountant | agency_candidate
-  audience      String[]
+  /// 読者（2026-07-23 石井さんと確定して enum 化）。
+  /// ★String[] のままだと表記ゆれが入り、集計が割れる（実際 0件のまま使われていなかった）。
+  ///   複数指定できる形は残す（「法人にも個人事業主にも効く記事」が実在する）
+  audience      ContentAudience[]
   buyerFitScore Int?
   /// ★効く結果指標（必須・APIで弾く。§5.5 結果フォーカスの構造的強制）
   impacts       String[]

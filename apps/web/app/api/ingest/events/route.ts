@@ -17,6 +17,7 @@ import {
   isFunnelStep,
   isValidClientId,
   truncateToSecond,
+  sanitizeLinkMeta,
   MAX_EVENTS_PER_REQUEST,
   type FunnelStep,
 } from "@/lib/telemetry";
@@ -211,7 +212,15 @@ export async function POST(req: Request) {
       unknownPositions.add(rawPosition);
     }
 
-    const meta = position ? { ...(e.meta ?? {}), ctaPosition: position } : e.meta;
+    // ★link_click の meta はクライアントが作った任意の JSON。
+    //   キーを固定し・長さを切り・語彙外を落としてから保存する。
+    //   生のまま jsonb に入れると行が肥大し、個人情報の混入経路にもなる。
+    const meta =
+      e.step === "link_click"
+        ? sanitizeLinkMeta(e.meta)
+        : position
+          ? { ...(e.meta ?? {}), ctaPosition: position }
+          : e.meta;
 
     rows.push({
       sessionId,
@@ -230,6 +239,25 @@ export async function POST(req: Request) {
   const created = rows.length
     ? await prisma.funnelEvent.createMany({ data: rows, skipDuplicates: true })
     : { count: 0 };
+
+  // ── 7.5 計測開始を1度だけ記録する（§3）──
+  //   ★これが無いと「0件」が **未計測**なのか**誰も踏んでいない**のか区別できない。
+  //     記事内リンクは実際に長いあいだ 0 だったが、原因は
+  //     「計測タグが a[href] を見ていなかった」＝未計測だった。
+  if (created.count > 0) {
+    for (const step of new Set(rows.map((r) => r.step))) {
+      const cov = await prisma.measurementCoverage.findFirst({ where: { metric: step } });
+      if (cov) continue;
+      await prisma.measurementCoverage.create({
+        data: {
+          metric: step,
+          startedAt: new Date(),
+          method: "browser_tag",
+          note: `計測タグ（mms-tag.js）の ${step}。初回受信により計測開始`,
+        },
+      });
+    }
+  }
 
   // ── 8. 知らない位置ラベルを通知（黙って捨てない）──
   //   計測タグ側でセレクタを増やしたときに新しい語彙が混ざると、

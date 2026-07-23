@@ -231,6 +231,32 @@
 
 ## 3. ファネル7段
 
+### 3.0 `ContentAudience` / `ContentFormat` — 記事の分類（D28）
+
+> 由来: 2026-07-23 石井さん「法人向けか、個人事業主向けや両方、製品情報、商品比較、制度、時事ニュースなどは知りたい」
+> ★**記事に `budgetTier`（予算帯）を付けてはいけない**（`docs/RULES.md` §4-16）。記事から読者の予算規模は決まらない。金額はリード側（`Lead.budgetTier`）で商談時に聞く。
+
+<!-- enum: ContentAudience -->
+| 値 | 意味 |
+|---|---|
+| `corporate` | 法人向け |
+| `sole_proprietor` | 個人事業主向け |
+| `both` | 両方が読む（「どちらでもない」ではない。税制改正など） |
+| `partner` | 税理士・代理店向け（商材の買い手ではない） |
+
+<!-- enum: ContentFormat -->
+| 値 | 意味 | 分かること |
+|---|---|---|
+| `product` | 特定商材の解説 | 買う対象そのものを探している層 |
+| `comparison` | 選択肢を比べる | **買う直前**。実測でも唯一の成約はここから出ている |
+| `system` | 税制・制度の解説 | 制度を調べている層（買い手とは限らない） |
+| `news` | 時事・法改正 | 瞬間的にPVが伸びるが送客は弱い |
+| `howto` | 実務手順 | 実務担当者。決裁者とは限らない |
+| `risk` | リスク・失敗・否認 | 買う直前の不安潰し |
+| `case_study` | 事例・インタビュー | 検討中の裏取り |
+
+★複数持てるのは `audience` のみ（配列）。`contentFormat` は単一。**判定できないものは空のまま残す**（§3・推測で埋めると分析が嘘になる）。分類は `scripts/tag-content-axes.py`（ルール＋一括処理＋人の承認・§9.4.2）。
+
 ### 3.1 `FunnelStep` — 計測点
 
 > 由来: §3 `FunnelEvent.step`（7値）＋ §3.8.3 の `phone_click`（8値目）
@@ -247,6 +273,7 @@
 | `form_field` | 6 | どの項目が重いか |
 | `submit` | 7 | 問い合わせ |
 | `phone_click` | ※ | **`tel:` リンクのクリック**（§3.8.3・架電したかは不明）。★§4.1 の「ファネル7段」の外（`docs/PHASES.md` §8 U25） |
+| `link_click` | ※ | **記事内リンクのクリック**（2026-07-23 追加・D29）。★§4.1 の「ファネル7段」の外。`meta` に `kind`（`redirect`/`internal`/`outbound`/`anchor`/`tel`/`mail`）・`area`（`body`/`header`/`footer`/`nav`/`sidebar`/`unknown`）・`href`・`text` を持つ。**リダイレクタ（`/r/`）は記事IDを持たない**ため、記事別の送客はこれでしか出せない |
 
 ### 3.2 `TrafficSource` / `AiEngine` — 流入元（§3.6.6）
 

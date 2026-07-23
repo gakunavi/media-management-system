@@ -37,6 +37,29 @@ export const CONTENT_STATUS_LABEL: Record<string, string> = {
   unknown: "不明",
 };
 
+export const AUDIENCE_LABEL: Record<string, string> = {
+  corporate: "法人向け",
+  sole_proprietor: "個人事業主向け",
+  both: "両方",
+  partner: "パートナー向け",
+};
+
+export const FORMAT_LABEL: Record<string, string> = {
+  product: "商材",
+  comparison: "比較",
+  system: "制度",
+  news: "時事",
+  howto: "実務",
+  risk: "リスク",
+  case_study: "事例",
+};
+
+/**
+ * ★buyer/audience の使い分け（2026-07-23 訂正）
+ *   budgetTier（高/中/低）は**商談相手の予算**で、記事から読者の予算規模は決まらない。
+ *   同じ外貨両替機（350万/台）の記事を1台買う人も数千万分買う人も読む。
+ *   記事について確実に言えるのは「誰に向けて・何を書いたか」だけ。
+ */
 export const BUDGET_LABEL: Record<string, string> = {
   high: "高",
   mid: "中",
@@ -72,6 +95,8 @@ export type ContentRow = {
   leads: number;
   won: number;
   // ── 埋まっていない軸（空であることを画面に出す）──
+  audience: string[];
+  contentFormat: string | null;
   budgetTier: string;
   funnelStage: string | null;
   freshnessTier: string | null;
@@ -81,13 +106,15 @@ export type ContentRow = {
   clusterCount: number;
 };
 
-/** 未タグと判定する条件。ここが埋まらないと買い手の質が出せない */
+/** 未タグと判定する条件。ここが埋まらないと「どのタグが効くか」を出せない */
 export function isUntagged(r: ContentRow): boolean {
-  return r.budgetTier === "unknown" || r.funnelStage === null;
+  return r.audience.length === 0 || r.contentFormat === null;
 }
 
 export type TagCoverage = {
   total: number;
+  audience: number;
+  format: number;
   budget: number;
   funnel: number;
   freshness: number;
@@ -124,6 +151,8 @@ export async function getContentList(range: Range): Promise<ContentList> {
       type: true,
       status: true,
       publishedAt: true,
+      audience: true,
+      contentFormat: true,
       budgetTier: true,
       funnelStage: true,
       freshnessTier: true,
@@ -136,7 +165,7 @@ export async function getContentList(range: Range): Promise<ContentList> {
   if (items.length === 0) {
     return {
       rows: [],
-      coverage: { total: 0, budget: 0, funnel: 0, freshness: 0, mainKeyword: 0, cluster: 0, aio: 0 },
+      coverage: { total: 0, audience: 0, format: 0, budget: 0, funnel: 0, freshness: 0, mainKeyword: 0, cluster: 0, aio: 0 },
       asOf: { clicks: null, pv: null, pvLifetime: null },
       outbound: [],
       outboundMeasured: false,
@@ -236,6 +265,8 @@ export async function getContentList(range: Range): Promise<ContentList> {
       pvLifetime: pvlBy.has(it.id) ? Math.round(pvlBy.get(it.id)!) : null,
       leads: lead?.leads ?? 0,
       won: lead?.won ?? 0,
+      audience: it.audience,
+      contentFormat: it.contentFormat,
       budgetTier: it.budgetTier,
       funnelStage: it.funnelStage,
       freshnessTier: it.freshnessTier,
@@ -263,6 +294,8 @@ export async function getContentList(range: Range): Promise<ContentList> {
     rows,
     coverage: {
       total: rows.length,
+      audience: rows.filter((r) => r.audience.length > 0).length,
+      format: rows.filter((r) => r.contentFormat !== null).length,
       budget: rows.filter((r) => r.budgetTier !== "unknown").length,
       funnel: rows.filter((r) => r.funnelStage !== null).length,
       freshness: rows.filter((r) => r.freshnessTier !== null).length,
@@ -281,6 +314,74 @@ export async function getContentList(range: Range): Promise<ContentList> {
   };
 }
 
+// ── タグ別の実績（どのタグが結果を生むか）──────────────────
+//
+// ★これが分類の目的。「法人向け記事はPVが伸びているか」
+//   「どの型が送客・問い合わせに効くか」を出すためにタグを付けた。
+//
+// ★1記事あたりで見る。記事数が違うタグを実数で比べると、
+//   単に本数が多いタグが勝つ（リスク46本 vs 事例7本）。
+
+export type TagStat = {
+  key: string;
+  label: string;
+  articles: number;
+  clicks: number;
+  impressions: number;
+  pv: number;
+  leads: number;
+  /** 1記事あたりクリック。本数の違うタグを比べるのに要る */
+  clicksPerArticle: number;
+  /** クリック率（clicks / impressions）。検索結果で選ばれているか */
+  ctr: number | null;
+  avgPosition: number | null;
+};
+
+function aggregate(rows: ContentRow[], label: string, key: string): TagStat {
+  const measured = rows.filter((r) => r.clicks !== null);
+  const clicks = rows.reduce((s, r) => s + (r.clicks ?? 0), 0);
+  const impressions = rows.reduce((s, r) => s + (r.impressions ?? 0), 0);
+  const positions = rows.map((r) => r.avgPosition).filter((v): v is number => v !== null);
+  return {
+    key,
+    label,
+    articles: rows.length,
+    clicks,
+    impressions,
+    pv: rows.reduce((s, r) => s + (r.pv ?? 0), 0),
+    leads: rows.reduce((s, r) => s + r.leads, 0),
+    clicksPerArticle: measured.length > 0 ? Math.round((clicks / measured.length) * 10) / 10 : 0,
+    // ★母数0で率を出さない（§16.5）
+    ctr: impressions > 0 ? clicks / impressions : null,
+    avgPosition:
+      positions.length > 0
+        ? Math.round((positions.reduce((a, b) => a + b, 0) / positions.length) * 10) / 10
+        : null,
+  };
+}
+
+export function tagStats(rows: ContentRow[]): { audience: TagStat[]; format: TagStat[] } {
+  const audKeys = ["corporate", "sole_proprietor", "both", "partner"];
+  const fmtKeys = ["comparison", "product", "risk", "howto", "system", "news", "case_study"];
+
+  const audience = audKeys
+    .map((k) => aggregate(rows.filter((r) => r.audience.includes(k)), AUDIENCE_LABEL[k] ?? k, k))
+    .filter((s) => s.articles > 0);
+  const untaggedAud = rows.filter((r) => r.audience.length === 0);
+  if (untaggedAud.length > 0) audience.push(aggregate(untaggedAud, "未分類", "none"));
+
+  const format = fmtKeys
+    .map((k) => aggregate(rows.filter((r) => r.contentFormat === k), FORMAT_LABEL[k] ?? k, k))
+    .filter((s) => s.articles > 0);
+  const untaggedFmt = rows.filter((r) => r.contentFormat === null);
+  if (untaggedFmt.length > 0) format.push(aggregate(untaggedFmt, "未分類", "none"));
+
+  // 1記事あたりクリックの多い順（本数の多さで勝たないように）
+  audience.sort((a, b) => b.clicksPerArticle - a.clicksPerArticle);
+  format.sort((a, b) => b.clicksPerArticle - a.clicksPerArticle);
+  return { audience, format };
+}
+
 // ── 絞り込みと並べ替え ────────────────────────────────────
 //
 // ★179件を固定順で全部出しても「どれを直すか」は決まらない。
@@ -292,6 +393,9 @@ export const CONTENT_FILTERS = [
   { key: "nodata", label: "実測なし" },
   { key: "dropped", label: "順位が落ちた" },
   { key: "untagged", label: "未タグ" },
+  { key: "corporate", label: "法人向け" },
+  { key: "sole_proprietor", label: "個人事業主向け" },
+  { key: "comparison", label: "比較記事" },
   { key: "pillar", label: "ピラー" },
 ] as const;
 
@@ -330,6 +434,10 @@ export function applyFilterSort(
   else if (filter === "dropped")
     out = out.filter((r) => r.positionDelta !== null && r.positionDelta <= -0.5);
   else if (filter === "untagged") out = out.filter(isUntagged);
+  else if (filter === "corporate") out = out.filter((r) => r.audience.includes("corporate"));
+  else if (filter === "sole_proprietor")
+    out = out.filter((r) => r.audience.includes("sole_proprietor"));
+  else if (filter === "comparison") out = out.filter((r) => r.contentFormat === "comparison");
   else if (filter === "pillar") out = out.filter((r) => r.isPillar);
 
   const nz = (n: number | null) => (n === null ? -1 : n);
@@ -363,6 +471,8 @@ export type ContentDetail = {
   category: string | null;
   isPillar: boolean;
   aioTier: string;
+  audience: string[];
+  contentFormat: string | null;
   budgetTier: string;
   funnelStage: string | null;
   freshnessTier: string | null;
@@ -396,6 +506,8 @@ export async function getContentDetail(
       category: true,
       isPillar: true,
       aioTier: true,
+      audience: true,
+      contentFormat: true,
       budgetTier: true,
       funnelStage: true,
       freshnessTier: true,

@@ -3,7 +3,17 @@
 // ★過去のサイト重量化事故（TTFBスパイク）の再発防止が最重要。
 //   計測タグ側の7原則（docs/RULES.md §1）に対応するサーバー側の受け皿。
 
-/** ファネル7段（§14.2）＋ phone_click（§3.8.3・P2.10）。schema の enum FunnelStep と一致 */
+/**
+ * ファネル7段（§14.2）＋ phone_click（§3.8.3・P2.10）＋ link_click。
+ * schema の enum FunnelStep と一致させる。
+ *
+ * ★link_click を足した理由（2026-07-23）
+ *   記事の目的は送客だが、「どの記事の・どのリンクが踏まれたか」を持っていなかった。
+ *   リダイレクタ（/r/）の送り元は設置場所IDだけで記事を持たず、
+ *   計測タグ側は data-mms を貼った要素しか見ていなかった（実際0件だった）。
+ *   計測タグが記事内の a[href] を自前で拾えば、WordPress 側を触らずに
+ *   記事別のリンク実績が取れる（記事には既に data-article が入っている）。
+ */
 export const FUNNEL_STEPS = [
   "cta_view",
   "cta_click",
@@ -13,6 +23,7 @@ export const FUNNEL_STEPS = [
   "form_field",
   "submit",
   "phone_click",
+  "link_click",
 ] as const;
 
 export type FunnelStep = (typeof FUNNEL_STEPS)[number];
@@ -56,3 +67,80 @@ export function isAllowedOrigin(origin: string | null): boolean {
 
 /** 1セッションが1リクエストで送れるイベント数の上限（§3.10.3-⑦ のサーバー側担保） */
 export const MAX_EVENTS_PER_REQUEST = 50;
+
+/**
+ * リンク種別。link_click の meta.kind に入る値。
+ *   internal   同じサイト内（回遊）
+ *   outbound   外部サイト
+ *   redirect   自前のリダイレクタ /r/{dest}/{source}（＝送客の本命）
+ *   tel        tel: リンク
+ *   mail       mailto: リンク
+ *   anchor     ページ内アンカー
+ */
+export const LINK_KINDS = ["internal", "outbound", "redirect", "tel", "mail", "anchor"] as const;
+export type LinkKind = (typeof LINK_KINDS)[number];
+
+/** 記事内のどの位置に置かれたリンクか。link_click の meta.area に入る */
+export const LINK_AREAS = ["body", "header", "footer", "nav", "sidebar", "unknown"] as const;
+
+const MAX_HREF = 300;
+const MAX_TEXT = 60;
+
+/**
+ * 計測タグから来た link_click の meta を、保存してよい形に削る。
+ *
+ * ★クライアントが送ってきた任意の JSON をそのまま jsonb に入れない。
+ *   長さ無制限の href やアンカー文字列がそのまま溜まると、
+ *   行が肥大して集計が重くなり、個人情報が混ざる経路にもなる。
+ *   ここで **キーを固定し・長さを切り・語彙外を落とす**。
+ * ★クエリ文字列は落とす。UTM や個人を含みうるパラメータを残さない。
+ *   ただしリダイレクタは経路そのものなのでパスは残す。
+ */
+/**
+ * href を保存してよい形にする。
+ *
+ * ★ベースURL付きの `new URL()` を使わない。
+ *   計測タグは既に `host + pathname`（スキーム無し）に削って送ってくるため、
+ *   ベース付きで解釈すると相対パス扱いになり、
+ *   `collect.asset-support.co.jp/r/line/x` が
+ *   `example.invalid/collect.asset-support.co.jp/r/line/x` に化ける。
+ *   実際に化けた（2026-07-23 の投入テストで検出）。
+ * ★スキーム付きで来たときだけ URL として解釈し、host+path に落とす。
+ *   それ以外は ? と # で切る（クエリに UTM や個人を含む値を溜めない）。
+ */
+function normalizeHref(raw: string): string {
+  let href = raw.trim();
+  if (/^https?:\/\//i.test(href)) {
+    try {
+      const u = new URL(href);
+      href = `${u.host}${u.pathname}`;
+    } catch {
+      /* 壊れた絶対URLは下の素朴な切り出しに任せる */
+    }
+  }
+  // tel: / mailto: はそのまま残す（何を踏んだかが消える）
+  if (!/^(tel|mailto):/i.test(href)) {
+    href = href.split("?")[0].split("#")[0];
+  }
+  return href.slice(0, MAX_HREF);
+}
+
+export function sanitizeLinkMeta(meta: unknown): Record<string, string> | null {
+  if (!meta || typeof meta !== "object") return null;
+  const m = meta as Record<string, unknown>;
+  const out: Record<string, string> = {};
+
+  const kind = typeof m.kind === "string" ? m.kind : "";
+  out.kind = (LINK_KINDS as readonly string[]).includes(kind) ? kind : "outbound";
+
+  const area = typeof m.area === "string" ? m.area : "";
+  out.area = (LINK_AREAS as readonly string[]).includes(area) ? area : "unknown";
+
+  if (typeof m.href === "string" && m.href) {
+    out.href = normalizeHref(m.href);
+  }
+  if (typeof m.text === "string" && m.text.trim()) {
+    out.text = m.text.trim().replace(/\s+/g, " ").slice(0, MAX_TEXT);
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
