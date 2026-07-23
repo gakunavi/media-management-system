@@ -235,7 +235,7 @@ function ReviewPanel({ q }: { q: ReviewQueue }) {
       {q.priority.length > 0 && (
         <ReviewList
           title="① 先に直す（期限切れ ＋ 表示はあるのにクリック0）"
-          note="★タイトル・説明文を読者の質問への即答型に書き換える。キーワードを並べ足すのは実測で効いていない。"
+          note="★打ち手は記事ごとに違う。下の指示を見る。"
           rows={q.priority}
           tone="bad"
         />
@@ -298,10 +298,31 @@ function ReviewList({
                   {r.title}
                 </Link>
                 {r.ctrFail && (
-                  <span className="text-[11px] text-[var(--faint)]">
-                    「{r.ctrFail.query}」{r.ctrFail.position.toFixed(1)}位・
-                    {r.ctrFail.impressions.toLocaleString("ja-JP")}表示でクリック0
-                  </span>
+                  <>
+                    <span className="text-[11px] text-[var(--faint)]">
+                      「{r.ctrFail.query}」{r.ctrFail.position.toFixed(1)}位・
+                      {r.ctrFail.impressions.toLocaleString("ja-JP")}表示でクリック0
+                    </span>
+                    {/* ★打ち手を出し分ける（cowork 指摘・2026-07-23）。
+                        同じ語で他の記事も出ているならカニバリで、
+                        タイトルを直しても互いに食い合ったまま。原因が違う。 */}
+                    {r.ctrFail.rivals.length > 0 ? (
+                      <div className="mt-1 rounded bg-[var(--warn)]/[0.12] px-1.5 py-1 text-[11px] text-[#9a6a00]">
+                        <strong>カニバリ解消</strong>（同じ語で他{r.ctrFail.rivals.length}
+                        記事も表示: {r.ctrFail.rivals
+                          .slice(0, 4)
+                          .map((v) => `${v.externalId} ${v.position.toFixed(0)}位`)
+                          .join(" / ")}
+                        ）。<strong>タイトル修正では効かない。</strong>
+                        本命を決めて狙うKWを分け、内部リンクを本命へ寄せる。
+                      </div>
+                    ) : (
+                      <div className="mt-1 rounded bg-[var(--panel-2)] px-1.5 py-1 text-[11px] text-[var(--muted)]">
+                        <strong>タイトル・説明文</strong>を読者の質問への即答型に書き換える。
+                        キーワードを並べ足すのは実測で効いていない。
+                      </div>
+                    )}
+                  </>
                 )}
               </td>
               <td className="w-24 whitespace-nowrap py-1.5 pr-2 text-right text-[11px] text-[var(--muted)]">

@@ -219,9 +219,26 @@ export async function getQueryInsights(): Promise<QueryInsights> {
  * ★鮮度の期限「だけ」で督促すると、処理能力を超えた瞬間に誰も見なくなる。
  *   期限は境界に留め、**CTR不全と重なった記事を先に出す**（二段構え）。
  */
-export async function getCtrFailures(): Promise<
-  Map<string, { query: string; position: number; impressions: number }>
-> {
+export type CtrFailure = {
+  query: string;
+  position: number;
+  impressions: number;
+  /**
+   * 同じ検索語で表示されている**他の**記事。
+   * ★ここが空かどうかで打ち手が変わる（cowork 指摘・2026-07-23）。
+   *     空でない → カニバリ。タイトルを直しても互いに食い合ったまま。
+   *                本命を決めて KW を分け、内部リンクを本命へ寄せる
+   *     空       → 単記事のCTR不全。タイトル・説明文を即答型に直す
+   *   実測では残った督促3本が**全部カニバリ**だった。既定文面のままだと
+   *   3本とも効かない指示を出すところだった。
+   */
+  rivals: { externalId: string; position: number; impressions: number }[];
+};
+
+/** 競合とみなす表示回数の下限。1〜2表示の偶然を競合と呼ばない */
+const RIVAL_MIN_IMPRESSIONS = 5;
+
+export async function getCtrFailures(): Promise<Map<string, CtrFailure>> {
   const latest = await prisma.contentQuery.findFirst({
     orderBy: { periodEnd: "desc" },
     select: { periodStart: true, periodEnd: true },
@@ -262,7 +279,7 @@ export async function getCtrFailures(): Promise<
     orderBy: { impressions: "desc" },
     select: { contentItemId: true, query: true, position: true, impressions: true },
   });
-  const out = new Map<string, { query: string; position: number; impressions: number }>();
+  const out = new Map<string, CtrFailure>();
   for (const r of rows) {
     if (waiting.has(r.contentItemId)) continue; // 効果測定の待ち中
     // ★指名検索（「国税庁 …」）を根拠にしない。§4-24 のとおり
@@ -276,7 +293,39 @@ export async function getCtrFailures(): Promise<
         query: r.query,
         position: r.position ?? 0,
         impressions: r.impressions,
+        rivals: [],
       });
+    }
+  }
+
+  // ★根拠の検索語ごとに、同じ語で出ている他の記事を引く。
+  //   これが打ち手の分岐になるので、件数が少なくても必ず調べる。
+  const queries = [...new Set([...out.values()].map((v) => v.query))];
+  if (queries.length > 0) {
+    const all = await prisma.contentQuery.findMany({
+      where: {
+        periodStart: latest.periodStart,
+        periodEnd: latest.periodEnd,
+        query: { in: queries },
+        impressions: { gte: RIVAL_MIN_IMPRESSIONS },
+      },
+      orderBy: { impressions: "desc" },
+      select: {
+        contentItemId: true,
+        query: true,
+        position: true,
+        impressions: true,
+        contentItem: { select: { externalId: true } },
+      },
+    });
+    for (const [cid, v] of out) {
+      v.rivals = all
+        .filter((a) => a.query === v.query && a.contentItemId !== cid)
+        .map((a) => ({
+          externalId: a.contentItem.externalId,
+          position: a.position ?? 0,
+          impressions: a.impressions,
+        }));
     }
   }
   return out;

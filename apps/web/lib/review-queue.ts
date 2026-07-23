@@ -15,7 +15,7 @@
 //   「期限が未定」と「今すぐ見直すべき」は別物。
 import { prisma } from "@mms/db";
 import { decodeEntities } from "./content";
-import { getCtrFailures } from "./search-queries";
+import { getCtrFailures, type CtrFailure } from "./search-queries";
 
 export const FRESHNESS_LABEL: Record<string, string> = {
   breaking: "速報",
@@ -32,7 +32,7 @@ export type ReviewRow = {
   nextReviewDue: Date | null;
   daysOver: number | null;
   /** CTR不全の根拠。ある記事を先に出す */
-  ctrFail: { query: string; position: number; impressions: number } | null;
+  ctrFail: CtrFailure | null;
 };
 
 export type ReviewQueue = {
