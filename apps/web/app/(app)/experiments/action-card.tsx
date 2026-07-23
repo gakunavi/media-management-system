@@ -107,11 +107,38 @@ export function ActionCard({ action }: { action: ProposedAction }) {
             <strong>タイトルを直してもクリックは増えません</strong>。
           </p>
         )}
+      {/* ★どのクエリに向けて直すかが分からないなら、タイトル修正の前提が崩れる。
+          cowork: AIモード合成クエリ汚染の典型症状（ART-061は表示503の95%が合成、
+          人間クエリの実順位は23.2位だった） */}
+      {!action.blockedBy &&
+        action.type !== "new_article" &&
+        action.queryCoverage !== null &&
+        action.queryCoverage < 0.3 && (
+          <p className="mb-1.5 rounded bg-[var(--warn)]/[0.12] px-2 py-1 text-[11px] text-[#9a6a00]">
+            ★表示のうち<strong>検索語まで分かっているのは
+            {Math.round(action.queryCoverage * 100)}%</strong>だけ。
+            GSCは表示の少ないクエリを伏せるので、これは
+            <strong>極端に細かいクエリに散っている</strong>ことを意味します。
+            どのクエリに向けて直せばよいか決まらないため、
+            <strong>タイトル/メタ単独では効きません</strong>。
+            本文のH2再構成・リード増厚に振り替えるか、まず検索語を確認してください。
+          </p>
+        )}
       {!action.blockedBy && action.weakEvidence && (
         <p className="mb-1.5 rounded bg-[var(--panel-2)] px-2 py-1 text-[11px] text-[var(--muted)]">
           ★根拠が弱い（28日の表示{" "}
           {action.impressions28 === null ? "不明" : action.impressions28}）。
           表示が少ないと順位もCTRも偶然で動くため、直しても<strong>効果を測れません</strong>。
+        </p>
+      )}
+      {/* ★新規記事は表示が少なくて当たり前（SERPに居ないから）。
+          「根拠が弱い」ではなく、その少ない表示が需要の証拠になる */}
+      {action.type === "new_article" && action.impressions28 !== null && (
+        <p className="mb-1.5 rounded bg-[var(--panel-2)] px-2 py-1 text-[11px] text-[var(--muted)]">
+          ★SERPに自社が1本も無いので<strong>表示が少ないのは当たり前</strong>です。
+          この {action.impressions28} 表示は「Googleが関連と認識している」証拠で、
+          記事を作れば取りに行ける余地があるという意味です。
+          <strong>効果が出るまで6〜12ヶ月</strong>かかります。
         </p>
       )}
 

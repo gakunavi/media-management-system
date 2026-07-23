@@ -1,6 +1,12 @@
-import { getProposedActions, getActionStats } from "@/lib/actions-repo";
+import {
+  getProposedActions,
+  getActionStats,
+  splitByQuota,
+  MONTHLY_QUOTA,
+} from "@/lib/actions-repo";
 import { getInterventions } from "@/lib/interventions";
 import { WEEKLY_CAPACITY } from "@/lib/review-queue";
+import type { ProposedAction } from "@/lib/actions-repo";
 import { ActionCard, RunOperatorButton } from "./action-card";
 import { runOperator } from "./actions";
 import { ManualRecord } from "./manual-record";
@@ -20,11 +26,8 @@ export default async function ExperimentsPage() {
     getInterventions(),
   ]);
 
-  const blocked = proposed.filter((a) => a.blockedBy).length;
-  const weak = proposed.filter((a) => !a.blockedBy && a.weakEvidence).length;
-  const nav = proposed.filter(
-    (a) => !a.blockedBy && a.navigationalShare !== null && a.navigationalShare >= 0.5,
-  ).length;
+  const q = splitByQuota(proposed);
+  const rest = q.restRewrite.length + q.restNew.length;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -56,41 +59,52 @@ export default async function ExperimentsPage() {
           </span>
           次の一手（承認待ち {proposed.length}件）
         </h2>
-        {/* ★処理能力を超える数を同じ重みで並べない。
-            上から順に見て力尽きるだけになり、一覧そのものが見られなくなる */}
-        {proposed.length > WEEKLY_CAPACITY && (
-          <p className="mb-3 rounded-lg border border-[var(--warn)]/40 bg-[var(--warn)]/[0.08] px-3 py-2 text-[12px] leading-relaxed text-[#9a6a00]">
-            承認待ち <strong>{proposed.length}件</strong>に対し、実際に回せるのは
-            <strong>週{WEEKLY_CAPACITY}本</strong>（実績）。
-            <strong>取り逃している表示回数の多い順</strong>に並べ、
-            {blocked > 0 && <>判定待ちと重なる{blocked}件、</>}
-            {nav > 0 && <>指名検索が主で直しても効かない{nav}件、</>}
-            根拠の弱い{weak}件は後ろへ回しています。
-            <br />
-            ★上位{WEEKLY_CAPACITY}件だけ見れば足ります。残りは14日で自動的に期限切れになります
-            （放置しても溜まり続けません）。
-          </p>
-        )}
+        {/* ★重み係数ではなく枠で分ける（cowork 2026-07-24）。
+            表示回数の単一ソートは新規記事を構造的に最下位へ沈める
+            （SERPに不在＝表示0なので、取り逃し表示では価値を測れない）。 */}
+        <p className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2 text-[12px] leading-relaxed text-[var(--muted)]">
+          月{MONTHLY_QUOTA.rewrite + MONTHLY_QUOTA.newArticle}枠を
+          <strong>リライト{MONTHLY_QUOTA.rewrite}・新規{MONTHLY_QUOTA.newArticle}</strong>
+          に分けています。★<strong>表示回数だけで並べると新規記事が永久に着手されません</strong>
+          （SERPに居ない＝表示0なので、取り逃している表示では価値を測れない）。
+          内部リンクと Threads は<strong>枠外</strong>（1件15〜30分の軽作業なので、
+          記事の枠を消費させない）。
+        </p>
+
         {proposed.length === 0 ? (
           <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--panel)] p-8 text-center text-[13px] text-[var(--faint)]">
             承認待ちの提案はありません。右上「立案を実行」で、記事の実測（CTR異常・striking
             distance・弱いピラー）から改善案を起票します。
           </div>
         ) : (
-          <div className="grid gap-3">
-            {proposed.slice(0, WEEKLY_CAPACITY).map((a) => (
-              <ActionCard key={a.id} action={a} />
-            ))}
-            {proposed.length > WEEKLY_CAPACITY && (
+          <div className="grid gap-5">
+            <QuotaGroup
+              title={`リライト（${q.rewrite.length} / ${MONTHLY_QUOTA.rewrite}枠）`}
+              note="既存の資産を伸ばす。効果は1〜3ヶ月で出る。取り逃している表示の多い順。"
+              rows={q.rewrite}
+            />
+            <QuotaGroup
+              title={`新規記事（${q.newArticle.length} / ${MONTHLY_QUOTA.newArticle}枠）`}
+              note="SERPに自社が居ないKW。ここでしか取れないが、効果は6〜12ヶ月かかる。"
+              rows={q.newArticle}
+            />
+            {q.light.length > 0 && (
+              <QuotaGroup
+                title={`枠外の軽作業（${q.light.length}件）`}
+                note="内部リンク・Threads。記事1本ぶんの工数がかからないので随時。"
+                rows={q.light}
+              />
+            )}
+            {rest > 0 && (
               <details className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3">
                 <summary className="cursor-pointer text-[13px] font-medium">
-                  残り {proposed.length - WEEKLY_CAPACITY}件を見る
+                  枠に入らなかった {rest}件を見る
                   <span className="ml-2 text-[11px] font-normal text-[var(--faint)]">
-                    （優先度が低い順。判定待ちと重なるもの・根拠が弱いものを含む）
+                    （判定待ちと重なる・指名検索が主・検索語が取れていない・母数が小さい）
                   </span>
                 </summary>
                 <div className="mt-3 grid gap-3">
-                  {proposed.slice(WEEKLY_CAPACITY).map((a) => (
+                  {[...q.restRewrite, ...q.restNew].map((a) => (
                     <ActionCard key={a.id} action={a} />
                   ))}
                 </div>
@@ -101,6 +115,35 @@ export default async function ExperimentsPage() {
       </section>
 
       <InterventionTable rows={interventions} />
+    </div>
+  );
+}
+
+/** 枠ごとのグループ。★枠が埋まっていないこと自体が情報（0件なら候補が無い） */
+function QuotaGroup({
+  title,
+  note,
+  rows,
+}: {
+  title: string;
+  note: string;
+  rows: ProposedAction[];
+}) {
+  return (
+    <div>
+      <h3 className="text-[13px] font-semibold">{title}</h3>
+      <p className="mb-2 mt-0.5 text-[11px] text-[var(--faint)]">{note}</p>
+      {rows.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-[var(--border-strong)] p-4 text-center text-[12px] text-[var(--faint)]">
+          候補がありません。
+        </p>
+      ) : (
+        <div className="grid gap-3">
+          {rows.map((a) => (
+            <ActionCard key={a.id} action={a} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

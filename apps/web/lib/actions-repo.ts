@@ -41,6 +41,23 @@ export type ProposedAction = {
    */
   navigationalShare: number | null;
   /**
+   * 表示のうち、**検索語まで分かっている割合**。
+   *
+   * ★なぜ要るか（cowork 依頼7の回答・2026-07-24）
+   *   「着手前にページ単位のクエリ内訳を確認せよ」に従って実データを見たところ、
+   *   上位2件が下記だった:
+   *     ART-072  ページ表示131 に対しクエリ内訳は **0行**
+   *     ART-179  ページ表示166 に対しクエリ内訳は 2行（表示3）
+   *   GSC は表示の少ないクエリを伏せるため、**極端に細かいクエリに散っている**と
+   *   内訳が丸ごと取れない。cowork の言う「AIモード合成クエリ汚染」の典型症状で、
+   *   実際 ART-061 は表示503の95%が合成クエリ・人間クエリの実順位は23.2位だった。
+   *
+   * ★ただし「合成クエリだから」と断定はしない（GSCの秘匿は理由を返さない）。
+   *   確実に言えるのは「**どのクエリに向けてタイトルを直せばよいか分からない**」こと。
+   *   それだけで title_meta_rewrite の前提が崩れる。
+   */
+  queryCoverage: number | null;
+  /**
    * 根拠が弱い（母数が小さい）。
    * ★§16.5 母数が足りないときに率で判断しない。表示が少ないと
    *   CTRも順位も偶然で動くので、直しても効果を測れない
@@ -57,6 +74,36 @@ export const MIN_IMPRESSIONS = 100;
  *   全部クリック0。これを「CTR異常」として最優先に出していた。
  */
 export const NAV_SHARE_THRESHOLD = 0.5;
+
+/**
+ * 検索語まで分かっている表示がこの割合を下回ったら、
+ * タイトル/メタ単独の提案は根拠不足とみなす。
+ */
+export const MIN_QUERY_COVERAGE = 0.3;
+
+/**
+ * 枠制（cowork 依頼7の回答・2026-07-24）。
+ *
+ * ★なぜ重み係数ではなく枠か
+ *   **表示回数の単一ソートは新規記事を構造的に最下位へ沈める**。
+ *   自社がSERPに不在のKWは GSC の表示がほぼ0になるので、
+ *   「取り逃している表示」では新規記事の価値が原理的に測れない。
+ *   係数で補正すると恣意的な数字が要るので、**枠で分ける**。
+ *
+ * ★内部リンクと Threads は記事枠を消費しない（1件15〜30分の軽作業）。
+ *   週2〜3本の処理能力と同じ土俵で競わせない。
+ */
+export const MONTHLY_QUOTA = { rewrite: 6, newArticle: 4 } as const;
+
+/** 記事1本ぶんの工数がかかる型（枠を消費する） */
+const ARTICLE_WORK = new Set(["title_meta_rewrite", "rewrite", "new_article"]);
+
+export function isArticleWork(type: string): boolean {
+  return ARTICLE_WORK.has(type);
+}
+export function isNewArticle(type: string): boolean {
+  return type === "new_article";
+}
 
 type Signal = { impressions28?: number; clicks28?: number; avgPosition?: number };
 
@@ -112,15 +159,28 @@ export async function getProposedActions(limit = 50): Promise<ProposedAction[]> 
     select: { periodStart: true, periodEnd: true },
   });
   const navShare = new Map<string, number>();
+  const coverage = new Map<string, number>();
   if (latest && ids.length) {
-    const qs = await prisma.contentQuery.findMany({
-      where: {
-        contentItemId: { in: ids },
-        periodStart: latest.periodStart,
-        periodEnd: latest.periodEnd,
-      },
-      select: { contentItemId: true, query: true, impressions: true },
-    });
+    const [qs, pageImpr] = await Promise.all([
+      prisma.contentQuery.findMany({
+        where: {
+          contentItemId: { in: ids },
+          periodStart: latest.periodStart,
+          periodEnd: latest.periodEnd,
+        },
+        select: { contentItemId: true, query: true, impressions: true },
+      }),
+      // ★同じ期間で比べる。28日と90日を突き合わせると割合が意味を持たない
+      prisma.contentMetric.groupBy({
+        by: ["contentItemId"],
+        where: {
+          contentItemId: { in: ids },
+          metric: "impressions",
+          date: { gte: latest.periodStart, lte: latest.periodEnd },
+        },
+        _sum: { value: true },
+      }),
+    ]);
     const total = new Map<string, number>();
     const nav = new Map<string, number>();
     for (const q of qs) {
@@ -131,6 +191,13 @@ export async function getProposedActions(limit = 50): Promise<ProposedAction[]> 
     }
     for (const [cid, t] of total) {
       if (t > 0) navShare.set(cid, (nav.get(cid) ?? 0) / t);
+    }
+    for (const p of pageImpr) {
+      const page = p._sum.value ?? 0;
+      // ★ページ表示が無ければ割合を出さない（0除算を0%と読ませない・§16.5）
+      if (page > 0) {
+        coverage.set(p.contentItemId, Math.min(1, (total.get(p.contentItemId) ?? 0) / page));
+      }
     }
   }
 
@@ -152,21 +219,59 @@ export async function getProposedActions(limit = 50): Promise<ProposedAction[]> 
       avgPosition: art.signal.avgPosition ?? null,
       blockedBy: art.contentItemId ? (blockedByContent.get(art.contentItemId) ?? null) : null,
       navigationalShare: art.contentItemId ? (navShare.get(art.contentItemId) ?? null) : null,
-      // ★表示が取れていないものは「根拠が弱い」。null（信号なし）も同じ扱い
-      weakEvidence: impressions28 === null || impressions28 < MIN_IMPRESSIONS,
+      queryCoverage: art.contentItemId ? (coverage.get(art.contentItemId) ?? null) : null,
+      // ★表示が取れていないものは「根拠が弱い」。null（信号なし）も同じ扱い。
+      //   ただし**新規記事には適用しない**。SERPに自社が居ないので表示が少ないのは
+      //   当たり前で、それを「根拠が弱い」と言うと新規記事が永久に選ばれない
+      //   （cowork 依頼7: 表示回数の単一ソートが新規を構造的に沈めるのと同じ理屈）。
+      weakEvidence:
+        !isNewArticle(r.type) && (impressions28 === null || impressions28 < MIN_IMPRESSIONS),
     };
   });
 
   // ① 判定待ちで重なるものは最後 ② 指名検索が主なものは後ろ
-  // ③ 根拠が弱いものは後ろ ④ 表示の多い順
+  // ③ 検索語が取れていないものは後ろ ④ 根拠が弱いものは後ろ ⑤ 表示の多い順
+  //
+  // ★新規記事はこの並びでは必ず下に来る（SERP不在＝表示0だから）。
+  //   だから**並び順ではなく枠で確保する**（groupByQuota）。
   const navHeavy = (a: (typeof out)[number]) =>
     a.navigationalShare !== null && a.navigationalShare >= NAV_SHARE_THRESHOLD;
+  // ★新規記事に「検索語が取れていない」を適用しない。SERPに居ないので当然0になる
+  const noQuery = (a: (typeof out)[number]) =>
+    !isNewArticle(a.type) &&
+    a.queryCoverage !== null &&
+    a.queryCoverage < MIN_QUERY_COVERAGE;
   return out.sort((a, b) => {
     if (!!a.blockedBy !== !!b.blockedBy) return a.blockedBy ? 1 : -1;
     if (navHeavy(a) !== navHeavy(b)) return navHeavy(a) ? 1 : -1;
+    if (noQuery(a) !== noQuery(b)) return noQuery(a) ? 1 : -1;
     if (a.weakEvidence !== b.weakEvidence) return a.weakEvidence ? 1 : -1;
     return (b.impressions28 ?? 0) - (a.impressions28 ?? 0);
   });
+}
+
+/**
+ * 枠に分ける。
+ * ★リライトと新規で別の枠を持つ。混ぜると新規が永久に着手されない。
+ * ★内部リンク・Threads は枠外（記事1本ぶんの工数がかからない）。
+ */
+export function splitByQuota(rows: ProposedAction[]): {
+  rewrite: ProposedAction[];
+  newArticle: ProposedAction[];
+  light: ProposedAction[];
+  restRewrite: ProposedAction[];
+  restNew: ProposedAction[];
+} {
+  const rewriteAll = rows.filter((a) => isArticleWork(a.type) && !isNewArticle(a.type));
+  const newAll = rows.filter((a) => isNewArticle(a.type));
+  return {
+    rewrite: rewriteAll.slice(0, MONTHLY_QUOTA.rewrite),
+    newArticle: newAll.slice(0, MONTHLY_QUOTA.newArticle),
+    // ★枠外。軽作業なので記事の枠を消費させない
+    light: rows.filter((a) => !isArticleWork(a.type)),
+    restRewrite: rewriteAll.slice(MONTHLY_QUOTA.rewrite),
+    restNew: newAll.slice(MONTHLY_QUOTA.newArticle),
+  };
 }
 
 export type ActionStats = {
