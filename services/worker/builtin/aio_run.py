@@ -61,6 +61,19 @@ ENGINE_SUFFIX = {
     "gemini-2.5-flash": "gemini",
 }
 
+# 被引用ドメインを保存するエンジン。
+# ★Gemini は保存しない。実測（2026-05〜06 の3353試行）で
+#   自社0% / 競合0.2% と、そもそも特定サイトを引用する挙動をほぼ持たない。
+#   保存しても読む価値がないので器を汚さない。
+CITATION_ENGINES = {"chatgpt"}
+
+# 公的機関とみなすドメイン。ここに当たらない被引用は「民間」とみなす。
+# ★目的は「民間競合が現れた」瞬間を後から辿れるようにすること。
+#   現状 ChatGPT の被引用は中小企業庁など公的機関が中心で、民間には負けていない。
+PUBLIC_SUFFIXES = (".go.jp", ".lg.jp")
+# COMPETITOR_PATTERNS のキーのうち公的機関にあたるもの（aio_monitor.py と対応）
+PUBLIC_COMPETITOR_KEYS = {"chusho_gov", "nta_gov"}
+
 # ★昇降格の閾値（旧 aio-promote-demote.py の方針を踏襲）
 #   直近の試行が少ないうちは動かさない。§16.5 母数が足りなければ判定不能。
 MIN_TRIALS_TO_JUDGE = 20
@@ -272,6 +285,60 @@ def main() -> int:
                 if suffix:
                     agg[(cid, f"aio_trials_{suffix}")] += 1.0
                     agg[(cid, f"aio_hits_{suffix}")] += hit
+
+        # ── 被引用ドメインを残す（画面もアラートも作らない・生データのみ）──
+        cites: dict[str, dict[str, set[str]]] = collections.defaultdict(
+            lambda: {"domains": set(), "competitors": set()}
+        )
+        for r in results:
+            engine = str(r.get("engine") or "").lower()
+            if engine not in CITATION_ENGINES:
+                continue
+            cid = by_ext.get(str(r.get("target_art") or ""))
+            if not cid:
+                continue
+            for tr in r.get("trials") or []:
+                if tr.get("error"):
+                    continue
+                for u in tr.get("citations") or []:
+                    host = (urlsplit(str(u)).hostname or "").lower()
+                    # ★lstrip("www.") は文字集合を剥がすので使わない
+                    #   （"wow-tax.jp" が "-tax.jp" になる）
+                    if host.startswith("www."):
+                        host = host[4:]
+                    if host:
+                        cites[cid]["domains"].add(host)
+                for name, present in (tr.get("detection") or {}).get(
+                    "competitors", {}
+                ).items():
+                    if present:
+                        cites[cid]["competitors"].add(name)
+
+        for cid, v in cites.items():
+            # ★民間競合が1つでも出たか。公的機関(.go.jp)だけなら false
+            private = any(
+                not d.endswith(PUBLIC_SUFFIXES) for d in v["domains"]
+            ) or bool(v["competitors"] - PUBLIC_COMPETITOR_KEYS)
+            cur.execute(
+                'INSERT INTO "AioCitation"(id,"contentItemId",engine,date,'
+                '"citedDomains","citedCompetitors","hasPrivateCompetitor",'
+                '"createdAt","updatedAt") '
+                "VALUES (gen_random_uuid()::text,%s,'chatgpt',%s::date,%s,%s,%s,now(),now()) "
+                'ON CONFLICT ("contentItemId",engine,date) DO UPDATE SET '
+                '"citedDomains"=EXCLUDED."citedDomains", '
+                '"citedCompetitors"=EXCLUDED."citedCompetitors", '
+                '"hasPrivateCompetitor"=EXCLUDED."hasPrivateCompetitor", '
+                '"updatedAt"=now()',
+                (cid, today, sorted(v["domains"]), sorted(v["competitors"]), private),
+            )
+        if cites:
+            n_private = sum(
+                1
+                for v in cites.values()
+                if any(not d.endswith(PUBLIC_SUFFIXES) for d in v["domains"])
+                or (v["competitors"] - PUBLIC_COMPETITOR_KEYS)
+            )
+            log(f"被引用を記録: {len(cites)}記事（うち民間競合あり {n_private}）")
 
         for (cid, metric), value in agg.items():
             cur.execute(
