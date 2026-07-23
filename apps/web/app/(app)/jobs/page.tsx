@@ -36,6 +36,9 @@ export default async function JobsPage() {
   const failed = jobs.filter((j) => j.health === "failed");
   const waiting = jobs.filter((j) => j.health === "waiting");
   const disabled = jobs.filter((j) => j.health === "disabled");
+  // ★「動いている数」を必ず出す。異常だけ出すと、全部で何本あって
+  //   何本が生きているのかが分からない（0/21 でも 20/21 でも見た目が同じになる）
+  const healthy = jobs.filter((j) => j.health === "ok" || j.health === "aborted");
   // 問題のあるものを先頭に出す（21枚を目で追わせない）
   const order: Record<string, number> = { stalled: 0, failed: 1, waiting: 2, ok: 3, disabled: 4 };
   const sorted = [...jobs].sort(
@@ -45,28 +48,36 @@ export default async function JobsPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-5">
-        <h1 className="text-xl font-bold tracking-tight">ジョブ</h1>
+        <h1 className="text-xl font-bold tracking-tight">自動処理</h1>
         <p className="mt-0.5 text-[13px] text-[var(--muted)]">
-          worker が自動実行する定期処理（§5.1）。失敗は段7にも出る
+          データを自動で取り込む処理。<strong>ここが止まると画面の数字が古いまま</strong>になり、
+          しかも画面上は「0」に見えるので気づけない。
         </p>
       </div>
 
-      <div className="mb-2 grid gap-3 sm:grid-cols-4">
+      <div className="mb-2 grid gap-3 sm:grid-cols-5">
+        <Stat
+          label="動いている"
+          value={healthy.length}
+          accent
+          hint={`全${jobs.length}本のうち`}
+        />
         <Stat
           label="止まっている"
           value={stalled.length}
           tone={stalled.length > 0 ? "bad" : "ok"}
         />
         <Stat label="失敗" value={failed.length} tone={failed.length > 0 ? "bad" : "ok"} />
-        <Stat label="初回待ち" value={waiting.length} />
-        <Stat label="停止中（意図的）" value={disabled.length} />
+        <Stat label="初回待ち" value={waiting.length} hint="予定時刻がまだ来ていない" />
+        <Stat label="止めている" value={disabled.length} hint="意図的" />
       </div>
       <p className="mb-4 text-[12px] text-[var(--faint)]">
-        ★<strong>「一度も動いていない」を異常にしない</strong>。週次ジョブは登録した曜日に
+        ★<strong>「一度も動いていない」を異常にしない</strong>。週次の処理は登録した曜日に
         よって最初の予定がまだ来ていないことがあり（実測: 火・木に登録した3本の初回は翌月曜）、
         これを赤で出すと意味のない警告を毎日見ることになる。
         <strong>「予定を過ぎたのに動いていない」だけを「止まっている」</strong>とする。
-        停止中は意図して止めたものなので警告に混ぜない。
+        ★<strong>中断は失敗に数えない</strong>。システムを入れ替えると実行中の処理は
+        打ち切られるが、次回の予定で再実行されるので直す必要が無い。
       </p>
 
       {/* ジョブ一覧 */}
@@ -228,6 +239,7 @@ function MetricFreshnessPanel({ rows }: { rows: MetricFreshness[] }) {
 
 const HEALTH_MARK: Record<string, string> = {
   ok: "🟢",
+  aborted: "🔁", // 打ち切られただけ。次回の予定で再実行される
   failed: "🔴",
   stalled: "🚨",
   waiting: "⏳",
@@ -257,10 +269,12 @@ function JobCard({ job }: { job: JobRow }) {
               {JOB_HEALTH_LABEL[job.health]}
               {job.health === "stalled" && `（予定${job.missedRuns}回分）`}
             </span>
-            <span className="rounded bg-[var(--accent-weak)] px-1.5 py-0.5 text-[10px] text-[var(--accent)]">
-              {job.kind}
-            </span>
           </div>
+          {/* ★何のための処理かを名前の次に置く。名前だけでは止まったときの
+              重大さが判断できない（gsc-fetch-daily を見て「検索の実測が入る」とは読めない） */}
+          {job.purpose && (
+            <p className="mt-1 text-[12px] text-[var(--ink)]">{job.purpose}</p>
+          )}
           <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[var(--muted)]">
             <span>
               スケジュール: <strong>{job.scheduleLabel}</strong>
@@ -278,10 +292,21 @@ function JobCard({ job }: { job: JobRow }) {
           </div>
           {/* ★停止理由・用途を先に出す。無いと「直すべき障害」に見えて、
               誰かが再有効化して同じ失敗を繰り返す（aio-* は OpenAI クォータ枯渇で意図的に停止） */}
+          {/* ★止めている理由は「なぜ止めたか」だけでなく
+              「止めている間できないこと」と「再開手順」まで書く。
+              理由だけだと、再開してよいのか誰も判断できない */}
           {job.note && (
-            <p className="mt-1.5 rounded bg-[var(--panel-2)] px-2 py-1 text-[11px] text-[var(--muted)]">
-              {job.note}
-            </p>
+            <div
+              className={`mt-1.5 max-w-[560px] rounded px-2 py-1.5 text-[11px] leading-relaxed ${
+                job.health === "disabled"
+                  ? "bg-[var(--warn)]/[0.12] text-[#9a6a00]"
+                  : "bg-[var(--panel-2)] text-[var(--muted)]"
+              }`}
+            >
+              {job.note.split("／").map((line, i) => (
+                <div key={i}>{line}</div>
+              ))}
+            </div>
           )}
           {job.lastLog && (
             <p
@@ -303,11 +328,13 @@ function Stat({
   value,
   accent,
   tone,
+  hint,
 }: {
   label: string;
   value: number;
   accent?: boolean;
   tone?: "ok" | "bad";
+  hint?: string;
 }) {
   const color = accent
     ? "text-[var(--accent)]"
@@ -320,6 +347,7 @@ function Stat({
     <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3.5">
       <div className="text-[12px] text-[var(--muted)]">{label}</div>
       <div className={`tnum mt-1 text-2xl font-bold leading-none ${color}`}>{value}</div>
+      {hint && <div className="mt-1 text-[10px] text-[var(--faint)]">{hint}</div>}
     </div>
   );
 }

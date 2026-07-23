@@ -12,7 +12,7 @@ const TZ = "Asia/Tokyo"; // docs/RULES.md §9 全てJST
  *   だけだった。これを赤で出すと、意味のない警告を毎日見ることになり、
  *   本物の停止が埋もれる。**待機中**と**予定を過ぎたのに動いていない**は別物。
  */
-export type JobHealthState = "ok" | "failed" | "stalled" | "waiting" | "disabled";
+export type JobHealthState = "ok" | "failed" | "aborted" | "stalled" | "waiting" | "disabled";
 
 export type JobRow = {
   id: string;
@@ -22,6 +22,8 @@ export type JobRow = {
   kind: string;
   enabled: boolean;
   note: string | null;
+  /** 何のための処理か（日本語） */
+  purpose: string | null;
   nextRunAt: Date | null;
   lastRunAt: Date | null;
   lastStatus: string | null;
@@ -35,11 +37,41 @@ export type JobRow = {
 };
 
 export const JOB_HEALTH_LABEL: Record<JobHealthState, string> = {
-  ok: "正常",
+  ok: "動いている",
   failed: "失敗",
+  aborted: "中断（再起動）",
   stalled: "止まっている",
   waiting: "初回待ち",
-  disabled: "停止中",
+  disabled: "止めている",
+};
+
+/**
+ * 何のための処理かを日本語で言う。
+ * ★「ジョブ名」だけでは何が起きるか分からない。`gsc-fetch-daily` を見ても
+ *   「検索の実測が毎日入る」とは読めず、止まっていても重大さが判断できない。
+ */
+export const JOB_PURPOSE: Record<string, string> = {
+  "gsc-fetch-daily": "検索の実測（表示・クリック・順位）を毎日取り込む",
+  "gsc-queries-weekly": "記事が実際に来ている検索語を取り込む",
+  "ga4-fetch-daily": "PV を毎日取り込む",
+  "wp-sync-daily": "WordPress の記事一覧を取り込む",
+  "threads-sync-daily": "Threads の投稿と実績を取り込む",
+  "line-followers-daily": "公式LINEの友だち数を取り込む",
+  "agency-lp-import-daily": "代理店LPの訪問・問い合わせを取り込む",
+  "dm-log-import-daily": "Threads の DM 記録を取り込む",
+  "rakko-import-daily": "ラッコのKW調査結果を取り込む",
+  "serp-fetch-weekly": "検索結果の順位を取り込む（DataForSEO）",
+  "url-health-daily": "記事URLが本当に開けるか確認する（301ループ・404）",
+  "ledger-check-daily": "台帳・設定・実公開のズレを検出する",
+  "tool-balance-daily": "外部ツールの残高を確認する",
+  "queue-refill-daily": "Threads の投稿キューを補充する",
+  "intervention-evaluate-daily": "打ち手の効果を28日後に判定する",
+  "health-alert-daily": "異常をまとめて通知する",
+  "ideas-collect-weekly": "記事ネタを集める",
+  "operator-propose-weekly": "次の打ち手を提案する",
+  "aio-hot-weekly": "AI検索（ChatGPT）に引用されているか測る（主戦場KW）",
+  "aio-warm-biweekly": "AI検索に引用されているか測る（中位KW）",
+  "aio-cold-monthly": "AI検索に引用されているか測る（下位KW）",
 };
 
 /**
@@ -141,7 +173,11 @@ export async function getJobs(): Promise<JobRow[]> {
       ? "disabled"
       : last?.status === "failed"
         ? "failed"
-        : missed > 0
+        : // ★中断は失敗ではない。デプロイで打ち切られただけで、次回の予定で再実行される。
+          //   失敗に混ぜると、イメージを作り直すたびに失敗件数が増えて信用できなくなる
+          last?.status === "aborted" && missed === 0
+          ? "aborted"
+          : missed > 0
           ? "stalled"
           : last
             ? "ok"
@@ -154,6 +190,7 @@ export async function getJobs(): Promise<JobRow[]> {
       kind: j.kind,
       enabled: j.enabled,
       note: j.note,
+      purpose: JOB_PURPOSE[j.name] ?? null,
       nextRunAt: j.enabled ? nextRun(j.schedule) : null,
       lastRunAt: last?.startedAt ?? null,
       lastStatus: last?.status ?? null,

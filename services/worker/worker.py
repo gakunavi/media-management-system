@@ -350,17 +350,22 @@ def main() -> int:
             cur.execute(
                 """
                 UPDATE "JobRun"
-                   SET "status" = 'failed',
+                   SET "status" = 'aborted',
                        "finishedAt" = now(),
                        "log" = COALESCE("log", '') ||
-                               E'\n[worker] 起動時に running のまま残っていたため failed に確定。'
-                               'worker の再起動で打ち切られた可能性が高い',
+                               E'\n[worker] worker の再起動で打ち切られた（中断）。'
+                               'ジョブ自体が失敗したわけではないので、次回の予定で再実行される',
                        "updatedAt" = now()
                  WHERE "status" = 'running'
                 """
             )
+            # ★'failed' ではなく 'aborted' にする（2026-07-24）。
+            #   デプロイのたびに実行中のジョブが「失敗」として積み上がり、
+            #   失敗件数が信用できなくなる。実際 url-health-daily は
+            #   直前の実行が success なのに、私がイメージを作り直したせいで
+            #   「失敗」と表示されていた。**打ち切りと失敗は別物**。
             if cur.rowcount:
-                log(f"★running のまま残っていた JobRun {cur.rowcount}件を failed に確定しました")
+                log(f"★running のまま残っていた JobRun {cur.rowcount}件を aborted（中断）にしました")
             c.commit()
     except psycopg.Error as e:
         log(f"孤児 JobRun の掃除に失敗（続行します）: {e}")
