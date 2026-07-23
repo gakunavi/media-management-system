@@ -41,6 +41,13 @@ export const CTR_FAIL_MAX_POSITION = 25;
 export const CTR_FAIL_MIN_IMPRESSIONS = 20;
 
 /**
+ * リライト直後は評価しない期間（日）。効果測定は28日後（cowork 実運用）。
+ * ★`Intervention` が無い記事のための保険。**通常は `Intervention.evaluateAt` を使う**
+ *   （そちらのほうが正確で、実施日も評価日も実データで入っている）。
+ */
+export const REWRITE_COOLDOWN_DAYS = 28;
+
+/**
  * 公的機関を名指しした検索語。
  *
  * ★これを分けないと打ち手を誤る。実測（2026-07-23）で「押されていない」上位は
@@ -220,6 +227,25 @@ export async function getCtrFailures(): Promise<
     select: { periodStart: true, periodEnd: true },
   });
   if (!latest) return new Map();
+  // ★実着手できない記事を除く（cowork 指摘・2026-07-23）
+  //   ① 統合済み/301済み … 直す実体が無い。URLを持たないプレースホルダで判別する
+  //      （実測で ART-006 が毎回上位に出ていた）
+  //   ② 効果測定の待ち中 … 直した記事をすぐ再掲すると同じ記事を無限に触る
+  //
+  // ★②は `lastReviewedAt` では判定できない。
+  //   「cosmetic更新は逆効果・実質追記のときだけ dateModified を更新する」が
+  //   既存ルールなので、**タイトル/メタだけ直した記事は最終更新日が動かない**。
+  //   まさに我々が推奨している直し方がそれ。実際 ART-058 は 7/3 にリライト済なのに
+  //   最終更新日は 4/23 のままで、除外できずに再掲されていた。
+  //   `Intervention.evaluateAt`（実施日＋28日）が実データで入っているのでそれを使う。
+  const now = new Date();
+  const pending = await prisma.intervention.findMany({
+    where: { evaluateAt: { gt: now }, contentItemId: { not: null } },
+    select: { contentItemId: true },
+  });
+  const waiting = new Set(pending.map((p) => p.contentItemId as string));
+
+  const cooldown = new Date(now.getTime() - REWRITE_COOLDOWN_DAYS * 86400000);
   const rows = await prisma.contentQuery.findMany({
     where: {
       periodStart: latest.periodStart,
@@ -227,12 +253,23 @@ export async function getCtrFailures(): Promise<
       clicks: 0,
       impressions: { gte: CTR_FAIL_MIN_IMPRESSIONS },
       position: { gte: CTR_FAIL_MIN_POSITION, lte: CTR_FAIL_MAX_POSITION },
+      contentItem: {
+        url: { not: null },
+        // Intervention が無い記事のための保険
+        OR: [{ lastReviewedAt: null }, { lastReviewedAt: { lt: cooldown } }],
+      },
     },
     orderBy: { impressions: "desc" },
     select: { contentItemId: true, query: true, position: true, impressions: true },
   });
   const out = new Map<string, { query: string; position: number; impressions: number }>();
   for (const r of rows) {
+    if (waiting.has(r.contentItemId)) continue; // 効果測定の待ち中
+    // ★指名検索（「国税庁 …」）を根拠にしない。§4-24 のとおり
+    //   利用者は公式ページを開きに来ているので、タイトルを直してもクリックは増えない。
+    //   /keywords では下へ回しているのに督促では拾っていた（不整合だった）。
+    //   これしか根拠が無い記事は督促に出さない。
+    if (isNavigational(r.query)) continue;
     // 表示の多い順に見るので、最初に入ったものが最も強い根拠
     if (!out.has(r.contentItemId)) {
       out.set(r.contentItemId, {
