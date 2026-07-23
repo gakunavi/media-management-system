@@ -48,9 +48,9 @@ LEGACY_DIR = Path(os.environ.get("MMS_WORKER_LEGACY_DIR", "/app/legacy"))
 AIO_DIR = LEGACY_DIR / "aio"
 
 TIER_PARAMS = {
-    "hot": {"engines": "chatgpt,gemini", "n_trials": 3},
-    "warm": {"engines": "chatgpt,gemini", "n_trials": 3},
-    "cold": {"engines": "chatgpt", "n_trials": 1},
+    "hot": {"engines": "chatgpt,gemini", "n_trials": 3, "min_interval_days": 6},
+    "warm": {"engines": "chatgpt,gemini", "n_trials": 3, "min_interval_days": 13},
+    "cold": {"engines": "chatgpt", "n_trials": 1, "min_interval_days": 27},
 }
 
 ENGINE_SUFFIX = {
@@ -204,6 +204,22 @@ def main() -> int:
         if not by_ext:
             log("対象なし。終了")
             return 0
+
+        # ★間隔の下限をスクリプト側で持つ。
+        #   cron に「隔週」は無く、date 演算（%U % 2）は年跨ぎでずれる。
+        #   毎週起動して、前回から日が浅ければ何もしないほうが確実。
+        cur.execute(
+            'SELECT MAX(date) FROM "ContentMetric" m '
+            'JOIN "ContentItem" c ON c.id = m."contentItemId" '
+            "WHERE m.metric='aio_trials' AND c.\"aioTier\"::text = %s",
+            (args.tier,),
+        )
+        last = cur.fetchone()[0]
+        if last is not None:
+            gap = (datetime.now(timezone.utc).date() - last).days
+            if gap < params["min_interval_days"]:
+                log(f"前回計測から{gap}日（下限{params['min_interval_days']}日）。今回は実行しない")
+                return 0
 
         prompts = load_prompts(set(by_ext))
         log(f"該当プロンプト {len(prompts)}件")

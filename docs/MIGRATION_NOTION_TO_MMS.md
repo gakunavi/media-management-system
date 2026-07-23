@@ -1,4 +1,68 @@
-# Notion → MMS 完全移行 指示書（Claude Code 実行用）
+# Notion → MMS 完全移行（**2026-07-23 完了**）
+
+> ## ✅ 移行は完了した
+>
+> 石井指示「今後 Notion は使わない」に基づき実施。以下は結果と、
+> 指示書の当初計画からずれた点の記録。
+>
+> | 項目 | 結果 |
+> |---|---|
+> | 記事メタ | Notion 158行 ⇔ MMS `ContentItem`。**移行漏れ0件**。AIO Tier の欠損18件を補填 |
+> | AIO 計測データ | 3353行 → `ContentMetric` 1252行に集約（試行3348・ヒット71） |
+> | 公開ゲート | `notion-sync.py` を廃止。MMS `wp-sync-daily`(06:00) が自動取り込み |
+> | AIO 計測の実行 | MMS ジョブ3本（`aio-hot-weekly` / `aio-warm-biweekly` / `aio-cold-monthly`） |
+> | 退役スクリプト | 18本を `.claude/scripts/_retired/` へ |
+>
+> ### 当初計画からずれた点（重要）
+>
+> **① 突合キーは記事IDではなく URL**
+> MMS 側で ID を改番したため、Notion の `ART-006` は MMS では
+> `LEGACY-chushokigyo-keiei-kyouka-zeisei` であり、MMS には**別の** `ART-006` が居る。
+> IDで突き合わせると一致して見えて中身が違い、そのまま書き込むと
+> **別の記事に実績が付く**。5件が該当した。
+> `prompts.yaml` の `target_art` も27件を付け替えた。
+>
+> **② 「1週間の並行稼働」は不要だった**
+> 記事メタは既に MMS にあり、動いている最中のデータではない。
+> 1回突き合わせて差分を埋めれば、待っても新しい情報は出ない。
+> ただし**差分ゼロの確認は必要だった**（実際に18件の欠損があった）。
+>
+> **③ `/api/ingest/aio` は作っていない**
+> 指示書は受口の新設を求めていたが、計測本体（`aio-monitor-v2.py`）が
+> Notion 非依存だったため、`legacy/aio/` に取り込んで worker から直接呼ぶ形にした。
+> 外部から送る相手が居ないのに受口だけ作っても、経路が1つ増えるだけになる。
+>
+> **④ ニュース記事の Tier=Hot を拾い直した**
+> `news-factory/pipeline.py` が `--aio-tier Hot` を強制していた。
+> この仕様を落とすと、移行を境にニュース記事の計測頻度が黙って下がる。
+> MMS 側で `blog_category` を見て Hot/Warm を分けるようにした。
+> （その過程で `wp_sync.py` が存在しないフィールド `categories` を取っていたことも判明。
+>   この投稿タイプの正しい名前は `blog_category`）
+>
+> ### 判明した事実
+>
+> ```
+> AIO 計測は 2026-06 以降 止まっている（7月は0行）
+>   7/13 に cowork のスケジュールが手動無効化された件と符合
+>
+> エンジン別のヒット率（移行データ 2026-05〜06）
+>   chatgpt  1966試行 → 71ヒット (3.6%)
+>   gemini   1382試行 →  0ヒット (0%)
+>
+> OpenAI API のクレジットが切れている（429 insufficient_quota）
+>   Gemini は動く。ただし Gemini は一度も引用していない
+> ```
+>
+> ### 残課題
+>
+> - `prj028-baseline-capture.py`（cowork 木19:00）がまだ Notion を読む。
+>   MMS の `ContentMetric` を読む形に直すか、PRJ-028 を畳むか要判断。
+> - cowork の `aio-batch-hot/warm/cold` は MMS へ移ったので登録削除が必要。
+> - **OpenAI のクレジット追加**。無いと AIO 計測はほぼ意味を失う（Gemini は0ヒットのため）。
+>
+> 以下は当初の指示書。記録として残す。
+
+---
 
 - 作成: 2026-07-22 / Cowork（監査・計画担当）
 - 実行: **Claude Code（MMSリポジトリ内・Mac上）** ／ 検証: Cowork（データ側）

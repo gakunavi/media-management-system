@@ -42,6 +42,17 @@ try {
 } catch {
   dataforseoReady = false;
 }
+// ★AIO引用率の計測（2026-07-23 Notion から移設）。
+//   ChatGPT / Gemini に質問して自社が引用されるかを測る。
+//   どちらか一方でも鍵があれば動かす（片方が落ちても計測は続けたい）。
+let aioReady = false;
+try {
+  const envText = readFileSync(path.resolve(process.cwd(), "../../.env"), "utf8");
+  aioReady =
+    /^OPENAI_API_KEY=.+$/m.test(envText) || /^GEMINI_API_KEY=.+$/m.test(envText);
+} catch {
+  aioReady = false;
+}
 
 const JOBS = [
   {
@@ -86,6 +97,41 @@ const JOBS = [
     note: dataforseoReady
       ? "SERP取得: 1〜20位の全ドメインとAIO有無を記録（§3.3.5・360KWで約$0.22/回）"
       : "SERP取得【停止中】.env に MMS_DATAFORSEO_LOGIN / MMS_DATAFORSEO_PASSWORD を設定して再実行",
+  },
+  {
+    name: "aio-hot-weekly",
+    // 木 02:00。Hot は週次（旧 cowork Scheduled aio-batch-hot と同じ枠）
+    schedule: "0 2 * * 4",
+    kind: "builtin",
+    config: { script: "aio_run.py", args: ["--tier", "hot"], timeoutSeconds: 3600 },
+    enabled: aioReady,
+    note: aioReady
+      ? "AIO計測(Hot): ChatGPT/Gemini に質問し引用率を記録。終わったらTier昇降格"
+      : "AIO計測(Hot)【停止中】.env に OPENAI_API_KEY か GEMINI_API_KEY を設定して再実行",
+  },
+  {
+    name: "aio-warm-biweekly",
+    // 木 03:30。Warm は隔週だが cron に隔週は無いので毎週動かし、
+    // ★スクリプト側が「前回から14日未満なら何もしない」で吸収する方が安全。
+    //   cron の date 演算（%U % 2）は年跨ぎでずれる。
+    schedule: "30 3 * * 4",
+    kind: "builtin",
+    config: { script: "aio_run.py", args: ["--tier", "warm"], timeoutSeconds: 3600 },
+    enabled: aioReady,
+    note: aioReady
+      ? "AIO計測(Warm): 隔週相当。60日 baseline 期間の記事が対象"
+      : "AIO計測(Warm)【停止中】.env に OPENAI_API_KEY か GEMINI_API_KEY を設定して再実行",
+  },
+  {
+    name: "aio-cold-monthly",
+    // 毎月 1〜7日の木 05:00 ＝ 第1木曜
+    schedule: "0 5 1-7 * 4",
+    kind: "builtin",
+    config: { script: "aio_run.py", args: ["--tier", "cold"], timeoutSeconds: 3600 },
+    enabled: aioReady,
+    note: aioReady
+      ? "AIO計測(Cold): 月次。chatgpt 1試行のみ（費用を抑える）"
+      : "AIO計測(Cold)【停止中】.env に OPENAI_API_KEY か GEMINI_API_KEY を設定して再実行",
   },
   {
     name: "rakko-import-daily",
