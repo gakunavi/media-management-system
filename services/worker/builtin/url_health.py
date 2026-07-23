@@ -17,9 +17,14 @@
 ★合格条件: 最大1ホップで200・ループ無し
   2ホップ以上は評価が減衰し、ループは到達不能を意味する。
 
-★静的キャッシュを迂回する
-  Xserver の静的キャッシュが古い301を返し続けることがあり、
-  実際それがループの一因だった。クエリを1つ足して素通りさせる。
+★エッジキャッシュを迂回する
+  ★当初「Xserver の静的キャッシュ」と書いたが、実測すると **Cloudflare APO**
+    （Automatic Platform Optimization for WordPress）だった。
+      server: cloudflare / cf-edge-cache: cache,platform=wordpress
+    APO は **HTMLをエッジでキャッシュする**ので、WordPress 側で301を直しても
+    古い応答が返り続けることがある。2026-07-23 のピラー301ループにも絡んだ疑い。
+  クエリを1つ足すと APO はキャッシュを使わない（cf-apo-via が
+  `origin,nohtml` → `origin,qs` に変わることを実測で確認）。
 
 必要な環境変数: MMS_DATABASE_URL
 任意: MMS_URL_HEALTH_TIMEOUT（既定20秒） / MMS_URL_HEALTH_CONCURRENCY（既定6）

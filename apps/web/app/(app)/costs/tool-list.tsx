@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useState, useTransition } from "react";
 import type { ToolRow } from "@/lib/tools";
 import { BILLING_LABEL, TOOL_STATE_LABEL } from "@/lib/tools";
@@ -80,13 +82,52 @@ export function ToolList({ rows }: { rows: ToolRow[] }) {
               </p>
             )}
 
+            {/* ★このツールで何が動いているかを出す。
+                止まったときに何が測れなくなるかが分からないと、
+                継続/停止の判定ができない（それがこの画面の目的） */}
+            {/* ★ジョブが無いツールもある（Cloudflare は配信そのもの）。
+                「動いている処理: 」だけ出て中身が空になると、
+                直後の注記が処理名に見える。空なら影響範囲を書く */}
+            {t.power && t.power.jobs.length > 0 && (
+              <p className="mt-1.5 text-[12px] text-[var(--muted)]">
+                動いている処理:{" "}
+                {t.power.jobs.map((j, i) => (
+                  <span key={j.name}>
+                    {i > 0 && " / "}
+                    <Link href="/jobs" className="hover:text-[var(--accent)] hover:underline">
+                      {j.label}
+                    </Link>
+                  </span>
+                ))}
+              </p>
+            )}
+            {t.power && t.power.jobs.length === 0 && (
+              <p className="mt-1.5 text-[12px] text-[var(--muted)]">
+                止まると: {t.power.losesWhat}
+              </p>
+            )}
+
             <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--faint)]">
               {t.balance !== null && (
-                <span className={t.balance <= 0.3 ? "text-[var(--bad)]" : ""}>
+                <span
+                  className={
+                    t.runsLeft !== null && t.runsLeft < 1
+                      ? "font-medium text-[var(--bad)]"
+                      : t.balance <= 0.3
+                        ? "text-[var(--bad)]"
+                        : ""
+                  }
+                >
                   残高 {t.balance}
                   {t.balanceCurrency ?? ""}
                   {t.balanceCheckedAt && `（${jaDate(t.balanceCheckedAt)}時点）`}
+                  {/* ★金額だけでは多いか少ないか分からない。回数に直す */}
+                  {t.runsLeft !== null && ` — あと${t.runsLeft}回分`}
                 </span>
+              )}
+              {/* ★残高が取れないものは「0」ではなく「取得できない」と書く（§3） */}
+              {t.balance === null && t.billingType === "prepaid" && (
+                <span className="text-[var(--warn)]">残高は自動取得できない</span>
               )}
               {t.decideBy && (
                 <span className={t.overdue ? "font-medium text-[var(--bad)]" : ""}>
