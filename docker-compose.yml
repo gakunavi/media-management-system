@@ -117,6 +117,8 @@ services:
       # GSC 日次取得（builtin/gsc_daily.py）。鍵は secrets/ を読み取り専用マウント
       GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/gsc-service-account.json
       MMS_GSC_SITE_URL: ${MMS_GSC_SITE_URL:-}
+      # GSC page×query の集計期間（builtin/gsc_queries.py）
+      MMS_GSC_QUERY_WINDOW_DAYS: ${MMS_GSC_QUERY_WINDOW_DAYS:-90}
       # WordPress 同期（読み取りのみ・§3.9.1）
       MMS_WP_BASE_URL: ${MMS_WP_BASE_URL:-}
       MMS_WP_USER: ${MMS_WP_USER:-}

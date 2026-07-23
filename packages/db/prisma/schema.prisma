@@ -862,6 +862,7 @@ model ContentItem {
   linkChecks          LinkCheck[]
   provenances         GenerationProvenance[]
   versions            ContentVersion[]
+  queries             ContentQuery[]
 
   /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
   createdAt DateTime @default(now())
@@ -940,6 +941,47 @@ model ContentMetric {
   @@index([contentItemId, metric, date])
   @@index([date])
   @@index([metric, date])
+}
+
+/// 記事が**実際に何で検索されて表示されたか**（GSC page×query・2026-07-23 追加）
+///
+/// ★なぜ要るか
+///   これが無いと「記事のメインKW」を実測から決められない。179記事すべてで
+///   mainKeyword が空だったのは、埋める材料がどこにも無かったからである。
+///   既存の Keyword(420件) はラッコの調査KWで「狙っているKW」、
+///   こちらは「実際に来ているKW」。**両者は一致しない**（そのズレ自体が打ち手になる）。
+///
+/// ★なぜ日次にしないか
+///   page×query の日次は行数が跳ね、しかも大半は0〜1表示のノイズになる。
+///   GSC 側も日次×query では閾値で行が落ちる。
+///   **期間の集計スナップショット**として持ち、週次で更新する。
+///   期間を列に持つので「いつの28日間か」が必ず分かる（§3 未計測との区別）。
+///
+/// ★position は期間内の平均（GSCの定義）。加重平均ではないので合算してはいけない。
+model ContentQuery {
+  id            String   @id @default(cuid())
+  contentItemId String
+  /// 検索語そのもの。Keyword テーブルとは紐づけない（調査KWと実測KWは別物）
+  query         String
+  clicks        Int      @default(0)
+  impressions   Int      @default(0)
+  ctr           Float?
+  position      Float?
+  /// 集計期間（含む）
+  periodStart   DateTime @db.Date
+  /// 集計期間（**含む**。GSC の end_date と同じ）
+  periodEnd     DateTime @db.Date
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([contentItemId, query, periodStart, periodEnd])
+  @@index([contentItemId, clicks])
+  @@index([periodEnd, position])
+  @@index([query])
 }
 
 /// AIO計測で「誰が引用されたか」を残す（2026-07-23 追加・低優先の生データ保存）

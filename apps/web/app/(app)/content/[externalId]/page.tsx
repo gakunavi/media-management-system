@@ -9,6 +9,7 @@ import {
 import { LEAD_STATUS_LABEL, SOURCE_LABEL } from "@/lib/leads";
 import { resolveRange } from "@/lib/period";
 import { RangePicker } from "@/components/range-picker";
+import { getQueriesForContent, STRIKING_MIN, STRIKING_MAX } from "@/lib/search-queries";
 import { MetricChart } from "./metric-chart";
 
 // 記事詳細（設計書 §3.2.3 記事別の日次推移グラフ）
@@ -28,6 +29,8 @@ export default async function ContentDetailPage({
   const range = resolveRange(await searchParams);
   const item = await getContentDetail(externalId, range);
   if (!item) notFound();
+  // ★この記事が実際に来ている検索語。合計だけでは「何を直すか」が決まらない
+  const queries = await getQueriesForContent(item.id);
 
   const latest = item.series.at(-1);
 
@@ -126,6 +129,63 @@ export default async function ContentDetailPage({
           </p>
         ) : (
           <MetricChart series={item.series} />
+        )}
+      </section>
+
+      {/* 実際に来ている検索語 */}
+      <section className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
+        <h2 className="text-[15px] font-semibold">実際に来ている検索語</h2>
+        <p className="mb-3 mt-0.5 text-[12px] text-[var(--faint)]">
+          ★GSC の page×query（直近90日の集計）。<strong>期間切替の対象外</strong>で、
+          常に最新の集計期間を出す（期間ごとに取り直すと GSC の呼び出しが跳ねるため）。
+          {STRIKING_MIN}〜{STRIKING_MAX}位は<strong>あと一押しで1ページ目</strong>の帯。
+        </p>
+        {queries.length === 0 ? (
+          <p className="py-6 text-center text-[13px] text-[var(--faint)]">
+            この記事に紐づく検索語がありません（検索で表示されていないか、まだ取得していない）
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-[var(--border)] text-left text-[11px] text-[var(--muted)]">
+                  <th className="py-1 pr-2 font-medium">検索語</th>
+                  <th className="py-1 pr-2 text-right font-medium">順位</th>
+                  <th className="py-1 pr-2 text-right font-medium">表示</th>
+                  <th className="py-1 pr-2 text-right font-medium">クリック</th>
+                  <th className="py-1 text-right font-medium">CTR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {queries.map((q) => {
+                  const striking =
+                    q.position !== null && q.position >= STRIKING_MIN && q.position <= STRIKING_MAX;
+                  return (
+                    <tr key={q.query} className="border-b border-[var(--border)]/60">
+                      <td className="py-1.5 pr-2">
+                        {q.query}
+                        {striking && (
+                          <span className="ml-1.5 rounded bg-[var(--warn)]/20 px-1 py-0.5 text-[10px] text-[#9a6a00]">
+                            あと一押し
+                          </span>
+                        )}
+                      </td>
+                      <td className="tnum py-1.5 pr-2 text-right">
+                        {q.position === null ? "—" : q.position.toFixed(1)}
+                      </td>
+                      <td className="tnum py-1.5 pr-2 text-right text-[var(--muted)]">
+                        {q.impressions.toLocaleString("ja-JP")}
+                      </td>
+                      <td className="tnum py-1.5 pr-2 text-right font-medium">{q.clicks}</td>
+                      <td className="tnum py-1.5 text-right text-[var(--muted)]">
+                        {q.ctr === null ? "—" : `${(q.ctr * 100).toFixed(1)}%`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 
