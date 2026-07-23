@@ -18,6 +18,7 @@ export default async function CostsPage() {
     runningOut,
     potentialMonthlyYen,
     trend,
+    sharedCount,
   } = await getTools();
 
   const active = rows.filter((t) => t.state === "active").length;
@@ -41,13 +42,16 @@ export default async function CostsPage() {
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
         {/* ★¥0 を「無料で運用している」と読ませない。
             前払い/従量（DataForSEO・OpenAI）はここに入らない */}
+        {/* ★出すのは「メディアのための追加コスト」。総支出ではない。
+            自社既存（エックスサーバー等）はメディアのために契約したものではないので
+            コスパ判定の対象にならない。ただし止まれば影響するので一覧には残す */}
         <Stat
-          label="固定の月額"
+          label="メディアのための月額"
           value={`¥${monthlyTotalYen.toLocaleString("ja-JP")}`}
           hint={
             monthlyUnknown > 0
               ? `★月額未入力が${monthlyUnknown}件あり、実際はこれより高い`
-              : `★前払い/従量（${prepaid}件）は含まない。使った分だけかかる`
+              : `前払い/従量${prepaid}件・自社既存${sharedCount}件は含まない`
           }
           bad={monthlyUnknown > 0}
         />

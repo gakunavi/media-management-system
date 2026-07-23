@@ -23,6 +23,8 @@ export const BILLING_LABEL: Record<string, string> = {
   monthly: "月額",
   prepaid: "前払い/従量",
   free: "無料",
+  // ★「無料」と分ける。会社が元々払っているもので、メディアのための追加コストが無いだけ
+  shared: "自社既存（追加コストなし）",
 };
 
 /**
@@ -211,6 +213,12 @@ export type ToolsView = {
   monthlyTotalYen: number;
   /** 月額が未入力の契約中ツール数。合計が過少に見えるのを防ぐため出す */
   monthlyUnknown: number;
+  /**
+   * 自社既存の共用資産の件数。
+   * ★コスパ判定の対象外だが、**止まれば影響する**ので一覧には残す。
+   *   合計から除いた事実を件数で出さないと「安く見える」だけになる。
+   */
+  sharedCount: number;
   overdueCount: number;
   /**
    * ★判定期日そのものが未設定の件数。
@@ -298,6 +306,7 @@ export async function getTools(now: Date = new Date()): Promise<ToolsView> {
     // ★月額未入力を黙って0円として合計すると「安く見える」。件数を別に出す
     monthlyUnknown: paying.filter((t) => t.billingType === "monthly" && t.monthlyYen === null)
       .length,
+    sharedCount: view.filter((t) => t.billingType === "shared" && t.state !== "stopped").length,
     overdueCount: view.filter((t) => t.overdue).length,
     noDueDateCount: paying.filter((t) => t.decideBy === null).length,
     // ★次回の実行ぶんに足りないもの。「残高がある」と「次回動く」は別

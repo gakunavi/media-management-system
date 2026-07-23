@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { ToolRow } from "@/lib/tools";
 import { BILLING_LABEL, TOOL_STATE_LABEL } from "@/lib/tools";
-import { decideTool, upsertTool } from "./actions";
+import { decideTool, upsertTool, deleteTool } from "./actions";
 
 const STATE_STYLE: Record<string, string> = {
   active: "bg-[var(--ok)]/12 text-[#1a7a2e]",
@@ -24,6 +24,9 @@ export function ToolList({ rows }: { rows: ToolRow[] }) {
   const [adding, setAdding] = useState(false);
   const [deciding, setDeciding] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   return (
     <>
@@ -71,7 +74,91 @@ export function ToolList({ rows }: { rows: ToolRow[] }) {
                   <span className="text-[11px] text-[var(--faint)]">/月</span>
                 )}
               </span>
+
+              {/* 右上の3点メニュー（編集・削除） */}
+              <div className="relative">
+                <button
+                  aria-label="操作"
+                  onClick={() => setMenuOpen(menuOpen === t.id ? null : t.id)}
+                  className="rounded px-1.5 py-0.5 text-[14px] leading-none text-[var(--muted)] hover:bg-[var(--panel-2)]"
+                >
+                  ⋯
+                </button>
+                {menuOpen === t.id && (
+                  <div className="absolute right-0 top-6 z-10 w-32 overflow-hidden rounded-md border border-[var(--border-strong)] bg-[var(--panel)] shadow-lg">
+                    <button
+                      onClick={() => {
+                        setEditing(t.id);
+                        setMenuOpen(null);
+                      }}
+                      className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-[var(--panel-2)]"
+                    >
+                      編集
+                    </button>
+                    <button
+                      onClick={() => {
+                        setConfirmDelete(t.id);
+                        setMenuOpen(null);
+                      }}
+                      className="block w-full px-3 py-1.5 text-left text-[12px] text-[var(--bad)] hover:bg-[var(--panel-2)]"
+                    >
+                      削除
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
+
+            {/* ★削除は確認してから。誤って消すと目的や判定の履歴ごと消える */}
+            {confirmDelete === t.id && (
+              <div className="mb-2 rounded-md border border-[var(--bad)]/40 bg-[var(--bad)]/[0.06] px-3 py-2 text-[12px]">
+                <p className="text-[var(--bad)]">
+                  「{t.name}」を削除しますか。目的・期待・判定の記録も消えます。
+                  <br />
+                  ★<strong>使わなくなっただけなら「編集」で状態を「停止」に</strong>してください。
+                  削除すると過去の月額の推移からも消え、実際より安かったことになります。
+                </p>
+                <div className="mt-1.5 flex gap-2">
+                  <button
+                    disabled={pending}
+                    onClick={() =>
+                      start(async () => {
+                        const r = await deleteTool(t.id);
+                        setToast(r.ok ? { msg: r.message, ok: true } : { msg: r.error, ok: false });
+                        setConfirmDelete(null);
+                      })
+                    }
+                    className="rounded-md bg-[var(--bad)] px-3 py-1 text-[12px] font-medium text-white disabled:opacity-40"
+                  >
+                    削除する
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(null)}
+                    className="rounded-md border border-[var(--border-strong)] px-3 py-1 text-[12px]"
+                  >
+                    やめる
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {editing === t.id && (
+              <div className="mb-2">
+                <ToolForm
+                  initial={t}
+                  onDone={(m, ok) => {
+                    setToast({ msg: m, ok });
+                    if (ok) setEditing(null);
+                  }}
+                />
+                <button
+                  onClick={() => setEditing(null)}
+                  className="text-[12px] text-[var(--muted)] hover:underline"
+                >
+                  編集をやめる
+                </button>
+              </div>
+            )}
 
             <p className="text-[12px] leading-relaxed text-[var(--muted)]">
               <strong className="text-[var(--ink)]">目的:</strong> {t.purpose}
@@ -197,20 +284,31 @@ export function ToolList({ rows }: { rows: ToolRow[] }) {
   );
 }
 
-function ToolForm({ onDone }: { onDone: (msg: string, ok: boolean) => void }) {
+/** Date → input[type=date] の値 */
+const dateValue = (d: Date | null) =>
+  d ? new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10) : "";
+
+function ToolForm({
+  onDone,
+  initial,
+}: {
+  onDone: (msg: string, ok: boolean) => void;
+  /** 渡すと編集モードになる（未指定なら新規登録） */
+  initial?: ToolRow;
+}) {
   const [pending, start] = useTransition();
   const [f, setF] = useState({
-    name: "",
-    vendor: "",
-    plan: "",
-    billingType: "monthly",
-    monthlyYen: "",
-    state: "active",
-    purpose: "",
-    expectedOutcome: "",
-    decideBy: "",
+    name: initial?.name ?? "",
+    vendor: initial?.vendor ?? "",
+    plan: initial?.plan ?? "",
+    billingType: initial?.billingType ?? "monthly",
+    monthlyYen: initial?.monthlyYen != null ? String(initial.monthlyYen) : "",
+    state: initial?.state ?? "active",
+    purpose: initial?.purpose ?? "",
+    expectedOutcome: initial?.expectedOutcome ?? "",
+    decideBy: dateValue(initial?.decideBy ?? null),
     vendorKey: "",
-    note: "",
+    note: initial?.note ?? "",
   });
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setF({ ...f, [k]: e.target.value });
@@ -231,6 +329,7 @@ function ToolForm({ onDone }: { onDone: (msg: string, ok: boolean) => void }) {
             <option value="monthly">月額</option>
             <option value="prepaid">前払い/従量</option>
             <option value="free">無料</option>
+            <option value="shared">自社既存（追加コストなし）</option>
           </select>
         </Field>
         <Field label="月額（円）">
@@ -277,12 +376,13 @@ function ToolForm({ onDone }: { onDone: (msg: string, ok: boolean) => void }) {
       <button
         disabled={pending || !f.name.trim() || !f.purpose.trim()}
         onClick={() => start(async () => {
-          const r = await upsertTool(f);
+          // ★編集時は id を渡す。渡さないと同名で作れず一意制約に当たる
+          const r = await upsertTool(initial ? { ...f, id: initial.id } : f);
           onDone(r.ok ? r.message : r.error, r.ok);
         })}
         className="mt-3 rounded-md bg-[var(--accent)] px-4 py-1.5 text-[12px] font-medium text-white disabled:opacity-40"
       >
-        保存
+        {initial ? "更新" : "保存"}
       </button>
     </div>
   );

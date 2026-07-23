@@ -113,3 +113,36 @@ export async function decideTool(
   revalidatePath("/");
   return { ok: true, message: `「${t.name}」の判定を記録しました` };
 }
+
+/**
+ * ツールを削除する。
+ *
+ * ★実績（月額の推移）が残っているものは削除させない。
+ *   消すと推移から過去の月まで消え、「先月は安かった」という嘘の推移になる。
+ *   使わなくなったものは **state=stopped**（停止）にする。それが正しい記録。
+ * ★誤登録をすぐ消せる道は残す（実績が無いものだけ）。
+ */
+export async function deleteTool(id: string): Promise<Result> {
+  const gate = await requireOwner();
+  if (gate) return gate;
+
+  const tool = await prisma.toolSubscription.findUnique({
+    where: { id },
+    select: { name: true, _count: { select: { costs: true } } },
+  });
+  if (!tool) return { ok: false, error: "見つかりません" };
+
+  if (tool._count.costs > 0) {
+    return {
+      ok: false,
+      error:
+        `「${tool.name}」は月額の記録が${tool._count.costs}件あるため削除できません。` +
+        "使わなくなったなら「停止」にしてください（削除すると過去の推移まで消え、実際より安かったことになります）",
+    };
+  }
+
+  await prisma.toolSubscription.delete({ where: { id } });
+  revalidatePath("/costs");
+  revalidatePath("/");
+  return { ok: true, message: `「${tool.name}」を削除しました` };
+}
