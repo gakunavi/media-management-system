@@ -70,11 +70,21 @@ def nid(p: str) -> str:
 
 
 def bust(url: str, token: str) -> str:
-    """静的キャッシュを迂回する。★元URLは変えない（記録は元URLで残す）"""
+    """静的キャッシュを迂回する。★元URLは変えない（記録は元URLで残す）
+
+    ★日本語パスを percent-encode する。しないと urllib が UnicodeEncodeError で落ち、
+      `/サービス/` のような**実在するページ**を「取得失敗」と誤判定していた。
+      ホストは IDNA。
+    """
     p = urlsplit(url)
     q = dict(parse_qsl(p.query, keep_blank_values=True))
     q["_mmsck"] = token
-    return urlunsplit((p.scheme, p.netloc, p.path, urlencode(q), p.fragment))
+    path = urllib.parse.quote(p.path, safe="/%")
+    try:
+        host = p.netloc.encode("idna").decode("ascii")
+    except Exception:  # noqa: BLE001
+        host = p.netloc
+    return urlunsplit((p.scheme, host, path, urlencode(q), p.fragment))
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -147,7 +157,7 @@ def main() -> int:
             #   ・?post_type=  … WPのプレビューURL。canonical ではない
             #   ・http で始まらない … 過去の取り込みで本文が混入した壊れた行
             cur.execute(
-                'SELECT id, url FROM "ContentItem"'
+                'SELECT id, url, type FROM "ContentItem"'
                 " WHERE url IS NOT NULL AND url <> ''"
                 "   AND url LIKE 'http%'"
                 "   AND url NOT LIKE '%?post_type=%'"
@@ -159,12 +169,20 @@ def main() -> int:
 
         log(f"対象 {len(targets)} URL（301元は除外）")
         with ThreadPoolExecutor(max_workers=CONCURRENCY) as ex:
-            results = list(ex.map(lambda t: (t[0], trace(t[1], token)), targets))
+            results = list(ex.map(lambda t: (t[0], t[2], trace(t[1], token)), targets))
 
-        bad = [(cid, r) for cid, r in results if r["loop"] or r["finalStatus"] != 200 or r["hops"] > OK_MAX_HOPS]
-        loops = [r for _c, r in results if r["loop"]]
-        dead = [r for _c, r in results if not r["loop"] and r["finalStatus"] != 200]
-        slow = [r for _c, r in results if not r["loop"] and r["finalStatus"] == 200 and r["hops"] > OK_MAX_HOPS]
+        def ng(r: dict) -> bool:
+            return r["loop"] or r["finalStatus"] != 200 or r["hops"] > OK_MAX_HOPS
+
+        # ★「直すべきもの」と「経年で消えた旧URL」を分ける。
+        #   分けないと毎日同じ26件が並び、本物の異常が埋もれて誰も見なくなる（§4-43）。
+        #   ・article        … 現役の記事。404やループは**障害**
+        #   ・article_unlinked / site_page … 実測（GSC）があるだけの旧URL。
+        #     404 は経年の結果で正常。ただし**ループと多段は障害**（設定ミスなので直せる）
+        urgent = [(c, t, r) for c, t, r in results
+                  if ng(r) and (t == "article" or r["loop"] or (r["finalStatus"] == 200 and r["hops"] > OK_MAX_HOPS))]
+        aged = [(c, t, r) for c, t, r in results if ng(r) and (c, t, r) not in urgent]
+        loops = [r for _c, _t, r in results if r["loop"]]
 
         with conn.cursor() as cur:
             cur.executemany(
@@ -179,7 +197,7 @@ def main() -> int:
                 [
                     (nid("uh"), cid, r["url"], r["finalStatus"], r["hops"], r["loop"],
                      json.dumps(r["chain"], ensure_ascii=False), TODAY, now_ts, now_ts)
-                    for cid, r in results
+                    for cid, _t, r in results
                 ],
             )
             # 計測開始を1度だけ記録する（§3）
@@ -193,12 +211,16 @@ def main() -> int:
                 )
         conn.commit()
 
-    log(f"★ループ {len(loops)} / 到達不可 {len(dead)} / 2ホップ以上 {len(slow)}（合計 {len(bad)}）")
-    for r in (loops + dead + slow)[:15]:
-        mark = "ループ" if r["loop"] else (f"HTTP{r['finalStatus']}" if r["finalStatus"] != 200 else f"{r['hops']}ホップ")
-        log(f"  [{mark}] {r['url']}")
-        if r["loop"] or r["finalStatus"] != 200:
-            log(f"        経路: {' → '.join(x.split('asset-support.co.jp')[-1] for x in r['chain'][:5])}")
+    def mark(r: dict) -> str:
+        if r["loop"]:
+            return "ループ"
+        return f"HTTP{r['finalStatus']}" if r["finalStatus"] != 200 else f"{r['hops']}ホップ"
+
+    log(f"★要対応 {len(urgent)} 件（うちループ {len(loops)}）")
+    for _c, t, r in urgent[:15]:
+        log(f"  [{mark(r)}] {t} {r['url']}")
+        log(f"        経路: {' → '.join(x.split('asset-support.co.jp')[-1] for x in r['chain'][:5])}")
+    log(f"　経年で消えた旧URL（正常）: {len(aged)} 件 ※実測があるだけで現役の記事ではない")
     return 0
 
 
