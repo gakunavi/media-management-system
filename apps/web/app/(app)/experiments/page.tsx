@@ -3,6 +3,7 @@ import { getInterventions } from "@/lib/interventions";
 import { ActionCard, RunOperatorButton } from "./action-card";
 import { runOperator } from "./actions";
 import { ManualRecord } from "./manual-record";
+import { InterventionTable } from "./intervention-table";
 
 // 施策・PDCA（設計書 §4.1 段5「次の一手」・§5.2 立案・§5.3 判定）
 export const dynamic = "force-dynamic";
@@ -10,13 +11,6 @@ export const dynamic = "force-dynamic";
 const jaDate = (d: Date | null) =>
   d ? d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" }) : "—";
 
-const VERDICT_LABEL: Record<string, { label: string; cls: string }> = {
-  pending: { label: "判定待ち", cls: "bg-[var(--panel-2)] text-[var(--muted)]" },
-  positive: { label: "効果あり", cls: "bg-[var(--ok)]/12 text-[#1a7a2e]" },
-  neutral: { label: "有意差なし", cls: "bg-[var(--panel-2)] text-[var(--muted)]" },
-  negative: { label: "悪化", cls: "bg-[var(--bad)]/12 text-[var(--bad)]" },
-  inconclusive: { label: "判定不能", cls: "bg-[var(--warn)]/15 text-[#9a6a00]" },
-};
 
 export default async function ExperimentsPage() {
   const [proposed, stats, interventions] = await Promise.all([
@@ -69,60 +63,7 @@ export default async function ExperimentsPage() {
         )}
       </section>
 
-      {/* 実行済み（Intervention）と判定 */}
-      <section>
-        <h2 className="mb-3 text-[15px] font-semibold">
-          実行済みの打ち手と効果判定（{interventions.length}件）
-        </h2>
-        {interventions.length === 0 ? (
-          <p className="text-[13px] text-[var(--faint)]">まだありません。</p>
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)]">
-            <div className="overflow-x-auto">
-              <table className="w-full text-[13px]">
-                <thead>
-                  <tr className="border-b border-[var(--border)] bg-[var(--panel-2)] text-left text-[12px] text-[var(--muted)]">
-                    <th className="px-3 py-2 font-medium">適用日</th>
-                    <th className="px-3 py-2 font-medium">打ち手</th>
-                    <th className="px-3 py-2 font-medium">対象</th>
-                    <th className="px-3 py-2 font-medium">判定日</th>
-                    <th className="px-3 py-2 font-medium">判定</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {interventions.map((iv) => {
-                    const v = VERDICT_LABEL[iv.verdict] ?? VERDICT_LABEL.pending;
-                    return (
-                      <tr key={iv.id} className="border-b border-[var(--border)] last:border-0">
-                        <td className="whitespace-nowrap px-3 py-2.5">{jaDate(iv.appliedAt)}</td>
-                        <td className="px-3 py-2.5">{iv.type}</td>
-                        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[12px]">
-                          {iv.contentExternalId ?? "—"}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 text-[var(--muted)]">
-                          {jaDate(iv.evaluateAt)}
-                          {iv.due && iv.verdict === "pending" && (
-                            <span className="ml-1 text-[var(--warn)]">●判定期日</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${v.cls}`}>
-                            {v.label}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-        <p className="mt-3 text-[12px] text-[var(--faint)]">
-          判定は適用後28日の実測 −
-          適用前28日 − 対照群トレンドで自動算出（§5.3）。自動判定ジョブは P8 で worker に登録。
-        </p>
-      </section>
+      <InterventionTable rows={interventions} />
     </div>
   );
 }

@@ -3,8 +3,9 @@
 // 段5「次の一手」の承認/却下/差戻し ＋ 立案の実行（設計書 §5.2 / §5.3 / §5.6）
 import { revalidatePath } from "next/cache";
 import { prisma, type Prisma } from "@mms/db";
-import { currentUser } from "@/lib/session";
+import { currentUser, isOwner } from "@/lib/session";
 import { generateProposals, JUDGE_DAYS } from "@/lib/operator";
+import { postponeIntervention } from "@/lib/interventions";
 
 const DAY = 86400000;
 
@@ -255,4 +256,25 @@ export async function recordManualIntervention(input: {
       ? `記録しました。ただし ${externalId} は適用前28日の実測が1件も無く、このままでは ${evaluateAt.toLocaleDateString("ja-JP")} の判定が inconclusive になります（GSCに現れていない記事です）`
       : `記録しました。${evaluateAt.toLocaleDateString("ja-JP")} に効果を自動判定します（適用前28日: clicks ${b.clicks ?? 0} / 掲載順位 ${b.position ?? "—"}）`,
   };
+}
+
+/**
+ * 判定日を延ばす。
+ * ★理由を必須にする。理由なく延ばせると、都合の悪い判定を永久に先送りできる。
+ */
+export async function postpone(
+  id: string,
+  date: string,
+  reason: string,
+): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  if (!(await isOwner())) return { ok: false, error: "権限がありません（owner のみ）" };
+  const r = reason.trim();
+  if (r.length < 5) return { ok: false, error: "延期の理由を書いてください（5文字以上）" };
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return { ok: false, error: "日付が不正です" };
+
+  const res = await postponeIntervention(id, d, r);
+  if (!res.ok) return res;
+  revalidatePath("/experiments");
+  return { ok: true, message: `判定日を ${date} に延ばしました` };
 }
