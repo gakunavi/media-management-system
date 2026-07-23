@@ -780,6 +780,12 @@ model ContentItem {
   category      String?
   /// ★KeywordAssignment(role=main) と二重の正になりうる（§13 記録済）
   mainKeywordId String?
+  /// 301 の転送先（2026-07-23 追加）。
+  /// ★同じ内容が複数URLに残るのが常態だと分かった。3件連続で踏んだ:
+  ///   ART-006→ART-142 ／ ART-105→ART-189 ／ chushokigyo-…→ART-142。
+  ///   これを記録しないと **301元が「競合記事」として集計に混ざる**。
+  ///   実際「即時償却」のカニバリ12記事に、実体の無い301元が2本入っていた。
+  redirectsToId String?
   charCount     Int?
   eyecatchType  String?
   eyecatchColor String?
@@ -863,6 +869,8 @@ model ContentItem {
   provenances         GenerationProvenance[]
   versions            ContentVersion[]
   queries             ContentQuery[]
+  redirectsTo         ContentItem?  @relation("ContentRedirect", fields: [redirectsToId], references: [id])
+  redirectedFrom      ContentItem[] @relation("ContentRedirect")
 
   /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
   createdAt DateTime @default(now())
@@ -876,6 +884,7 @@ model ContentItem {
   @@index([reviewState, nextReviewDue])
   @@index([publishedAt])
   @@index([mainKeywordId])
+  @@index([redirectsToId])
 }
 
 /// §3 ══3. ★リライト/レビューの履歴（いつ何を見て何をしたか）

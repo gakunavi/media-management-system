@@ -136,8 +136,15 @@ export async function getQueryInsights(): Promise<QueryInsights> {
     };
   }
 
+  // ★301元は競合ではない。実体が無いURLを「同じ語で戦っている記事」に数えると
+  //   カニバリの件数が水増しされ、直しようのないものが並ぶ。
+  //   実際「即時償却」のカニバリ12記事に、実体の無い301元が2本入っていた。
   const rows = (await prisma.contentQuery.findMany({
-    where: { periodEnd: latest.periodEnd, periodStart: latest.periodStart },
+    where: {
+      periodEnd: latest.periodEnd,
+      periodStart: latest.periodStart,
+      contentItem: { redirectsToId: null },
+    },
     select: {
       query: true,
       clicks: true,
@@ -272,6 +279,7 @@ export async function getCtrFailures(): Promise<Map<string, CtrFailure>> {
       position: { gte: CTR_FAIL_MIN_POSITION, lte: CTR_FAIL_MAX_POSITION },
       contentItem: {
         url: { not: null },
+        redirectsToId: null, // 301元は直す実体が無い
         // Intervention が無い記事のための保険
         OR: [{ lastReviewedAt: null }, { lastReviewedAt: { lt: cooldown } }],
       },
@@ -308,6 +316,7 @@ export async function getCtrFailures(): Promise<Map<string, CtrFailure>> {
         periodEnd: latest.periodEnd,
         query: { in: queries },
         impressions: { gte: RIVAL_MIN_IMPRESSIONS },
+        contentItem: { redirectsToId: null },
       },
       orderBy: { impressions: "desc" },
       select: {
