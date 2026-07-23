@@ -68,6 +68,15 @@ export function ActionCard({ action }: { action: ProposedAction }) {
             {action.contentExternalId}
           </Link>
         )}
+        {/* ★「どれくらい効きそうか」を数字で出す。
+            表示回数が母数なので、少ないものは直しても動く余地が無い */}
+        {action.impressions28 !== null && (
+          <span className="tnum text-[11px] text-[var(--muted)]">
+            28日 表示 {action.impressions28.toLocaleString("ja-JP")}
+            {action.clicks28 !== null && ` / クリック ${action.clicks28}`}
+            {action.avgPosition !== null && ` / ${action.avgPosition.toFixed(1)}位`}
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-1">
           {action.impacts.map((im) => (
             <span
@@ -79,6 +88,32 @@ export function ActionCard({ action }: { action: ProposedAction }) {
           ))}
         </div>
       </div>
+
+      {/* ★同じ記事に重ねて手を入れない。どちらの効果か分からなくなる */}
+      {action.blockedBy && (
+        <p className="mb-1.5 rounded bg-[var(--warn)]/[0.12] px-2 py-1 text-[11px] text-[#9a6a00]">
+          ★この記事は <strong>{action.blockedBy.type}</strong> の判定待ち（
+          {action.blockedBy.evaluateAt.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" })}）。
+          いま重ねると<strong>どちらの効果か分からなくなります</strong>。判定後に。
+        </p>
+      )}
+      {/* ★指名検索が主なものは、タイトルを直してもクリックは増えない（§4-24） */}
+      {!action.blockedBy &&
+        action.navigationalShare !== null &&
+        action.navigationalShare >= 0.5 && (
+          <p className="mb-1.5 rounded bg-[var(--warn)]/[0.12] px-2 py-1 text-[11px] text-[#9a6a00]">
+            ★表示の{Math.round(action.navigationalShare * 100)}%が「国税庁 …」型の
+            <strong>指名検索</strong>。利用者は公式ページを開きに来ているので、
+            <strong>タイトルを直してもクリックは増えません</strong>。
+          </p>
+        )}
+      {!action.blockedBy && action.weakEvidence && (
+        <p className="mb-1.5 rounded bg-[var(--panel-2)] px-2 py-1 text-[11px] text-[var(--muted)]">
+          ★根拠が弱い（28日の表示{" "}
+          {action.impressions28 === null ? "不明" : action.impressions28}）。
+          表示が少ないと順位もCTRも偶然で動くため、直しても<strong>効果を測れません</strong>。
+        </p>
+      )}
 
       <div className="text-[13px] font-medium">{action.title}</div>
       <p className="mt-1 text-[12px] leading-relaxed text-[var(--muted)]">{action.rationale}</p>
