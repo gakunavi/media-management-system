@@ -336,6 +336,35 @@ def main() -> int:
             log(f"DB 接続待ち: {e}")
             time.sleep(3)
 
+    # ★起動時に running のまま残った JobRun を確定させる（2026-07-23 追加）
+    #
+    #   worker を再起動（再ビルド・デプロイ）すると、実行中のジョブは
+    #   finish_run を通らずに消える。JobRun は running のまま残り続け、
+    #   段7のジョブ健全性では「実行中」に見えたままになる。
+    #   実際に aio-warm-biweekly が3時間以上 running のまま残った。
+    #
+    #   ★worker は1プロセス前提。複数走らせるなら、他プロセスの実行中を
+    #     殺さないように「自分が起動する前に始まったもの」だけに絞る必要がある。
+    try:
+        with psycopg.connect(DATABASE_URL) as c, c.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE "JobRun"
+                   SET "status" = 'failed',
+                       "finishedAt" = now(),
+                       "log" = COALESCE("log", '') ||
+                               E'\n[worker] 起動時に running のまま残っていたため failed に確定。'
+                               'worker の再起動で打ち切られた可能性が高い',
+                       "updatedAt" = now()
+                 WHERE "status" = 'running'
+                """
+            )
+            if cur.rowcount:
+                log(f"★running のまま残っていた JobRun {cur.rowcount}件を failed に確定しました")
+            c.commit()
+    except psycopg.Error as e:
+        log(f"孤児 JobRun の掃除に失敗（続行します）: {e}")
+
     while not _shutdown:
         try:
             with psycopg.connect(DATABASE_URL) as conn:

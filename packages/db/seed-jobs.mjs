@@ -44,12 +44,24 @@ try {
 }
 // ★AIO引用率の計測（2026-07-23 Notion から移設）。
 //   ChatGPT / Gemini に質問して自社が引用されるかを測る。
-//   どちらか一方でも鍵があれば動かす（片方が落ちても計測は続けたい）。
+//
+// ★鍵があっても「使えるか」は別問題（2026-07-23 実際に起きた）。
+//   OpenAI のクレジットを止めている間、ジョブは毎回 429 で失敗し、
+//   hot は 60分タイムアウト、cold は12連続失敗で中断していた。
+//   失敗が毎週積み上がると、段7の異常通知が無視されるようになり
+//   **本当の異常を見落とす**。鳴らないようにするのではなく、
+//   動かせない間は止めておくのが正しい。
+//
+//   ★Gemini だけで回す選択もあるが、実測で Gemini は
+//     1382試行 0ヒット（chatgpt は 1966試行 71ヒット）。
+//     Gemini 単独では測る意味がないので、OpenAI が使えることを条件にする。
+//
+//   再開するときは .env の MMS_AIO_ENABLED を 1 にして npm run seed:jobs。
 let aioReady = false;
 try {
   const envText = readFileSync(path.resolve(process.cwd(), "../../.env"), "utf8");
   aioReady =
-    /^OPENAI_API_KEY=.+$/m.test(envText) || /^GEMINI_API_KEY=.+$/m.test(envText);
+    /^OPENAI_API_KEY=.+$/m.test(envText) && /^MMS_AIO_ENABLED=1$/m.test(envText);
 } catch {
   aioReady = false;
 }
@@ -115,7 +127,7 @@ const JOBS = [
     enabled: aioReady,
     note: aioReady
       ? "AIO計測(Hot): ChatGPT/Gemini に質問し引用率を記録。終わったらTier昇降格"
-      : "AIO計測(Hot)【停止中】.env に OPENAI_API_KEY か GEMINI_API_KEY を設定して再実行",
+      : "AIO計測(Hot)【停止中】.env に MMS_AIO_ENABLED=1 を設定して再実行（OpenAI クレジットが要る）",
   },
   {
     name: "aio-warm-biweekly",
@@ -128,7 +140,7 @@ const JOBS = [
     enabled: aioReady,
     note: aioReady
       ? "AIO計測(Warm): 隔週相当。60日 baseline 期間の記事が対象"
-      : "AIO計測(Warm)【停止中】.env に OPENAI_API_KEY か GEMINI_API_KEY を設定して再実行",
+      : "AIO計測(Warm)【停止中】.env に MMS_AIO_ENABLED=1 を設定して再実行（OpenAI クレジットが要る）",
   },
   {
     name: "aio-cold-monthly",
@@ -139,7 +151,7 @@ const JOBS = [
     enabled: aioReady,
     note: aioReady
       ? "AIO計測(Cold): 月次。chatgpt 1試行のみ（費用を抑える）"
-      : "AIO計測(Cold)【停止中】.env に OPENAI_API_KEY か GEMINI_API_KEY を設定して再実行",
+      : "AIO計測(Cold)【停止中】.env に MMS_AIO_ENABLED=1 を設定して再実行（OpenAI クレジットが要る）",
   },
   {
     name: "line-followers-daily",
