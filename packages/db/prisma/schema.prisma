@@ -632,6 +632,7 @@ model Business {
   adSimulations   AdSimulation[]
   landingPages    LandingPage[]
   toolSubscriptions ToolSubscription[]
+  toolCosts         ToolCostMonthly[]
 
   /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
   createdAt DateTime @default(now())
@@ -2550,6 +2551,37 @@ model ProductionCost {
 ///   分解不能で、算出すると根拠のない数字が出る。代わりに導入時に
 ///   purpose / expectedOutcome / decideBy を書き、期日に人が判定する
 ///   （既存の Action → Intervention → Learning と同じ形）。
+/// ツールの月額を月次で残す（2026-07-24 追加）
+///
+/// ★なぜ要るか
+///   「今いくら払っているか」は `ToolSubscription.monthlyYen` で分かるが、
+///   **増えているのか減っているのか**が分からない。ツールは足すのは簡単で
+///   止めるのは忘れるので、合計は放っておくと単調に増える。
+///
+/// ★過去は埋めない（§3）。計測開始より前の月は「未計測」であって0円ではない。
+///   遡って埋めると「先月まで無料だった」という嘘の推移になる。
+model ToolCostMonthly {
+  id         String   @id @default(cuid())
+  businessId String
+  /// "YYYY-MM"
+  period     String
+  toolId     String?
+  /// そのツールのその月の月額（円）。前払い/従量は null（使った分は別）
+  monthlyYen Decimal? @db.Decimal(12, 2)
+  /// その月の状態（active / trial / considering …）。検討中の見込みを合計と分けるため
+  state      ToolState
+
+  business Business          @relation(fields: [businessId], references: [id])
+  tool     ToolSubscription? @relation(fields: [toolId], references: [id])
+
+  /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([period, toolId])
+  @@index([businessId, period])
+}
+
 model ToolSubscription {
   id         String @id @default(cuid())
   businessId String
@@ -2587,6 +2619,7 @@ model ToolSubscription {
   note String?
 
   business Business @relation(fields: [businessId], references: [id])
+  costs    ToolCostMonthly[]
 
   /// §9-D11: 監査・障害調査用のタイムスタンプ
   createdAt DateTime @default(now())
