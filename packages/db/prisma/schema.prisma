@@ -2566,8 +2566,18 @@ model ToolCostMonthly {
   /// "YYYY-MM"
   period     String
   toolId     String?
-  /// そのツールのその月の月額（円）。前払い/従量は null（使った分は別）
+  /// そのツールのその月の固定月額（円）。前払い/従量は null（使った分は variableYen）
   monthlyYen Decimal? @db.Decimal(12, 2)
+  /// その月に**実際に使った**額（円換算・2026-07-24 追加）。
+  /// ★前払い/従量は「契約額」が無いので、残高の減りから積む。
+  ///   固定費と混ぜない。合計だけ見ると、使っていないのに高いのか
+  ///   使った結果高いのかが区別できない。
+  variableYen      Decimal? @db.Decimal(12, 2)
+  /// 換算前の実額と通貨（DataForSEO は USD）。★為替で歪むので原単位も残す
+  variableAmount   Decimal? @db.Decimal(14, 4)
+  variableCurrency String?
+  /// 直近に確認した残高。翌日の差分から消費を求めるために持つ
+  balanceSnapshot  Decimal? @db.Decimal(14, 4)
   /// その月の状態（active / trial / considering …）。検討中の見込みを合計と分けるため
   state      ToolState
 

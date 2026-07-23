@@ -10,6 +10,8 @@
 //   投稿が出ていることと、その結果が測れていることは別の障害。
 import Link from "next/link";
 import type { JobHealth, MetricFreshness } from "@/lib/dashboard";
+import type { CostSummary } from "@/lib/tools";
+import { NOT_MEASURED } from "@mms/shared";
 
 const jaDate = (d: Date | null) =>
   d
@@ -46,6 +48,103 @@ function Box({ alert, title, children }: { alert: Alert; title: string; children
   );
 }
 
+/**
+ * コスト。
+ *
+ * ★なぜダッシュボードに出すか（2026-07-24 石井さん指摘）
+ *   /costs を開かないと見えなかった。開かなければ気づかないので、
+ *   「ツールは足すのは簡単で止めるのは忘れる」が起きる。
+ *
+ * ★1件あたりの獲得コストは出さない。ツール費 ÷ 問い合わせ件数 は
+ *   **人件費と外注費を含まない**ので、獲得単価と読むと桁が2つ違う判断になる。
+ *   出すのは「いくら払っているか」「増えていないか」「止まりそうか」の3つ。
+ */
+function CostPanel({ cost }: { cost: CostSummary }) {
+  const diff = cost.prevMonthYen === null ? null : cost.monthlyYen - cost.prevMonthYen;
+  return (
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
+      <div className="mb-3 flex items-baseline gap-2.5">
+        <h2 className="text-[15px] font-semibold">コスト</h2>
+        <Link href="/costs" className="ml-auto text-[12px] text-[var(--accent)] hover:underline">
+          コスト画面 →
+        </Link>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div className="rounded-lg border border-[var(--border)] px-3 py-2.5">
+          <div className="text-[11px] text-[var(--muted)]">今月のメディア費用</div>
+          <div className="tnum mt-0.5 text-xl font-bold leading-none">
+            ¥{(cost.monthlyYen + cost.variableYen).toLocaleString("ja-JP")}
+          </div>
+          <div className="mt-0.5 text-[10px] text-[var(--muted)]">
+            固定 ¥{cost.monthlyYen.toLocaleString("ja-JP")} ＋ 使った分 ¥
+            {cost.variableYen.toLocaleString("ja-JP")}
+          </div>
+          <div className="mt-1 text-[10px] text-[var(--faint)]">
+            {diff === null ? (
+              <>前月は{NOT_MEASURED}（記録開始前）</>
+            ) : diff === 0 ? (
+              "前月から変化なし"
+            ) : (
+              <span className={diff > 0 ? "text-[var(--warn)]" : "text-[#1a7a2e]"}>
+                前月比 {diff > 0 ? "+" : ""}
+                {diff.toLocaleString("ja-JP")}円
+              </span>
+            )}
+            ・自社既存（会社が元々払っているもの）は含まない
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-[var(--border)] px-3 py-2.5">
+          <div className="text-[11px] text-[var(--muted)]">検討中を全部入れると</div>
+          <div className="tnum mt-0.5 text-xl font-bold leading-none">
+            ¥{cost.potentialYen.toLocaleString("ja-JP")}
+          </div>
+          <div className="mt-1 text-[10px] text-[var(--faint)]">
+            使用中 {cost.toolCount}件
+            {cost.potentialYen > cost.monthlyYen && "・検討中を契約した場合の見込み"}
+          </div>
+        </div>
+
+        <div
+          className={`rounded-lg border px-3 py-2.5 ${
+            cost.noDueDateCount > 0
+              ? "border-[var(--warn)]/40 bg-[var(--warn)]/[0.08]"
+              : "border-[var(--border)]"
+          }`}
+        >
+          <div className="text-[11px] text-[var(--muted)]">見直し予定日</div>
+          <div className="tnum mt-0.5 text-xl font-bold leading-none">
+            {cost.noDueDateCount > 0 ? `未設定 ${cost.noDueDateCount}件` : "設定済み"}
+          </div>
+          <div className="mt-1 text-[10px] text-[var(--faint)]">
+            {cost.noDueDateCount > 0
+              ? "★続けるか止めるかを決める日が未定＝止めどきを判断できない"
+              : "期日に判定する"}
+          </div>
+        </div>
+      </div>
+
+      {cost.runningOut.length > 0 && (
+        <div className="mt-2 rounded-lg border border-[var(--bad)]/40 bg-[var(--bad)]/[0.06] px-3 py-2.5 text-[13px] text-[var(--bad)]">
+          {cost.runningOut.map((t) => (
+            <div key={t.name}>
+              {t.name}: 残高 {t.balance}
+              {t.currency} — 次回の実行分に足りません
+              {t.jobs.length > 0 && `（${t.jobs.join(" / ")} が途中で止まります）`}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="mt-2 text-[11px] text-[var(--faint)]">
+        ★<strong>1件あたりの獲得コストは出しません</strong>。ツール費だけでは
+        人件費・外注費が抜けており、獲得単価として読むと判断を誤ります。
+      </p>
+    </section>
+  );
+}
+
 /** 上部の警告バッジ用。赤/黄の項目だけを短文で返す */
 export function healthAlerts(health: JobHealth, stale: MetricFreshness[]): string[] {
   const out: string[] = [];
@@ -68,15 +167,19 @@ export function healthAlerts(health: JobHealth, stale: MetricFreshness[]): strin
 export function HealthPanel({
   health,
   freshness,
+  cost,
 }: {
   health: JobHealth;
   freshness: MetricFreshness[];
+  cost: CostSummary;
 }) {
   const stale = freshness.filter((f) => f.alert !== "ok");
   const unused = freshness.filter((f) => !f.used);
 
   return (
     <section className="grid gap-4">
+      <CostPanel cost={cost} />
+
       <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
         <div className="mb-3 flex items-baseline gap-2.5">
           <span className="inline-flex h-5 items-center rounded-md bg-[var(--ink)] px-1.5 text-[11px] font-semibold text-white">

@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { NOT_MEASURED } from "@mms/shared";
 import { getTools, type ToolRow } from "@/lib/tools";
 import { ToolList } from "./tool-list";
+import { CostTrend } from "./cost-trend";
 
 // コスト管理（2026-07-21 追加）。
 // ★ROIは自動算出しない。ツール単位の売上寄与は分解不能で、算出すれば
@@ -19,6 +19,7 @@ export default async function CostsPage() {
     potentialMonthlyYen,
     trend,
     sharedCount,
+    variableThisMonthYen,
   } = await getTools();
 
   const active = rows.filter((t) => t.state === "active").length;
@@ -37,7 +38,12 @@ export default async function CostsPage() {
       </div>
 
       <RunningOutPanel rows={runningOut} />
-      <CostTrendPanel trend={trend} potential={potentialMonthlyYen} current={monthlyTotalYen} />
+      <CostTrend
+        trend={trend}
+        potential={potentialMonthlyYen}
+        current={monthlyTotalYen}
+        usdJpy={Number(process.env.MMS_USD_JPY ?? 150)}
+      />
 
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
         {/* ★¥0 を「無料で運用している」と読ませない。
@@ -45,13 +51,15 @@ export default async function CostsPage() {
         {/* ★出すのは「メディアのための追加コスト」。総支出ではない。
             自社既存（エックスサーバー等）はメディアのために契約したものではないので
             コスパ判定の対象にならない。ただし止まれば影響するので一覧には残す */}
+        {/* ★固定と変動を足した数字を出す。ただし内訳を必ず併記する。
+            合計だけだと「使っていないのに高い」と「使った結果高い」が区別できない */}
         <Stat
-          label="メディアのための月額"
-          value={`¥${monthlyTotalYen.toLocaleString("ja-JP")}`}
+          label="今月のメディア費用"
+          value={`¥${(monthlyTotalYen + variableThisMonthYen).toLocaleString("ja-JP")}`}
           hint={
             monthlyUnknown > 0
               ? `★月額未入力が${monthlyUnknown}件あり、実際はこれより高い`
-              : `前払い/従量${prepaid}件・自社既存${sharedCount}件は含まない`
+              : `固定 ¥${monthlyTotalYen.toLocaleString("ja-JP")} ＋ 使った分 ¥${variableThisMonthYen.toLocaleString("ja-JP")}（自社既存${sharedCount}件は除く）`
           }
           bad={monthlyUnknown > 0}
         />
@@ -123,77 +131,12 @@ export default async function CostsPage() {
  *   それが多いのか少ないのか分からない。実際は次回の実行に $0.24 かかるので
  *   **途中で止まる**。金額ではなく「あと何回動くか」「止まると何が測れなくなるか」を出す。
  */
-/**
- * 月額の推移と、検討中を入れたときの見込み。
- *
- * ★ツールは足すのは簡単で止めるのは忘れるので、合計は放っておくと単調に増える。
- *   「1つ足すくらい」の判断を積み重ねて気づけば倍になっている、を防ぐ。
- * ★計測開始より前の月は**未計測**であって0円ではない。描かない（§3）。
- */
-function CostTrendPanel({
-  trend,
-  potential,
-  current,
-}: {
-  trend: { period: string; activeYen: number; plannedYen: number; tools: number }[];
-  potential: number;
-  current: number;
-}) {
-  const max = Math.max(1, ...trend.map((t) => t.activeYen + t.plannedYen), potential);
-  return (
-    <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-4">
-      <div className="flex flex-wrap items-baseline gap-3">
-        <h2 className="text-[14px] font-semibold">固定月額の推移</h2>
-        {potential > current && (
-          <span className="text-[12px] text-[var(--muted)]">
-            検討中・トライアルを全部契約すると{" "}
-            <strong className="tnum text-[var(--warn)]">
-              ¥{potential.toLocaleString("ja-JP")}
-            </strong>
-            （いま ¥{current.toLocaleString("ja-JP")}）
-          </span>
-        )}
-      </div>
-      {trend.length === 0 ? (
-        <p className="mt-2 text-[13px] text-[var(--faint)]">
-          {NOT_MEASURED}（記録はこれから貯まります）
-        </p>
-      ) : (
-        <>
-          <div className="mt-3 flex items-end gap-3">
-            {trend.map((t) => {
-              const total = t.activeYen + t.plannedYen;
-              return (
-                <div key={t.period} className="flex flex-col items-center gap-1">
-                  <span className="tnum text-[11px] text-[var(--muted)]">
-                    ¥{total.toLocaleString("ja-JP")}
-                  </span>
-                  <div
-                    className="w-12 rounded-t bg-[var(--accent)]"
-                    style={{ height: `${Math.max(4, (total / max) * 64)}px` }}
-                  />
-                  <span className="text-[11px] text-[var(--faint)]">{t.period}</span>
-                  <span className="text-[10px] text-[var(--faint)]">{t.tools}件</span>
-                </div>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-[11px] text-[var(--faint)]">
-            ★記録は {trend[0].period} から。それ以前は
-            <strong>未計測</strong>（0円ではない）なので描いていません。
-          </p>
-        </>
-      )}
-    </section>
-  );
-}
-
 function RunningOutPanel({ rows }: { rows: ToolRow[] }) {
   if (rows.length === 0) return null;
   return (
     <section className="mb-4 rounded-xl border border-[var(--bad)]/40 bg-[var(--bad)]/[0.06] p-4">
       <h2 className="text-[14px] font-semibold text-[var(--bad)]">
-        次回の実行ぶんに残高が足りない（{rows.length}件）
+        次回の実行分の残高が足りない（{rows.length}件）
       </h2>
       <div className="mt-2 grid gap-2">
         {rows.map((t) => (

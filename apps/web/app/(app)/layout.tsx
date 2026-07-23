@@ -16,7 +16,7 @@ export default async function AppLayout({
     <div className="min-h-screen">
       <Sidebar />
 
-      {/* コンテンツ領域（サイドバー幅ぶん左に余白） */}
+      {/* コンテンツ領域（サイドバー幅分だけ左に余白） */}
       <div className="pl-60">
         {/* トップバー */}
         <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-[var(--border)] bg-[var(--panel)]/80 px-6 backdrop-blur">

@@ -28,6 +28,7 @@ import { resolveRange } from "@/lib/period";
 import { TrendChart } from "@/components/chart";
 import { Stages } from "@/components/stages";
 import { RangePicker } from "@/components/range-picker";
+import { getCostSummary } from "@/lib/tools";
 import { Tabs, resolveTab } from "@/components/dashboard/tabs";
 import { ResultPanel } from "@/components/dashboard/result-panel";
 import { HealthPanel, healthAlerts } from "@/components/dashboard/health-panel";
@@ -93,7 +94,9 @@ export default async function Dashboard({
 
       {tab === "overview" && <OverviewTab range={range} />}
       {tab === "routes" && <RoutesTab range={range} />}
-      {tab === "health" && <HealthPanel health={health} freshness={freshness} />}
+      {tab === "health" && (
+        <HealthPanel health={health} freshness={freshness} cost={await getCostSummary()} />
+      )}
     </div>
   );
 }

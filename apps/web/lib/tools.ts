@@ -209,8 +209,14 @@ async function recentRowsByKind(since: Date): Promise<Record<string, number>> {
 
 export type ToolsView = {
   rows: ToolRow[];
-  /** 契約中＋トライアルの月額合計（円）。前払い/無料は含めない */
+  /** 契約中＋トライアルの固定月額（円）。前払い/無料/自社既存は含めない */
   monthlyTotalYen: number;
+  /**
+   * 当月に実際に使った変動費（円換算）。
+   * ★固定と足した数字だけを出さない。「使っていないのに高い」と
+   *   「使った結果高い」は打ち手が正反対（前者は止める、後者は成果次第）
+   */
+  variableThisMonthYen: number;
   /** 月額が未入力の契約中ツール数。合計が過少に見えるのを防ぐため出す */
   monthlyUnknown: number;
   /**
@@ -231,7 +237,27 @@ export type ToolsView = {
   /** 検討中・トライアルを全部契約したときの月額（見込み） */
   potentialMonthlyYen: number;
   /** 月次の推移（古い順）。★計測開始より前は行が無い＝未計測 */
-  trend: { period: string; activeYen: number; plannedYen: number; tools: number }[];
+  trend: MonthCost[];
+};
+
+export type MonthCost = {
+  period: string;
+  /** 契約中の固定月額 */
+  activeYen: number;
+  /** 契約中の変動費（前払い/従量を実際に使った分） */
+  variableYen: number;
+  /** 検討中・トライアルの固定月額（見込み） */
+  plannedYen: number;
+  tools: number;
+  /** その月の内訳（クリックで開く）。★合計だけでは何に払ったか分からない */
+  items: {
+    name: string;
+    state: string;
+    fixedYen: number | null;
+    variableYen: number | null;
+    variableAmount: number | null;
+    variableCurrency: string | null;
+  }[];
 };
 
 /**
@@ -239,21 +265,49 @@ export type ToolsView = {
  * ★行が無い月は**未計測**。0円として描かない（§3）。
  *   計測開始（2026-07）より前は記録が無いので、グラフも開始月からしか出さない。
  */
-async function costTrend(): Promise<ToolsView["trend"]> {
+async function costTrend(): Promise<MonthCost[]> {
   const rows = await prisma.toolCostMonthly.findMany({
-    orderBy: { period: "asc" },
-    select: { period: true, monthlyYen: true, state: true },
+    orderBy: [{ period: "asc" }, { monthlyYen: "desc" }],
+    select: {
+      period: true,
+      monthlyYen: true,
+      variableYen: true,
+      variableAmount: true,
+      variableCurrency: true,
+      state: true,
+      tool: { select: { name: true } },
+    },
   });
-  const by = new Map<string, { activeYen: number; plannedYen: number; tools: number }>();
+  const by = new Map<string, MonthCost>();
   for (const r of rows) {
-    const cur = by.get(r.period) ?? { activeYen: 0, plannedYen: 0, tools: 0 };
-    const yen = r.monthlyYen === null ? 0 : Number(r.monthlyYen);
-    if (r.state === "active") cur.activeYen += yen;
-    else cur.plannedYen += yen; // trial / considering
+    const cur =
+      by.get(r.period) ??
+      ({ period: r.period, activeYen: 0, variableYen: 0, plannedYen: 0, tools: 0, items: [] } as MonthCost);
+    const fixed = r.monthlyYen === null ? 0 : Number(r.monthlyYen);
+    const variable = r.variableYen === null ? 0 : Number(r.variableYen);
+    // ★固定と変動を混ぜない。合計だけだと「使っていないのに高い」と
+    //   「使った結果高い」が区別できず、打ち手が変わる
+    if (r.state === "active") {
+      cur.activeYen += fixed;
+      cur.variableYen += variable;
+    } else {
+      cur.plannedYen += fixed; // trial / considering
+    }
     cur.tools += 1;
+    // 0円のものは内訳に出さない（無料・自社既存で埋まって読めなくなる）
+    if (fixed > 0 || variable > 0) {
+      cur.items.push({
+        name: r.tool?.name ?? "(削除済み)",
+        state: r.state,
+        fixedYen: fixed || null,
+        variableYen: variable || null,
+        variableAmount: r.variableAmount === null ? null : Number(r.variableAmount),
+        variableCurrency: r.variableCurrency,
+      });
+    }
     by.set(r.period, cur);
   }
-  return [...by.entries()].map(([period, v]) => ({ period, ...v }));
+  return [...by.values()];
 }
 
 export async function getTools(now: Date = new Date()): Promise<ToolsView> {
@@ -298,9 +352,12 @@ export async function getTools(now: Date = new Date()): Promise<ToolsView> {
   const potentialMonthlyYen = view
     .filter((t) => t.state !== "stopped")
     .reduce((s, t) => s + (t.monthlyYen ?? 0), 0);
+  const trend = await costTrend();
+  const period = new Date(now.getTime() + 9 * 3600_000).toISOString().slice(0, 7);
   return {
     potentialMonthlyYen,
-    trend: await costTrend(),
+    variableThisMonthYen: trend.find((t) => t.period === period)?.variableYen ?? 0,
+    trend,
     rows: view,
     monthlyTotalYen: paying.reduce((s, t) => s + (t.monthlyYen ?? 0), 0),
     // ★月額未入力を黙って0円として合計すると「安く見える」。件数を別に出す
@@ -309,7 +366,7 @@ export async function getTools(now: Date = new Date()): Promise<ToolsView> {
     sharedCount: view.filter((t) => t.billingType === "shared" && t.state !== "stopped").length,
     overdueCount: view.filter((t) => t.overdue).length,
     noDueDateCount: paying.filter((t) => t.decideBy === null).length,
-    // ★次回の実行ぶんに足りないもの。「残高がある」と「次回動く」は別
+    // ★次回の実行分に足りないもの。「残高がある」と「次回動く」は別
     runningOut: view.filter((t) => t.runsLeft !== null && t.runsLeft < 1),
   };
 }
@@ -340,7 +397,7 @@ export async function getToolAlerts(now: Date = new Date()): Promise<ToolAlert[]
     // ★残高は「未取得」と「0」を区別する。null は警告しない（測っていないだけ）
     //
     // ★閾値を金額で決めない（旧実装は 0.3 USD 固定）。いくらから危ないかは
-    //   ツールごとに違う。**次回の実行ぶんに足りるか**で判定し、
+    //   ツールごとに違う。**次回の実行分に足りるか**で判定し、
     //   止まる処理の名前まで出す。名前が無いと重大さが判断できない。
     if (t.state !== "stopped" && t.runsLeft !== null && t.runsLeft < 1) {
       const jobs = t.power?.jobs.map((j) => j.name).join(" / ") ?? "";
@@ -353,4 +410,53 @@ export async function getToolAlerts(now: Date = new Date()): Promise<ToolAlert[]
     }
   }
   return out;
+}
+
+/**
+ * ダッシュボード用のコスト要約。
+ *
+ * ★なぜダッシュボードに出すか（2026-07-24 石井さん「ダッシュボードにコストがない」）
+ *   コストは /costs を開かないと見えなかった。開かなければ気づかないので、
+ *   ツールは足すのは簡単で止めるのは忘れる、が起きる。
+ *
+ * ★1件あたりの獲得コストは出さない。
+ *   ツール費（¥909）÷ 問い合わせ（4件）= ¥227 は**人件費と外注費を含まない**ので、
+ *   これを「獲得単価」と読むと桁が2つ違う判断になる。
+ *   出すのは「いくら払っているか」「増えていないか」「止まりそうか」の3つ。
+ */
+export type CostSummary = {
+  /** メディアのための固定月額（自社既存は除く） */
+  monthlyYen: number;
+  /** 当月に実際に使った変動費（前払い/従量） */
+  variableYen: number;
+  /** 前月比（前月の記録が無ければ null＝未計測） */
+  prevMonthYen: number | null;
+  /** 検討中・トライアルを全部契約したときの月額 */
+  potentialYen: number;
+  /** 残高が次回の実行に足りないもの */
+  runningOut: { name: string; balance: number | null; currency: string | null; jobs: string[] }[];
+  /** 見直し予定日が未設定の件数 */
+  noDueDateCount: number;
+  toolCount: number;
+};
+
+export async function getCostSummary(now: Date = new Date()): Promise<CostSummary> {
+  const v = await getTools(now);
+  const period = new Date(now.getTime() + 9 * 3600_000).toISOString().slice(0, 7);
+  // ★前月の記録が無ければ null。0 にすると「先月は無料だった」という嘘になる（§3）
+  const prev = v.trend.filter((t) => t.period < period).at(-1) ?? null;
+  return {
+    monthlyYen: v.monthlyTotalYen,
+    variableYen: v.variableThisMonthYen,
+    prevMonthYen: prev ? prev.activeYen + prev.variableYen : null,
+    potentialYen: v.potentialMonthlyYen,
+    runningOut: v.runningOut.map((t) => ({
+      name: t.name,
+      balance: t.balance,
+      currency: t.balanceCurrency,
+      jobs: t.power?.jobs.map((j) => j.name) ?? [],
+    })),
+    noDueDateCount: v.noDueDateCount,
+    toolCount: v.rows.filter((t) => t.state !== "stopped").length,
+  };
 }

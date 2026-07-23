@@ -383,7 +383,7 @@ function HealthPanel({ health }: { health: AccountHealth }) {
         </p>
       ) : !hasBaseline ? (
         <p className="mb-2 rounded-md bg-[var(--warn)]/12 px-3 py-2 text-[12px] text-[#9a6a00]">
-          判定できません。日次記録は <strong>{historyDays}日</strong>ぶん（必要 {minDays}日）、
+          判定できません。日次記録は <strong>{historyDays}日</strong>分（必要 {minDays}日）、
           そのうち平均viewsを算出できたのは <strong>{measured}日</strong>です
           {measured < historyDays && "（その日の投稿の Insights がまだ回収されていないため）"}。
           ★<strong>「異常なし」ではなく「まだ判定できない」</strong>状態です。

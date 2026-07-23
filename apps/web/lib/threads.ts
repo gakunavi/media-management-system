@@ -512,7 +512,7 @@ export type AccountHealth = {
   /** 判定に必要な日数（UIで残り日数を出すため） */
   minDays: number;
   suspectedDays: number;
-  /** SnsAccountHealth の行数。日次記録そのものが何日ぶんあるか */
+  /** SnsAccountHealth の行数。日次記録そのものが何日分あるか */
   historyDays: number;
 };
 
@@ -594,7 +594,7 @@ export async function getAccountHealth(now: Date = new Date()): Promise<AccountH
     hasBaseline: measured >= HEALTH_MIN_DAYS,
     minDays: HEALTH_MIN_DAYS,
     suspectedDays: filled.filter((r) => r.restrictionSuspected).length,
-    /** ★何日ぶんの記録があるか。「7日待てば埋まる」かを判断する材料 */
+    /** ★何日分の記録があるか。「7日待てば埋まる」かを判断する材料 */
     historyDays: rows.length,
   };
 }

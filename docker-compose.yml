@@ -121,6 +121,8 @@ services:
       MMS_GSC_QUERY_WINDOW_DAYS: ${MMS_GSC_QUERY_WINDOW_DAYS:-90}
       # 台帳3点照合のリポジトリ（builtin/ledger_check.py）。未設定なら黙って何もしない
       MMS_LEDGER_REPO: ${MMS_LEDGER_REPO:-}
+      # ツールの変動費の円換算レート（builtin/tool_cost_snapshot.py）
+      MMS_USD_JPY: ${MMS_USD_JPY:-150}
       # 登録URLの実地チェック（builtin/url_health.py）
       MMS_URL_HEALTH_TIMEOUT: ${MMS_URL_HEALTH_TIMEOUT:-20}
       MMS_URL_HEALTH_CONCURRENCY: ${MMS_URL_HEALTH_CONCURRENCY:-6}

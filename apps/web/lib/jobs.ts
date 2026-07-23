@@ -32,7 +32,7 @@ export type JobRow = {
   successCount: number;
   failedCount: number;
   health: JobHealthState;
-  /** 予定を何回分ぶん過ぎているか（stalled のときだけ） */
+  /** 予定を何回分過ぎているか（stalled のときだけ） */
   missedRuns: number;
 };
 
