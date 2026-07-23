@@ -269,6 +269,9 @@ export async function POST(req: Request) {
     }
   }
 
+  // ★同期前にクリックされた送客リンクを、投稿に付け替える
+  const reclaimed = await reclaimPendingClicks(channel.id);
+
   return NextResponse.json({
     ok: true,
     upserted,
@@ -276,7 +279,80 @@ export async function POST(req: Request) {
     skipped,
     accountDays: healthRows,
     queuePending,
+    reclaimedClicks: reclaimed,
   });
+}
+
+/**
+ * 同期前にクリックされた送客リンクを、投稿に付け替える。
+ *
+ * ★なぜ要るか（2026-07-23 に実際に起きた）
+ *   Threads 同期は日次（06:30）。その後に公開された投稿のリンクが踏まれると、
+ *   リダイレクタは ContentItem を引けず `threads_link_clicks_pending_*` に退避する。
+ *   放置すると **Threads のメディア送客が 0 のまま**になり、
+ *   「リンクを貼ったのに誰も踏んでいない」という誤った像になる。
+ *   実際 THR-034/035/042 の初クリック5件がこれに当たった。
+ *
+ * ★退避した行は移した後に 0 にする（削除はしない）。
+ *   消すと「取りこぼしがあった事実」も消え、次に同じ穴が空いても気づけない。
+ */
+async function reclaimPendingClicks(channelId: string): Promise<number> {
+  const pending = await prisma.metricSnapshot.findMany({
+    where: { metric: { startsWith: "threads_link_clicks_pending_" }, value: { gt: 0 } },
+    select: { id: true, metric: true, value: true, date: true },
+  });
+  if (pending.length === 0) return 0;
+
+  let moved = 0;
+  for (const row of pending) {
+    // threads_link_clicks_pending_{dest}__{THR-xxx}
+    const m = /^threads_link_clicks_pending_([a-z]+)__(THR-\d+)$/i.exec(row.metric);
+    if (!m) continue;
+    const [, dest, externalId] = m;
+
+    const item = await prisma.contentItem.findFirst({
+      where: { channelId, externalId, type: "post" },
+      select: { id: true },
+    });
+    if (!item) continue; // まだ同期されていない。次回に持ち越す
+
+    const metric = `threads_link_clicks_${dest.toLowerCase()}`;
+    const existing = await prisma.contentMetric.findFirst({
+      where: { contentItemId: item.id, metric, date: row.date },
+      select: { id: true, value: true },
+    });
+    if (existing) {
+      await prisma.contentMetric.update({
+        where: { id: existing.id },
+        data: { value: existing.value + row.value },
+      });
+    } else {
+      await prisma.contentMetric.create({
+        data: { contentItemId: item.id, metric, value: row.value, date: row.date },
+      });
+    }
+    // ★計測開始を記録する（§3）。これが無いと画面が「未計測」のまま
+    //   実測が入り、0件と区別できなくなる（実際そうなった）
+    const covered = await prisma.measurementCoverage.findFirst({
+      where: { metric },
+      select: { id: true },
+    });
+    if (!covered) {
+      await prisma.measurementCoverage.create({
+        data: {
+          metric,
+          startedAt: row.date,
+          method: "redirect_link",
+          note: `Threads投稿から ${dest} への送客。同期前のクリックを付け替えて計測開始`,
+        },
+      });
+    }
+
+    // ★退避行は 0 にするだけ。削除すると取りこぼしの記録も消える
+    await prisma.metricSnapshot.update({ where: { id: row.id }, data: { value: 0 } });
+    moved += row.value;
+  }
+  return moved;
 }
 
 /**

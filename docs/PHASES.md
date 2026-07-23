@@ -404,8 +404,9 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 | **U39** | **リレーションの逆側フィールドが設計書に無い** | Prisma は双方向リレーションが必須のため機械的に追加した（C-2）。**データ構造の追加ではない** |
 | **U61** | **記事詳細（`single-media.php`）にLINE CTAが1本も無い**（2026-07-23 判明） | メディア側の9本はすべてトップ・カテゴリ一覧・タグ一覧。いちばん温まっている読者に出口が無い。**計測ではなく設計の穴**。cowork に記事詳細へのCTA追加を依頼中 |
 | **U62** | ~~ヘッダ/フッタのLINEリンクが常に `hp-` 計上~~ | ✅ **2026-07-23 対応済み**（cowork）。ページ文脈で接頭辞を出し分ける方式に変更。★MMS が渡した判定式 `is_singular('post')` は誤りで、この案件の記事は `post_type=blog`。cowork が `is_singular('blog')` ＋ `is_search()` に修正。**本番反映（zip→FTP）待ち** |
-| **U63** | ~~LINEの遷移先URLが未確定~~ | ✅ **2026-07-23 解決**。実測で確認したところ `lin.ee/5NVLBXA` と `lin.ee/szd8e1x` は**同じアカウント**（`@898ubeoo`）の短縮URLが2本あるだけ。MMSのトークンも同アカウント。env は現状のままで問題なし |
+| **U63** | ~~LINEの遷移先URLが未確定~~ | ✅ **2026-07-23 解決**。実測で確認したところ `lin.ee/5NVLBXA` と `lin.ee/szd8e1x` は**同じアカウント**（`@898ubeoo`）の短縮URLが2本あるだけ。MMSのトークンも同アカウント。石井判断で承認済み canonical `szd8e1x` に統一（2026-07-22）。`MMS_LINK_DEST_LINE` を `lin.ee/szd8e1x` に変更済・**反映は MMS コンテナ再起動待ち**（env は起動時注入） |
 | **U64** | **LINE友だち数の履歴取り込みが途中** | insight/followers はレート制限（約60回/時）があり、初回は 5/20 までしか遡れていない。日次実行で順次埋まる。それ以前を含む期間は「期首の記録なし」と表示される |
+| **U66** | **`/media/` トップだけヘッダ/フッタが `hp-` のまま**（2026-07-23 実測） | 記事詳細・カテゴリ・タグでは `media-` に切り替わるが、`/media/` トップだけ `hp-header` 等になる。原因は `is_page_template('page-media.php')` が **false** を返すこと。`page-{slug}.php` は WordPress のテンプレート階層による自動適用で、テンプレートを明示的に割り当てていない場合 `is_page_template()` は false。**`is_page('media')` に変えれば直る**。cowork へ連絡済み |
 | **U65** | **`Target` に `inquiries_total` が無い** | 段1のゴール（問い合わせ総数）に対する月次目標が未設定。現状は `direct_inquiry=2` のみで、種別内訳にしか出ない |
 
 ---

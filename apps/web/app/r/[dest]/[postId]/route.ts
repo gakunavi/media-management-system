@@ -146,7 +146,19 @@ async function recordClick(
   });
 
   if (!item) {
-    // ★投稿に紐づかない送り元。捨てずにサイト単位で残す。
+    // ★投稿IDの形をしているのに ContentItem が無い＝**まだ同期していない投稿**。
+    //   Threads 同期は日次（06:30）なので、その後に公開された投稿は
+    //   最大24時間このルートを通る。実際 2026-07-23 に THR-034/035/042 の
+    //   初クリック5件がこれに当たった。
+    //
+    //   これを recordSiteClick に落とすと「サイト（HP・記事）からのクリック」に
+    //   化け、**Threads のメディア送客が0のまま**になる。同期後に移す前提で
+    //   別の指標名に退避する（api/ingest/threads が引き取る）。
+    if (/^THR-\d+$/i.test(postId)) {
+      await recordSiteClick(postId, dest, "threads_link_clicks_pending");
+      return;
+    }
+    // ★投稿に紐づかない送り元（サイトのCTA等）。捨てずにサイト単位で残す。
     //   捨てると「サイトからは誰も来ていない」という誤った像になる
     await recordSiteClick(postId, dest);
     return;
@@ -177,7 +189,12 @@ async function recordClick(
 }
 
 /** サイト（記事のCTA・フッタ等）からの送客。MetricSnapshot に日次で積む */
-async function recordSiteClick(source: string, dest: string): Promise<void> {
+async function recordSiteClick(
+  source: string,
+  dest: string,
+  /** 指標の接頭辞。未同期の投稿を退避するときだけ差し替える */
+  base = "site_link_clicks",
+): Promise<void> {
   // ★任意の文字列を指標名にしない。指標が無限に増えると鮮度チェックが壊れる
   if (!SAFE_SOURCE.test(source)) return;
 
@@ -187,7 +204,7 @@ async function recordSiteClick(source: string, dest: string): Promise<void> {
   });
   if (!business) return;
 
-  const metric = `site_link_clicks_${dest}`;
+  const metric = `${base}_${dest}`;
   const date = jstDate(new Date());
 
   // ★MetricSnapshot は channelId NULL だと一意制約が効かない（§13 記録済）。
@@ -221,7 +238,11 @@ async function recordSiteClick(source: string, dest: string): Promise<void> {
     });
   }
 
-  await ensureCoverage(metric, null, `サイトから ${dest} への送客`);
+  await ensureCoverage(
+    metric,
+    null,
+    base === "site_link_clicks" ? `サイトから ${dest} への送客` : `未同期の投稿から ${dest} への送客（同期後に移す）`,
+  );
 }
 
 /** 計測開始を1度だけ記録する（§3）。これが無いと 0 と未計測を区別できない */
