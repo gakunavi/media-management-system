@@ -53,6 +53,14 @@ try {
 } catch {
   aioReady = false;
 }
+// ★公式LINE の友だち数（Messaging API）。トークンが無ければ動かさない
+let lineReady = false;
+try {
+  const envText = readFileSync(path.resolve(process.cwd(), "../../.env"), "utf8");
+  lineReady = /^MMS_LINE_CHANNEL_ACCESS_TOKEN=.+$/m.test(envText);
+} catch {
+  lineReady = false;
+}
 
 const JOBS = [
   {
@@ -132,6 +140,17 @@ const JOBS = [
     note: aioReady
       ? "AIO計測(Cold): 月次。chatgpt 1試行のみ（費用を抑える）"
       : "AIO計測(Cold)【停止中】.env に OPENAI_API_KEY か GEMINI_API_KEY を設定して再実行",
+  },
+  {
+    name: "line-followers-daily",
+    // 毎日 07:45。GA4(07:30) の後、アラート(09:30) の前に入れる
+    schedule: "45 7 * * *",
+    kind: "builtin",
+    config: { script: "line_followers.py", timeoutSeconds: 600 },
+    enabled: lineReady,
+    note: lineReady
+      ? "公式LINE友だち数: Messaging API から日次取得（Webhook 観測分では取りこぼすため）"
+      : "公式LINE友だち数【停止中】.env に MMS_LINE_CHANNEL_ACCESS_TOKEN を設定して再実行",
   },
   {
     name: "rakko-import-daily",
