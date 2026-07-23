@@ -18,6 +18,28 @@ const yen = (n: number | null) => (n === null ? "—" : `¥${n.toLocaleString("j
 const jaDate = (d: Date | null) =>
   d ? d.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" }) : "—";
 
+/**
+ * 絞り込み。
+ *
+ * ★なぜ課金形態で分けるか（2026-07-24 石井さん指摘）
+ *   固定と変動は**打ち手が違う**。固定は「止めれば必ず減る」、
+ *   変動は「使わなければ減る」。同じ一覧に混ぜたままだと、
+ *   どちらの手を打つべきか判断できない。
+ * ★件数を必ず出す。0件の区分があること自体が情報になる
+ *   （例: 変動が0件なら「使った分の費用は発生していない」と分かる）。
+ */
+const FILTERS: { key: string; label: string; match: (t: ToolRow) => boolean }[] = [
+  { key: "all", label: "すべて", match: () => true },
+  { key: "monthly", label: "固定（月額）", match: (t) => t.billingType === "monthly" },
+  { key: "prepaid", label: "変動（前払い/従量）", match: (t) => t.billingType === "prepaid" },
+  { key: "free", label: "無料", match: (t) => t.billingType === "free" },
+  { key: "shared", label: "自社既存", match: (t) => t.billingType === "shared" },
+  // ★「お金がかかっているもの」だけを見たいことが多い。無料と自社既存を除く
+  { key: "paid", label: "費用が出るもの", match: (t) => t.billingType === "monthly" || t.billingType === "prepaid" },
+  { key: "considering", label: "検討中・トライアル", match: (t) => t.state === "considering" || t.state === "trial" },
+  { key: "stopped", label: "停止", match: (t) => t.state === "stopped" },
+];
+
 export function ToolList({ rows }: { rows: ToolRow[] }) {
   const [pending, start] = useTransition();
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
@@ -27,17 +49,46 @@ export function ToolList({ rows }: { rows: ToolRow[] }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [filter, setFilter] = useState("all");
+
+  const active = FILTERS.find((f) => f.key === filter) ?? FILTERS[0];
+  const shown = rows.filter(active.match);
 
   return (
     <>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="text-[14px] font-semibold">ツール一覧（{rows.length}件）</h2>
+        <h2 className="text-[14px] font-semibold">
+          ツール一覧（{filter === "all" ? `${rows.length}件` : `${shown.length} / ${rows.length}件`}）
+        </h2>
         <button
           onClick={() => setAdding((v) => !v)}
           className="rounded-md bg-[var(--ink)] px-3 py-1.5 text-[12px] font-medium text-white hover:opacity-90"
         >
           {adding ? "閉じる" : "ツールを追加"}
         </button>
+      </div>
+
+      {/* 絞り込み。件数を出す（0件であること自体が情報） */}
+      <div className="mb-3 flex flex-wrap gap-1">
+        {FILTERS.map((f) => {
+          const n = rows.filter(f.match).length;
+          return (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              className={`rounded-md border px-2.5 py-1 text-[12px] transition-colors ${
+                filter === f.key
+                  ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                  : "border-[var(--border-strong)] text-[var(--muted)] hover:bg-[var(--panel-2)]"
+              }`}
+            >
+              {f.label}
+              <span className={`tnum ml-1 ${filter === f.key ? "opacity-80" : "text-[var(--faint)]"}`}>
+                {n}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {toast && (
@@ -55,7 +106,12 @@ export function ToolList({ rows }: { rows: ToolRow[] }) {
       {adding && <ToolForm onDone={(m, ok) => { setToast({ msg: m, ok }); if (ok) setAdding(false); }} />}
 
       <div className="space-y-2.5">
-        {rows.map((t) => (
+        {shown.length === 0 && (
+          <p className="rounded-xl border border-dashed border-[var(--border-strong)] p-6 text-center text-[13px] text-[var(--faint)]">
+            この区分に当てはまるツールはありません。
+          </p>
+        )}
+        {shown.map((t) => (
           <article
             key={t.id}
             className={`rounded-xl border bg-[var(--panel)] p-4 ${
