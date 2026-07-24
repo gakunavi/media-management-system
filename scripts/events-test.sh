@@ -6,11 +6,19 @@
 set -euo pipefail
 
 URL="${MMS_EVENTS_URL:-http://127.0.0.1:3000/api/ingest/events}"
+# ★Origin を必ず送る（2026-07-24）。
+#   受口は Origin allowlist で守っており（HMAC はブラウザに置けない・§9-D19）、
+#   ヘッダ無しの curl は本番設定では必ず 403 になる。
+#   .env の MMS_INGEST_ALLOWED_ORIGINS の先頭を既定にして、
+#   「テストは通るのに本番は落ちる／その逆」を防ぐ。
+ORIGIN="${MMS_EVENTS_ORIGIN:-$(grep -m1 '^MMS_INGEST_ALLOWED_ORIGINS=' .env 2>/dev/null | cut -d= -f2- | cut -d, -f1)}"
+ORIGIN="${ORIGIN:-http://localhost:3000}"
+echo "  Origin: $ORIGIN"
 SID="testsession$(date +%s)"     # 8-64 文字の英数字
 VID="testvisitor000001"
 
 post() {
-  curl -s -X POST "$URL" -H 'Content-Type: text/plain' --data-binary "$1"
+  curl -s -X POST "$URL" -H 'Content-Type: text/plain' -H "Origin: $ORIGIN" --data-binary "$1"
 }
 
 echo "── 7段すべてを1リクエストで送る ──"
@@ -38,6 +46,6 @@ echo "── 上限超過（51件）は 413 になるはず ──"
 BIG='{"visitorId":"'$VID'","sessionId":"'$SID'x","events":['
 for i in $(seq 1 51); do BIG="$BIG{\"step\":\"cta_view\"},"; done
 BIG="${BIG%,}]}"
-curl -s -o /dev/null -w "  → HTTP %{http_code}\n" -X POST "$URL" -H 'Content-Type: text/plain' --data-binary "$BIG"
+curl -s -o /dev/null -w "  → HTTP %{http_code}\n" -X POST "$URL" -H 'Content-Type: text/plain' -H "Origin: $ORIGIN" --data-binary "$BIG"
 
 echo "SID=$SID"   # DB 確認用に出力

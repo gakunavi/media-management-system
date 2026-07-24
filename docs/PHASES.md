@@ -71,7 +71,7 @@
 |---|---|---|---|---:|---|---|---|
 | 19 | **P5** | Threads / AIO 配管（GAS→ingest、aio-batch→jobs） | P1 | 1 | Channel / ContentItem / ContentMetric / Job / JobRun | Threads GAS の Insights が `/api/ingest/threads` へ届く。aio-batch が jobs から自動実行される（時間制限なし） | Sonnet |
 | 20 | **P5.6** | `AgencyLead` / `Partner`（DM triage のDB化・GAS連携） | P5 | 1 | AgencyLead / Partner | 投稿→DM→有効→契約の歩留まりが算出できる。**代理店募集投稿1本あたりの有効DM数**が出る | Sonnet |
-| 21 | **P5.7** | `LineFriend` / `LineMessage`（LINE Messaging API連携） | P2 | 1 | LineFriend / LineMessage | 友だち追加が Webhook で即時記録され、記事別に登録経路が分離される | Sonnet |
+| 21 | **P5.7** | `LineFriend` / `LineInbound`（LINE Messaging API連携）※担当モデルを D35 で訂正 | P2 | 1 | LineFriend / LineInbound | 友だち追加が Webhook で即時記録され、記事別に登録経路が分離される | Sonnet |
 
 ### 【S5 市場・競合・広告】
 
@@ -424,6 +424,7 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 | **U85** | **ART-072 / ART-179 は検索語の内訳が取れていない** | ページ表示131・166 に対し、クエリ内訳は **0行 / 2行**。極端に細かいクエリに散っているためGSCが伏せている。cowork の指摘する「AIモード合成クエリ汚染」の可能性が高いが**断定はできない**。★対処: `title_meta_rewrite` の提案を後ろへ回した。着手するなら本文のH2再構成・リード増厚に振り替える |
 | ~~**U86**~~ | ~~内部リンクの提案が1件しか出ていない~~ | ✅ **2026-07-24 対応**。旧実装は `isPillar` と被リンク中央値で判定しておりクラスタ構造を見ていなかった。**クラスタ単位**で「子記事→ピラーのリンクが2本未満」を列挙する方式に作り直し、提案が **1件 → 13件**になった。★実測: クラスタの子記事**78本すべてが2本未満**、うち44本が0本。★効果は分離測定しない。`/clusters` に「→ピラー未接続」列を追加し、**それが減ること＋ピラー側の表示・順位**で判定する |
 | ~~**U87**~~ | ~~加筆の起票経路が無い~~ | ✅ **2026-07-24 対応**。既存記事がある話題に「この記事に加筆」を追加し、`Action.type=rewrite` として起票する（新規記事とは工数も判定期間も違うので型を分ける）。加筆先の実在を確認してから起票する。★動作確認: ART-061 への加筆が施策・PDCA の**リライト枠**に入ることを確認 |
+| **U89** | **`cta_click` を意図的に 0 のまま残している**（2026-07-24・石井さん「このままでいい」） | 記事内のCTAクリックは **`link_click(kind=redirect)` が正**。同じクリックを `cta_click` にも書くと、同じ行動を2つの段で二重に数えることになり「どちらが正か分からない」状態を作る（§4-21 の失敗と同型）。★**LP内CTA**（段2の6段目）は `cta_click` を割り当てるのが自然だが、**診断LPの実物を見ないと何がCTAか決められない**（CF7 の送信ボタンなら既に `submit` で取れており、別に定義すると二重になる）。推測で定義せず空のまま残す。★したがって **`cta_view` は出るが `cta_click` は常に0**。画面には「未計装」として出し、**実測ゼロと書かない**（§2-1・§4-13）。着手条件: LPの構成を実際に見て、フォーム到達より手前にクリック地点があるかを確認してから |
 | **U88** | **PAA が1トピックに偏っている**（15件すべて「少額減価償却資産・個人事業主」） | ラッコの取得元が1KWに偏っているため。供給源としては動いているが**話題の幅が出ていない**。取得対象KWを広げる運用が要る |
 | ~~**U83**~~ | ~~承認待ちの Action が23件で処理能力を超えている~~ | ✅ **2026-07-24 対応**。並び順を「取り逃している表示回数」に変え、上位3件（週の処理能力）だけ表示して残りは畳んだ。判定待ちと重なる3件・指名検索が主の2件・根拠が弱い12件は後ろへ回す。★立案そのものは止めていない（14日で自動的に期限切れになるため溜まり続けない）。**残る課題は「どの型の打ち手を優先すべきか」で、これは SEO の判断が要る → cowork へ確認**（U84） |
 | ~~**U77**~~ | ~~worker が `idle in transaction` の接続を残す~~ | ✅ **2026-07-24 根治**。原因は worker だけでなく **`url_health.py`（私が当日書いたもの・235回のHTTPを開いたトランザクション内で実行）** と `line_followers.py` も同じ構造だった。3つとも `autocommit=True` に変更。検証: ポーリング2周超のあいだ `idle in transaction` が常時0、DDL は**4分超 → 0.3秒**、ジョブの書き込みも正常（235行保存） |
@@ -484,7 +485,7 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 | P4.10 | 🟡 partial | KeywordVolume / KeywordCluster / CtrCurve（自社実測CTR曲線） | KeywordCluster・CtrCurve |
 | P5 | ✅ done | Threads / AIO 配管（GAS→ingest、aio-batch→jobs） | — |
 | P5.6 | 🟡 partial | AgencyLead / Partner（DM triage のDB化・GAS連携） | Partner |
-| P5.7 | ❌ empty | LineFriend / LineMessage（LINE Messaging API連携） | LineFriend・LineMessage |
+| P5.7 | ❌ empty | LineFriend / LineInbound（LINE Messaging API連携）★受口は実装済み・Webhook未設定（D35） | LineFriend・LineInbound |
 | P6.7 | 🟡 partial | SerpSnapshot（DataForSEO 週次・AIO有無含む）／Competitor | Competitor・CompetitorMetric |
 | P6.8 | ❌ empty | MarketShare / Opportunity の自動算出 ＋ /market | MarketShare・Opportunity |
 | P7.5 | ❌ empty | 広告 API 連携（AdAccount〜AdMetricDaily・gclidでLead突合） | AdAccount・AdCampaign・AdGroup・AdCreative・AdMetricDaily |
@@ -579,6 +580,28 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 
 | **D33** | クラスタのピラー紐付け（cowork 回答 2026-07-23） | **`art-kw-map.yaml` の notes が設計上の正。** P1即時償却=ART-006（実体はART-142）／P2法人節税=ART-007／P3決算対策=ART-008。横串2つは**設計上ピラーを置かない** | 前回CSVの「制度・法人節税 総合Pillar」はCSV作成時の便宜的グルーピングだった。「5クラスタでピラーが欠けている」と読んでいたが、**3つは実在していて紐付けが外れていただけ**。ART-006 は 301 で ART-142 へ統合済みのプレースホルダなのでクラスタから外す（被リンク0のピラーという誤った像になる） | `scripts/fix-cluster-pillars.py`／`TopicCluster.note`／`/clusters` |
 | **D34** | 鮮度のケイデンス（cowork 実運用ヒアリング 2026-07-23） | **速報=随時（法改正トリガ）／商材・比較=90日＋CTRトリガ／Pillar・実務=6ヶ月／制度・リスク=12ヶ月＋法改正トリガ。** 督促は**二段構え**（期限は境界、着手はCTR不全と重なった記事） | 当初案から3点直した。①リスク記事を商用60〜90日に入れていたが、C柱は時事性が低く実測でもリライト0件だった ②90日は「全商材を定期的に回す」ではなく「CTR不全が出た記事だけの事後対応」が実態 ③処理能力は週2〜3本で、期限切れを全部出すと誰も見なくなる | `scripts/derive-freshness.py`／`lib/review-queue.ts`／`/content` |
+
+| **D35** | P5.7 の担当モデル（2026-07-24 の実データ確認で判明） | **`LineFriend` / `LineMessage` → `LineFriend` / `LineInbound` に訂正する。** `LineMessage`（配信＝送信側）は P5.7 の完了条件に含まれない | 受口 `/api/ingest/line` は**実装済みで生きている**（`collect.asset-support.co.jp` に署名なしPOSTで 401＝正しく弾いている）が、実装は §16.2「本文を持たない」に従い `LineMessage` ではなく **`LineInbound`** を使っている。担当モデルが古いままだと `phase-status.py` は **P5.7 を永久に done にできない**（配信を実装しない限り `LineMessage` は0件のまま）。★機械判定は担当モデルのマッピングが正しいときだけ正しい | P5.7／`scripts/phase-status.py`／§8.9 |
+
+| **D36** | ファネル計測の起点（2026-07-24・P2.5 の実測） | **`lp_view` / `form_*` / `cta_view` を `data-*` 属性から外す。** LPかどうかは**実質フォームの有無**でタグが判定し、**どのLPか（`lpId`・バリアント）は `LandingPage` 台帳との path 照合でサーバーが解決する**。CTA表示は `/r/` リダイレクタリンクの可視化で拾う。★**CTAクリックは `link_click(kind=redirect)` が正**とし、`cta_click` を重ねて送らない（同じクリックを2つの step で数えると、どちらが正か分からなくなる・§4-21） | 7段のうち5段が0件だった。原因は属性依存（§4-94）。`data-lp` は診断LPに無く、`data-mms-form` は WP プラグインが JS で後付けするため `defer` の実行順で計測タグからは見えなかった。**台帳は MMS 側にあるので、どのページが LP かはサーバーが知っている**。属性を貼らせる設計をやめれば貼り漏れも競合も起きない | P2.5／`mms-tag.js`／`/api/ingest/events`／`lib/telemetry.ts` |
+
+**★D36 の検証（2026-07-24・実ブラウザで実サイトを操作）**
+- 診断LP（`/setsuzei-diagnosis-b/`）で `data-lp` が **null のまま** `lp_view` が発火し、サーバーが `lpId=setsuzei-diagnosis` / `lpVariant=b` まで解決した
+- `form_view` / `form_field` が発火（CF7 フォーム・属性なし）。**送信は行っていない**（偽のリードを作らないため）
+- `lp_scroll` が 25/50/75/100 の4段で発火
+- path 照合の切り分け: `-a/-b/-c` はバリアント付きで解決、素の slug は variant なしで解決、**記事のpath と `-zzz` は解決せず null**（取り違えない）
+- `form_field` は**項目ごとに1回**へ変更。毎 change で送ると10項目の書き直しで上限50件（原則⑦）を使い切り、**肝心の送信が送れなくなる**
+
+**★D36 で同時に見つかった配信事故（2026-07-24・§4-95）**
+- **6本の記事で、実訪問者に届くHTMLに計測タグが入っていない。** オリジンには入っている＝ **Cloudflare APO のキャッシュが古い**
+- 該当: ART-002 即時償却（主力商材）／ART-007 法人節税 完全ガイド／ART-086 GPU 節税 ／ART-088 データセンター節税／ART-009 即時償却vs税額控除／ART-041 2026年税制改正
+- **クエリを足して叩くと6本ともタグが見える**ため、静的な確認では発見できなかった。ブラウザUA＋`Accept: text/html` で叩いて初めて出た（`cf-apo-via: tcache`）
+- 159本中153本は配信されている。**パージが必要なのはこの6本**（→ `docs/prompts/ishii-cloudflare-purge.md`）
+
+**★D35 で実際に見えたこと（2026-07-24 実測）**
+- `LineFriend` 0件 / `LineInbound` 0件。**受口は生きているのに1件も来ていない**＝ LINE Developers 側の Webhook 設定が未了
+- 設定先を間違えると全滅する: `mms.asset-support.co.jp/api/ingest/line` は Cloudflare Access のログインへ **302**。`collect.asset-support.co.jp/api/ingest/line` は Access 対象外で **401**（署名検証まで到達している）
+- **follow イベントは遡及しない。** 設定が遅れた日数ぶんの友だち追加は永久に取れない（§9-D27）
 
 **★D34 の根拠になった cowork の実測（そのまま記録する）**
 - 着手理由の最多は **CTR不全＝「順位10〜14位×表示あり×クリック0」**。"順位が落ちた"ではない

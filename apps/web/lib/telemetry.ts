@@ -128,6 +128,48 @@ function normalizeHref(raw: string): string {
   return href.slice(0, MAX_HREF);
 }
 
+/**
+ * 計測タグが送ってくる path の正規化（前後のスラッシュを落として小文字化）。
+ * クエリと #断片は捨てる（LP の同定にしか使わないうえ、UTM や個人を含みうる）。
+ */
+export function normalizePath(v: unknown): string | null {
+  if (typeof v !== "string" || !v) return null;
+  const head = v.split("#")[0].split("?")[0];
+  if (head.length > 512) return null; // 異常に長い path は捨てる（暴走・注入の防止）
+  return head.replace(/^\/+|\/+$/g, "").toLowerCase();
+}
+
+/**
+ * path から LandingPage を同定する（★lpId をタグの属性に頼らない）。
+ *
+ * ★なぜサーバー側で解決するか（2026-07-24・§4-94）
+ *   タグは `data-lp` が付いたページでしか lp_view / lp_scroll を送らない作りだった。
+ *   ところが**診断LPの script タグに `data-lp` が無く**、最も重要な転換ページで
+ *   LP到達が1件も記録されていなかった。§4-18 で link_click を属性依存から外したのに、
+ *   LP・CTA・フォームは属性依存のまま残っていた。
+ *   属性の貼り漏れは画面に出ないので、貼らせる設計にしてはいけない。
+ *
+ * ★A/B は「1つのLPのバリアント」（§9-D24）。`/setsuzei-diagnosis-a/` も `-b/` も
+ *   同じ LandingPage に解決し、末尾の記号を variant として返す。
+ *   LandingPage.url は代表1本（実測では -b）しか持たないため、url 一致では a/c が漏れる。
+ */
+export function resolveLandingPage(
+  path: string | null,
+  lps: { id: string; slug: string; variantKeys: string[] }[],
+): { lpId: string; variant: string | null } | null {
+  if (!path) return null;
+  for (const lp of lps) {
+    const slug = lp.slug.toLowerCase();
+    if (path !== slug && !path.startsWith(`${slug}-`)) continue;
+    const rest = path.slice(slug.length).replace(/^-/, "");
+    const variant = lp.variantKeys.map((k) => k.toLowerCase()).includes(rest) ? rest : null;
+    // ★slug で始まるが既知のバリアントでもない path（別記事など）は取り違えになるので捨てる
+    if (rest && !variant) continue;
+    return { lpId: lp.id, variant };
+  }
+  return null;
+}
+
 export function sanitizeLinkMeta(meta: unknown): Record<string, string> | null {
   if (!meta || typeof meta !== "object") return null;
   const m = meta as Record<string, unknown>;

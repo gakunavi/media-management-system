@@ -106,6 +106,11 @@
     var ev = {
       step: step,
       occurredAt: new Date().toISOString(),
+      // ★path を必ず載せる。lpId は data-lp に頼らずサーバー側で path から解決する
+      //   （§4-94。診断LPの script に data-lp が無く LP到達が0件だった）。
+      //   pagehide の2回目の flush には session が載らないので、
+      //   セッション単位ではなくイベント単位で持たせる。
+      path: location.pathname,
     };
     if (ARTICLE) ev.contentExternalId = ARTICLE;
     if (LP) ev.lpId = LP;
@@ -162,10 +167,44 @@
   });
   window.addEventListener("pagehide", flush);
 
-  // ── LP 到達（このタグが読み込まれた＝lp_view）──
-  // 記事側では cta_view / cta_click を、LP側では lp_view / lp_scroll / form_* を送る想定。
-  // data-lp があれば LP ページとみなす。
-  if (LP) {
+  // ── 実質フォームの検出（★属性に頼らない）──
+  //
+  // ★なぜ自動にするか（2026-07-24・§4-94）
+  //   フォームは form[data-mms-form] を貼った要素しか見ていなかった。
+  //   ところが診断LPのフォームは Contact Form 7 で data-mms-form が無く、
+  //   **form_view / form_field / submit が1件も記録されていなかった**。
+  //   §4-18 で link_click を属性依存から外したのに、フォーム・LP・CTA は
+  //   属性依存のまま残っていた。貼り漏れは画面に出ないので、貼らせる設計にしない。
+  //
+  // ★検索フォームを除外する。除外しないと、記事のヘッダ検索が全ページで
+  //   「フォーム到達」になり、転換率の分母が壊れる。
+  function isRealForm(form) {
+    if (form.hasAttribute("data-mms-form")) return true; // 明示指定は最優先
+    if (form.getAttribute("role") === "search") return false;
+    var method = (form.getAttribute("method") || "get").toLowerCase();
+    if (method !== "post") return false; // 検索は get。問い合わせは post
+    if (form.closest("header, .site-header, #masthead, nav, footer")) return false;
+    if (
+      form.className &&
+      /(^|\s)(header-search|search-form|wp-block-search)(\s|$)/.test(form.className)
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  var realForms = [];
+  var allForms = document.querySelectorAll("form");
+  for (var q = 0; q < allForms.length; q++) {
+    if (isRealForm(allForms[q])) realForms.push(allForms[q]);
+  }
+
+  // ── LP 到達 ──
+  // ★data-lp が無くても、実質フォームのあるページは転換ページとみなす。
+  //   lpId（どのLPか）は path からサーバー側が解決する。解決できなければ null
+  //   のまま記録する（§9-D20「解決できない参照は null 化して残りを保存する」）。
+  var IS_LP = !!LP || realForms.length > 0;
+  if (IS_LP) {
     track("lp_view");
   }
 
@@ -189,7 +228,7 @@
       });
     }, SCROLL_THROTTLE_MS);
   }
-  if (LP) window.addEventListener("scroll", onScroll, { passive: true });
+  if (IS_LP) window.addEventListener("scroll", onScroll, { passive: true });
 
   // ── 記事内リンクの自動計測（data 属性が無くても拾う）──
   //
@@ -301,10 +340,40 @@
     );
     var ctas = document.querySelectorAll('[data-mms-view="cta"]');
     for (var i = 0; i < ctas.length; i++) io.observe(ctas[i]);
+
+    // ── 記事内CTAの表示を自動で拾う（★属性に頼らない・2026-07-24）──
+    //
+    // ★記事のCTAはリダイレクタ（/r/{送り先}/）へのリンクである。
+    //   実測: ART-002 の本文に /r/line/ が12本。data-mms-view は0箇所。
+    //   属性が無いので cta_view は永久に0件だった。
+    //
+    // ★クリック側は link_click(kind=redirect) が既に取れているので送らない。
+    //   同じクリックを2つの step で二重に数えると、どちらが正か分からなくなる
+    //   （§4-21 と同じ失敗）。**表示は cta_view、クリックは link_click** と用途を分ける。
+    var ctaSeen = {};
+    var ctaObs = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (en) {
+          if (!en.isIntersecting) return;
+          ctaObs.unobserve(en.target);
+          var href = en.target.getAttribute("href") || "";
+          if (ctaSeen[href]) return; // 同じ送り先が複数あっても表示は1回
+          ctaSeen[href] = true;
+          track("cta_view", {
+            meta: { kind: "redirect", area: linkArea(en.target), href: href },
+          });
+        });
+      },
+      { threshold: 0.5 },
+    );
+    var redirectors = document.querySelectorAll('a[href*="/r/"]');
+    for (var r = 0; r < redirectors.length; r++) {
+      if (linkKind(redirectors[r]) === "redirect") ctaObs.observe(redirectors[r]);
+    }
   }
 
-  // フォーム到達・項目・送信
-  var forms = document.querySelectorAll("form[data-mms-form]");
+  // フォーム到達・項目・送信（★realForms＝検索フォームを除いた実質フォーム）
+  var forms = realForms;
   for (var f = 0; f < forms.length; f++) {
     (function (form) {
       var seenForm = false;
@@ -318,9 +387,19 @@
         },
         true,
       );
+      // ★同じ項目を何度直しても1回だけ数える。
+      //   毎 change で送ると、10項目のフォームを書き直しただけで
+      //   1セッション上限50件（原則⑦）を使い切り、**送信が送れなくなる**。
+      //   知りたいのは「どこまで入力して離脱したか」なので、項目ごとに1回で足りる。
+      var seenField = {};
       form.addEventListener(
         "change",
-        function () {
+        function (e) {
+          var t = e.target;
+          if (!t) return;
+          var key = t.name || t.id || t.type || "unknown";
+          if (seenField[key]) return;
+          seenField[key] = true;
           track("form_field");
         },
         true,

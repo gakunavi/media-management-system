@@ -18,6 +18,8 @@ import {
   isValidClientId,
   truncateToSecond,
   sanitizeLinkMeta,
+  normalizePath,
+  resolveLandingPage,
   MAX_EVENTS_PER_REQUEST,
   type FunnelStep,
 } from "@/lib/telemetry";
@@ -37,6 +39,8 @@ type IncomingEvent = {
   /** hero / mid / final ... の位置ラベル。ctaId とは別物（下の CTA_POSITIONS 参照） */
   ctaPosition?: string;
   lpId?: string;
+  /** そのイベントが起きたページの pathname。lpId をここから解決する（§4-94） */
+  path?: string;
   meta?: Record<string, unknown>;
 };
 
@@ -174,6 +178,19 @@ export async function POST(req: Request) {
   const knownCta = new Set(ctas.map((c) => c.id));
   const knownLp = new Set(lps.map((l) => l.id));
 
+  // ── 6.5 path → LandingPage の解決（★lpId をタグの属性に頼らない・§4-94）──
+  //   診断LPの script タグに data-lp が無く、LP到達が1件も記録されていなかった。
+  //   台帳は MMS 側にあるので、どのページが LP かはサーバーが知っている。
+  //   ★LP は2件程度なので全件読んで照合する（path で LIKE を回すより安い）。
+  const registry = await prisma.landingPage.findMany({
+    select: { id: true, slug: true, variantKeys: true },
+  });
+  const lpByPath = new Map<string, { lpId: string; variant: string | null }>();
+  for (const p of new Set(events.map((e) => normalizePath(e.path)).filter(Boolean) as string[])) {
+    const hit = resolveLandingPage(p, registry);
+    if (hit) lpByPath.set(p, hit);
+  }
+
   // ── 7. FunnelEvent を投入（冪等キーで重複排除・§16.1-④）──
   //   一意制約 (sessionId, step, contentItemId, occurredAt) が NULLS NOT DISTINCT で
   //   効くので、同一秒の重複は DB 側で弾かれる。skipDuplicates でまとめて入れる。
@@ -215,12 +232,26 @@ export async function POST(req: Request) {
     // ★link_click の meta はクライアントが作った任意の JSON。
     //   キーを固定し・長さを切り・語彙外を落としてから保存する。
     //   生のまま jsonb に入れると行が肥大し、個人情報の混入経路にもなる。
+    // ★path から解決した LP。タグが送ってきた lpId（既知のもの）を優先する。
+    //   解決できなければ null のまま残す（§9-D20。落とさずに記録は残す）
+    const resolved = lpByPath.get(normalizePath(e.path) ?? "") ?? null;
+
+    // ★cta_view も link_click と同じ形の meta（kind/area/href）を送るので
+    //   同じ sanitize を通す。生の jsonb を溜めない（§4-19）
     const meta =
-      e.step === "link_click"
+      e.step === "link_click" || e.step === "cta_view"
         ? sanitizeLinkMeta(e.meta)
         : position
           ? { ...(e.meta ?? {}), ctaPosition: position }
           : e.meta;
+
+    // ★A/B のバリアントは meta に残す。LP は3件に割らず1つの台帳＋variant で持つ（§9-D24）
+    const metaWithVariant =
+      resolved?.variant && meta && typeof meta === "object"
+        ? { ...(meta as Record<string, unknown>), lpVariant: resolved.variant }
+        : resolved?.variant
+          ? { lpVariant: resolved.variant }
+          : meta;
 
     rows.push({
       sessionId,
@@ -231,8 +262,8 @@ export async function POST(req: Request) {
         : null,
       // 存在しない ctaId / lpId は null にする（FK 違反でバッチを落とさない）
       ctaId: e.ctaId && knownCta.has(e.ctaId) ? e.ctaId : null,
-      lpId: e.lpId && knownLp.has(e.lpId) ? e.lpId : null,
-      meta: (meta as Prisma.InputJsonValue) ?? undefined,
+      lpId: e.lpId && knownLp.has(e.lpId) ? e.lpId : (resolved?.lpId ?? null),
+      meta: (metaWithVariant as Prisma.InputJsonValue) ?? undefined,
     });
   }
 
