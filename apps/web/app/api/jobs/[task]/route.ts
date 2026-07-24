@@ -13,11 +13,12 @@ import { notify } from "@/lib/notify";
 import { evaluateDueInterventions } from "@/lib/evaluate";
 import { safeEqual } from "@/lib/crypto";
 import { refillQueue } from "@/lib/threads-queue";
+import { runUptimeChecks } from "@/lib/uptime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TASKS = ["propose", "evaluate", "ideas", "alerts", "queue-refill"] as const;
+const TASKS = ["propose", "evaluate", "ideas", "alerts", "queue-refill", "uptime"] as const;
 type Task = (typeof TASKS)[number];
 
 function isTask(v: string): v is Task {
@@ -127,6 +128,13 @@ export async function POST(
           ].join("\n"),
         });
       }
+      return NextResponse.json({ ok: true, task, ...r });
+    }
+    if (task === "uptime") {
+      // §3.9.3 死活監視。5分間隔で叩き、連続3回失敗で即通知する。
+      // ★通知を web 側に置くのは、worker から notify を呼ぶ経路が無いため。
+      //   Python 側に通知を再実装すると二重実装になり必ず乖離する。
+      const r = await runUptimeChecks();
       return NextResponse.json({ ok: true, task, ...r });
     }
     if (task === "ideas") {

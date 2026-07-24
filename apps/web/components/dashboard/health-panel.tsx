@@ -11,6 +11,8 @@
 import Link from "next/link";
 import type { JobHealth, MetricFreshness } from "@/lib/dashboard";
 import type { CostSummary } from "@/lib/tools";
+import type { UptimeSummary } from "@/lib/uptime";
+import { type IncidentSummary, severityLabel, categoryLabel } from "@/lib/incidents";
 import { NOT_MEASURED } from "@mms/shared";
 
 const jaDate = (d: Date | null) =>
@@ -168,10 +170,14 @@ export function HealthPanel({
   health,
   freshness,
   cost,
+  uptime,
+  incidents,
 }: {
   health: JobHealth;
   freshness: MetricFreshness[];
   cost: CostSummary;
+  uptime: UptimeSummary[];
+  incidents: IncidentSummary;
 }) {
   const stale = freshness.filter((f) => f.alert !== "ok");
   const unused = freshness.filter((f) => !f.used);
@@ -329,6 +335,127 @@ export function HealthPanel({
               ))}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      {/* ── サイトが生きているか（P3.9）──
+          ★ジョブが全部緑でも、サイトや問い合わせの受口が落ちていれば獲得は止まる。
+            しかも問い合わせが来ないだけなので、誰も気づかないまま何日も過ぎる。 */}
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
+        <div className="mb-1 flex items-baseline gap-2.5">
+          <h2 className="text-[15px] font-semibold">サイトが開けるか</h2>
+          <span className="text-[12px] text-[var(--faint)]">
+            5分ごとに確認 ／ 15分続けて落ちたら通知
+          </span>
+        </div>
+        {uptime.length === 0 ? (
+          <p className="text-[13px] text-[var(--muted)]">監視対象がありません</p>
+        ) : (
+          <>
+            {/* ★異常の件数だけを出さない。動いている数を必ず並べる（§4-53） */}
+            <p className="mb-2 text-[12px] text-[var(--faint)]">
+              {uptime.filter((u) => u.ok === true).length} / {uptime.length} が応答しています
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead className="text-left text-[11px] text-[var(--faint)]">
+                  <tr>
+                    <th className="py-1 pr-2 font-medium">対象</th>
+                    <th className="py-1 pr-2 text-right font-medium">状態</th>
+                    <th className="py-1 pr-2 text-right font-medium">応答</th>
+                    <th className="py-1 pr-2 text-right font-medium">24時間の稼働率</th>
+                    <th className="py-1 text-right font-medium">最終確認</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {uptime.map((u) => (
+                    <tr key={u.key} className="border-t border-[var(--border)]">
+                      <td className="py-1.5 pr-2">{u.label}</td>
+                      <td className="py-1.5 pr-2 text-right">
+                        {u.ok === null ? (
+                          <span className="text-[var(--warn)]">{NOT_MEASURED}</span>
+                        ) : u.ok ? (
+                          <span className="text-[#1a7a2e]">開ける</span>
+                        ) : (
+                          <span className="font-semibold text-[var(--bad)]">開けない</span>
+                        )}
+                      </td>
+                      <td className="tnum py-1.5 pr-2 text-right text-[var(--faint)]">
+                        {u.responseMs === null ? "—" : `${u.responseMs}ms`}
+                      </td>
+                      <td className="tnum py-1.5 pr-2 text-right">
+                        {/* ★記録が無いときは 0% ではなく「—(未計測)」（§2-1） */}
+                        {u.uptime24h === null ? (
+                          <span className="text-[var(--warn)]">{NOT_MEASURED}</span>
+                        ) : (
+                          `${u.uptime24h.toFixed(1)}%`
+                        )}
+                      </td>
+                      <td className="tnum py-1.5 text-right text-[var(--faint)]">
+                        {jaDateTime(u.checkedAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* ── 過去の事故と再発防止（P3.10）──
+          ★見るべきは件数ではなく「対策が入っているか」。
+            done でない対策が残っている＝同じ事故がもう一度起きうる。 */}
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
+        <div className="mb-1 flex items-baseline gap-2.5">
+          <h2 className="text-[15px] font-semibold">過去の事故と再発防止</h2>
+          <span className="text-[12px] text-[var(--faint)]">{incidents.total}件を記録</span>
+        </div>
+        <p className="mb-3 text-[12px] text-[var(--muted)]">
+          {incidents.pendingActions === 0 ? (
+            "再発防止策はすべて実装済みです。"
+          ) : (
+            <>
+              <strong className="text-[var(--warn)]">
+                まだ入っていない再発防止策が {incidents.pendingActions} 件
+              </strong>
+              （{incidents.withPending}件の事故）。入るまでは同じことが起こりえます。
+            </>
+          )}
+        </p>
+        <div className="grid gap-2">
+          {incidents.rows.map((r) => (
+            <details key={r.id} className="rounded-lg border border-[var(--border)] p-3">
+              <summary className="cursor-pointer text-[13px]">
+                <span
+                  className={
+                    r.pending > 0
+                      ? "mr-2 rounded bg-[var(--warn)] px-1.5 py-0.5 text-[11px] font-semibold text-white"
+                      : "mr-2 rounded bg-[var(--border)] px-1.5 py-0.5 text-[11px] text-[var(--muted)]"
+                  }
+                >
+                  {r.pending > 0 ? `対策 未${r.pending}件` : "対策済み"}
+                </span>
+                <span className="font-medium">{r.title}</span>
+                <span className="ml-2 text-[11px] text-[var(--faint)]">
+                  {jaDate(r.occurredAt)} ・ {severityLabel(r.severity)} ・ {categoryLabel(r.category)}
+                </span>
+              </summary>
+              <ul className="mt-2 grid gap-1 text-[12px]">
+                {r.actions.map((a, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className={a.done ? "text-[#1a7a2e]" : "text-[var(--warn)]"}>
+                      {a.done ? "✓" : "未"}
+                    </span>
+                    <span>
+                      {a.action}
+                      {a.ref && <span className="ml-1 text-[var(--faint)]">（{a.ref}）</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ))}
         </div>
       </section>
     </section>

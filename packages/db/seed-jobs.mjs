@@ -183,6 +183,16 @@ const JOBS = [
     note: "ツール残高: API取得できるものを更新し、枯渇を段7で警告（/costs）",
   },
   {
+    name: "uptime-check-5min",
+    // ★5分間隔（§3.9.3）。連続3回＝15分落ちていれば通知する。
+    //   1回で鳴らすと瞬断のたびに飛んで、通知そのものが無視されるようになる。
+    schedule: "*/5 * * * *",
+    kind: "http",
+    config: { path: "/api/jobs/uptime", timeoutSeconds: 120 },
+    enabled: true,
+    note: "死活監視: トップ・代表記事・LP・問い合わせの受口を5分ごとに確認（連続3回失敗で通知）",
+  },
+  {
     name: "tag-delivery-daily",
     // 05:50。url-health(05:20) / ledger-check(05:40) の後。
     // ★役割が違う: url_health は §4-44 でキャッシュを迂回して「原因」を見る。

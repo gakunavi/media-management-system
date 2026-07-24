@@ -461,7 +461,7 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 > - `empty` … 全部0件。**未着手か、実装したが動いていないかは人が見て区別する**
 > - `n/a` … 担当モデルが特定できない（インフラ・ドキュメント系）
 
-**2026-07-24 時点: 合計59 ／ ✅done 17 ／ 🟡partial 17 ／ ❌empty 18 ／ —n/a 7**
+**2026-07-24 時点: 合計59 ／ ✅done 19 ／ 🟡partial 17 ／ ❌empty 16 ／ —n/a 7**
 
 | Phase | 状態 | 内容 | データが無いモデル |
 |---|---|---|---|
@@ -517,15 +517,15 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 | P5.9 | 🟡 partial | SnsAccountHealth / PostSchedule / CrossPromotion | PostSchedule・CrossPromotion |
 | P6.10 | ✅ done | m2連携（Lead ⇄ m2 Deal・成約結果の還流）※m2 は無改修（§9-D13） | — |
 | P1.8 | ✅ done | WP書き込みのMMS一本化（wp-publish.py API化）＋日次ハッシュ突合 | — |
-| P3.9 | ❌ empty | UptimeCheck（5分間隔・フォーム含む） | UptimeCheck |
+| P3.9 | ✅ done | UptimeCheck（5分間隔・フォーム含む） | — |
 | P4.14 | ❌ empty | GenerationProvenance（スキル/モデルのバージョン記録） | GenerationProvenance |
 | P6.11 | 🟡 partial | LinkCheck（週次・tier1優先） | LinkCheck |
 | P8.3 | ❌ empty | BrandMention（レピュテーション監視） | BrandMention |
 | P1.9 | ❌ empty | PerfGate（デプロイ前後PSI計測・劣化でブロック） | PerfGate |
 | P2.11 | ❌ empty | TelemetryVolume（発火回数監視）＋閾値アラート＋ワンクリック停止 | TelemetryVolume |
-| P3.10 | ❌ empty | Incident ＋ 過去5件の登録 | Incident |
+| P3.10 | ✅ done | Incident ＋ 過去5件の登録（実際は8件） | — |
 
-合計 59  ✅done 17  🟡partial 17  ❌empty 18  —n/a 7
+合計 59  ✅done 19  🟡partial 17  ❌empty 16  —n/a 7
 ★empty は「未着手」か「実装したが動いていない」のどちらか。区別は人が見る
 
 ---

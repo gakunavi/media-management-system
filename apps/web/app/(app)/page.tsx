@@ -32,6 +32,8 @@ import { getCostSummary } from "@/lib/tools";
 import { Tabs, resolveTab } from "@/components/dashboard/tabs";
 import { ResultPanel } from "@/components/dashboard/result-panel";
 import { HealthPanel, healthAlerts } from "@/components/dashboard/health-panel";
+import { getUptimeSummary } from "@/lib/uptime";
+import { getIncidents } from "@/lib/incidents";
 import { RoutesPanel } from "@/components/dashboard/routes-panel";
 import { getActionStats, type ActionStats } from "@/lib/actions-repo";
 
@@ -95,7 +97,13 @@ export default async function Dashboard({
       {tab === "overview" && <OverviewTab range={range} />}
       {tab === "routes" && <RoutesTab range={range} />}
       {tab === "health" && (
-        <HealthPanel health={health} freshness={freshness} cost={await getCostSummary()} />
+        <HealthPanel
+          health={health}
+          freshness={freshness}
+          cost={await getCostSummary()}
+          uptime={await getUptimeSummary()}
+          incidents={await getIncidents()}
+        />
       )}
     </div>
   );
