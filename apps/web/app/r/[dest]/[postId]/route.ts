@@ -198,6 +198,23 @@ async function recordSiteClick(
   // ★任意の文字列を指標名にしない。指標が無限に増えると鮮度チェックが壊れる
   if (!SAFE_SOURCE.test(source)) return;
 
+  // ── 送り元から記事IDを取り出す（U72）────────────────────────────────
+  //
+  // ★なぜ要るか: リダイレクタはサーバー側の実測なので**広告ブロックの影響を受けない**。
+  //   一方いまは「どの設置場所か」しか持たず、「どの記事から送ったか」が出せない。
+  //   計測タグ側（link_click）では記事別に出せるが、あちらは JS が動いた分だけで、
+  //   両者の合計は一致しない（§4-21）。記事IDを URL に入れれば、
+  //   **合計と内訳の両方をサーバー実測だけで**出せる。
+  //
+  // ★記事IDは指標名に混ぜない。混ぜると
+  //   `site_link_clicks_line__media-article-bottom-ART-159` が記事数×設置場所ぶん
+  //   増え、指標が無限に増える（鮮度チェックが壊れる）。
+  //   記事別は ContentMetric（記事単位の入れ物）に置き、
+  //   MetricSnapshot の内訳は**設置場所だけ**に保つ。
+  const m = /^(.*?)-?(ART-\d+)$/i.exec(source);
+  const articleExternalId = m ? m[2].toUpperCase() : null;
+  const placement = m ? m[1] || "unknown" : source;
+
   const business = await prisma.business.findFirst({
     where: { slug: process.env.MMS_DEFAULT_BUSINESS_SLUG ?? "tax-saving-agency" },
     select: { id: true },
@@ -224,8 +241,28 @@ async function recordSiteClick(
     });
   }
 
+  // ── 記事別の送客（U72）──
+  //   ★記事IDが付いていないリンクは今までどおり。設置場所だけが残る。
+  //     付いているものだけ記事単位で積むので、移行途中でも壊れない。
+  if (articleExternalId) {
+    const article = await prisma.contentItem.findFirst({
+      where: { externalId: articleExternalId },
+      select: { id: true },
+    });
+    // ★存在しない記事IDは黙って捨てる（貼り間違いで送客そのものを落とさない）。
+    //   サイト単位の合計には既に入っているので、数字は失われない
+    if (article) {
+      await prisma.contentMetric.upsert({
+        where: { contentItemId_metric_date: { contentItemId: article.id, metric, date } },
+        update: { value: { increment: 1 } },
+        create: { contentItemId: article.id, metric, value: 1, date },
+      });
+    }
+  }
+
   // 送り元別の内訳も持つ（どのCTAが効いたか）
-  const detail = `${metric}__${source}`;
+  // ★記事IDを除いた設置場所だけを使う（指標の数を有限に保つ）
+  const detail = `${metric}__${placement}`;
   const d2 = await prisma.metricSnapshot.findFirst({
     where: { businessId: business.id, metric: detail, date, channelId: null },
     select: { id: true, value: true },
