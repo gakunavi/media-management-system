@@ -1153,8 +1153,14 @@ model FunnelEvent {
   cta         Cta?           @relation(fields: [ctaId], references: [id])
   landingPage LandingPage?   @relation(fields: [lpId], references: [id])
 
-  /// §16.1-④ 冪等キー: (sessionId, step, contentItemId, occurredAt秒)
-  /// ★contentItemId が NULL の行では Postgres の NULL 非同値により効かない（§13 記録済）
+  /// §16.1-④ 冪等キー: (sessionId, step, contentItemId, occurredAt秒, meta->>'href')
+  /// ★実際の索引は手書きマイグレーション 20260724150000_funnel_event_target_key。
+  ///   Prisma は式インデックス（meta->>'href'）と NULLS NOT DISTINCT を表現できないため、
+  ///   下の @@unique は**列の並びだけ**が正で、実体は SQL 側にある。
+  ///   → スキーマ変更時は `--create-only` で生成SQLを目視し、
+  ///     この索引を戻す DROP/CREATE が混ざっていたら消す（§20-6）
+  /// ★href を含める理由: cta_view を自動化した結果、同じ記事の別々のCTAが
+  ///   同じ秒に発火してキーが衝突し、3件が1件に潰れた（2026-07-24 実測・§4-96）
 
   /// §9-D11: 監査・障害調査用のタイムスタンプ（設計書に記載は無いが P0-a で全モデルに付与）
   createdAt DateTime @default(now())
