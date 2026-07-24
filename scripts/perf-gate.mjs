@@ -13,6 +13,28 @@
 // ★測れなかったときも不合格にする。合格にすると
 //   ゲートが在るのに何も守っていない状態になる。
 import { PrismaClient } from "@prisma/client";
+import { readFileSync } from "node:fs";
+
+// ★.env を自分で読む（2026-07-24 の実測で判明）。
+//   この CLI は **ホストで動く**ので、コンテナと違って .env が自動で入らない。
+//   キーを .env に入れたのに「未設定」と言われて気づいた。
+//   ★既に環境変数がある場合は上書きしない（一時的に差し替えて試せるように）
+function loadEnv() {
+  try {
+    for (const line of readFileSync(new URL("../.env", import.meta.url), "utf8").split("\n")) {
+      const m = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());
+      if (!m) continue;
+      // ★既にある環境変数を上書きしない。
+      //   npm script が MMS_DATABASE_URL を **host 用（localhost:5433）** に
+      //   差し替えて渡しているのに、.env の値（db:5432＝コンテナ用）で
+      //   上書きしてしまい DB に繋がらなくなった（2026-07-24 実測）。
+      if (m[2] !== "" && process.env[m[1]] === undefined) process.env[m[1]] = m[2];
+    }
+  } catch {
+    // .env が無くても動く（環境変数で渡す運用もありうる）
+  }
+}
+loadEnv();
 
 const prisma = new PrismaClient();
 
