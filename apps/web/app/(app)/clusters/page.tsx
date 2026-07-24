@@ -184,6 +184,10 @@ function ClusterTable({ clusters }: { clusters: ClusterRow[] }) {
             クリックの多い子記事がある</strong>（ハブが実態と合っていない）。
           </>
         )}
+        {" "}
+        ★<strong>→ピラー未接続</strong>は、子記事のうちピラーへのリンクが2本未満のもの。
+        内部リンクの打ち手は<strong>1本ごとの効果を測れない</strong>ので、
+        ここが減ることと<strong>ピラー側の表示・順位</strong>の2つで進捗を見る。
         {byDesign.length > 0 && (
           <>
             {" "}
@@ -199,6 +203,7 @@ function ClusterTable({ clusters }: { clusters: ClusterRow[] }) {
               <th className="py-1.5 pr-2 font-medium">クラスタ</th>
               <th className="py-1.5 pr-2 font-medium">柱</th>
               <th className="py-1.5 pr-2 text-right font-medium">記事</th>
+              <th className="py-1.5 pr-2 text-right font-medium">→ピラー未接続</th>
               <th className="py-1.5 pr-2 font-medium">ピラー</th>
               <th className="py-1.5 pr-2 text-right font-medium">クリック</th>
               <th className="py-1.5 pr-2 text-right font-medium">表示</th>
@@ -226,6 +231,19 @@ function ClusterTable({ clusters }: { clusters: ClusterRow[] }) {
                     {PILLAR_TYPE_LABEL[c.pillarType] ?? c.pillarType}
                   </td>
                   <td className="tnum py-2 pr-2 text-right">{c.articles}</td>
+                  {/* ★内部リンクの打ち手は1本ごとに測れないので（cowork）、
+                      ここが減ることと、ピラー側の表示・順位で進捗を見る */}
+                  <td className="tnum py-2 pr-2 text-right">
+                    {c.pillar === null ? (
+                      "—"
+                    ) : c.lackingLinks === 0 ? (
+                      <span className="text-[#1a7a2e]">0</span>
+                    ) : (
+                      <span className="text-[var(--warn)]">
+                        {c.lackingLinks}/{c.children}
+                      </span>
+                    )}
+                  </td>
                   <td className="max-w-[20rem] py-2 pr-2">
                     {c.pillar === null ? (
                       c.pillarByDesign ? (

@@ -128,6 +128,14 @@ export type ClusterRow = {
   /** 由来・判断の根拠 */
   note: string | null;
   /**
+   * 子記事のうち、ピラーへのリンクが2本未満のもの。
+   * ★内部リンクの打ち手は1本ごとの効果を測れないので（cowork 2026-07-24）、
+   *   **ここが減っていくこと**と**ピラー側の表示・順位**の2つで進捗を見る。
+   */
+  lackingLinks: number;
+  /** 子記事の数（ピラーを除く） */
+  children: number;
+  /**
    * ピラーが無いのが**設計どおり**か。
    * ★「欠けている」と「置かない」を区別しないと、直す必要の無いものを直そうとする。
    *   横串クラスタはクラスタ横断のため Pillar-Cluster 構造を取らない（cowork 2026-07-23）。
@@ -153,7 +161,7 @@ export const PILLAR_TYPE_LABEL: Record<string, string> = {
 };
 
 export async function getClusters(): Promise<ClusterRow[]> {
-  const [clusters, incomingRaw] = await Promise.all([
+  const [clusters, incomingRaw, allLinks] = await Promise.all([
     prisma.topicCluster.findMany({
       select: {
         id: true,
@@ -179,7 +187,14 @@ export async function getClusters(): Promise<ClusterRow[]> {
       },
     }),
     prisma.internalLink.groupBy({ by: ["dstContentId"], _count: { _all: true } }),
+    prisma.internalLink.findMany({ select: { srcContentId: true, dstContentId: true } }),
   ]);
+  // 子 → ピラー のリンク本数
+  const pairCount = new Map<string, number>();
+  for (const l of allLinks) {
+    const k = `${l.srcContentId}>${l.dstContentId}`;
+    pairCount.set(k, (pairCount.get(k) ?? 0) + 1);
+  }
 
   const memberIds = clusters.flatMap((c) => c.members.map((m) => m.contentItem.id));
   // ★クリックは最新の集計期間（ContentQuery）から取る。
@@ -230,6 +245,14 @@ export async function getClusters(): Promise<ClusterRow[]> {
       pillarIncoming: c.pillarContentId ? (incomingBy.get(c.pillarContentId) ?? 0) : null,
       note: c.note,
       pillarByDesign: (c.note ?? "").includes(BY_DESIGN),
+      children: members.filter((m) => m.id !== c.pillarContentId).length,
+      lackingLinks: c.pillarContentId
+        ? members.filter(
+            (m) =>
+              m.id !== c.pillarContentId &&
+              (pairCount.get(`${m.id}>${c.pillarContentId}`) ?? 0) < 2,
+          ).length
+        : 0,
     };
   });
 

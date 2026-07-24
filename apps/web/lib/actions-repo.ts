@@ -224,8 +224,14 @@ export async function getProposedActions(limit = 50): Promise<ProposedAction[]> 
       //   ただし**新規記事には適用しない**。SERPに自社が居ないので表示が少ないのは
       //   当たり前で、それを「根拠が弱い」と言うと新規記事が永久に選ばれない
       //   （cowork 依頼7: 表示回数の単一ソートが新規を構造的に沈めるのと同じ理屈）。
+      // ★記事枠を使う打ち手だけに適用する。
+      //   新規記事はSERPに居ないので表示が少なくて当たり前、
+      //   内部リンク・Threads は判断材料が表示回数ではない（リンク構造・投稿実績）。
+      //   全部に出すと「根拠が弱い」が常時表示になり、意味を失う。
       weakEvidence:
-        !isNewArticle(r.type) && (impressions28 === null || impressions28 < MIN_IMPRESSIONS),
+        isArticleWork(r.type) &&
+        !isNewArticle(r.type) &&
+        (impressions28 === null || impressions28 < MIN_IMPRESSIONS),
     };
   });
 

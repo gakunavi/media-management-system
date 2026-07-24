@@ -145,10 +145,20 @@ export function ActionCard({ action }: { action: ProposedAction }) {
       <div className="text-[13px] font-medium">{action.title}</div>
       <p className="mt-1 text-[12px] leading-relaxed text-[var(--muted)]">{action.rationale}</p>
 
-      {action.evaluateDays && (
+      {/* ★内部リンクは1本ごとの効果を分離測定できない（cowork）。
+          「自動判定」と書くと、出ない数字を待つことになる */}
+      {action.type === "internal_link" ? (
         <p className="mt-1.5 text-[11px] text-[var(--faint)]">
-          承認すると {action.evaluateDays}日後に効果を自動判定（対照群補正つき・§5.3）
+          ★<strong>1本ごとの効果は測れません</strong>。承認後は
+          <strong>ピラー側の表示回数・順位を月次で見て</strong>判定します
+          （個別の対照群比較は成立しないため）。
         </p>
+      ) : (
+        action.evaluateDays && (
+          <p className="mt-1.5 text-[11px] text-[var(--faint)]">
+            承認すると {action.evaluateDays}日後に効果を自動判定（対照群補正つき・§5.3）
+          </p>
+        )
       )}
 
       {msg && !msg.ok && (

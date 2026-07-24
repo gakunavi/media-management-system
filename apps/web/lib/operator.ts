@@ -440,47 +440,92 @@ function slugify(s: string): string {
 }
 
 /**
- * Rule C（§3.5.2）: 宣言ピラーだが被リンクが少ない（権威が集約されていない）
- *   → internal_link（クラスター→ピラーのリンクを増やす）
+ * Rule C（§3.5.2）: クラスターからピラーへのリンクが足りない
+ *   → internal_link（権威をピラーへ集約する）
+ *
+ * ★2026-07-24 に作り直した。
+ *   旧実装は `isPillar` フラグと「被リンク中央値」で判定していたが、
+ *   クラスタ構造（`TopicCluster` / `ContentCluster`）が入る前の暫定版で、
+ *   **提案が1件しか出ていなかった**（cowork 依頼7で「明らかに過小」と指摘）。
+ *
+ *   実測（2026-07-24）: クラスタに属する子記事78本のうち
+ *   **78本すべてがピラーへのリンク2本未満**、うち44本は**0本**。
+ *   内部リンクの69%がクラスター↔クラスターで、ピラーへは19%しか向いていない。
+ *   運用順序「①head KW20位以内 → ②内部リンクでPillar押上げ → ③GEO再計測」の
+ *   ②が丸ごと未実装だった（cowork）。
+ *
+ * ★1記事1提案にはしない。ピラー単位でまとめる。
+ *   78件の提案を並べても処理できない。「このピラーへ、この記事群からリンクを張る」
+ *   を1件にすれば、実作業（1件15〜30分）の単位とも一致する。
+ *
+ * ★個別の効果は分離測定しない（cowork）。
+ *   1本のリンクの効果は測れないので、**ピラー側の表示回数・順位を月次で見る**。
  */
-async function proposeFromWeakPillars(): Promise<Proposal[]> {
-  const [pillars, incoming] = await Promise.all([
-    prisma.contentItem.findMany({
-      where: { type: "article", isPillar: true },
-      select: { id: true, externalId: true, title: true },
-    }),
-    prisma.internalLink.groupBy({ by: ["dstContentId"], _count: { _all: true } }),
-  ]);
-  const incBy = new Map(incoming.map((r) => [r.dstContentId, r._count._all]));
+const MIN_LINKS_TO_PILLAR = 2;
 
-  // 全記事の被リンク中央値
-  const all = await prisma.contentItem.findMany({
-    where: { type: "article" },
-    select: { id: true },
+async function proposeFromWeakPillars(): Promise<Proposal[]> {
+  const clusters = await prisma.topicCluster.findMany({
+    where: { pillarContentId: { not: null } },
+    select: {
+      name: true,
+      pillarContentId: true,
+      pillarContent: { select: { id: true, externalId: true, title: true } },
+      members: {
+        where: { role: "secondary" },
+        select: { contentItem: { select: { id: true, externalId: true, title: true } } },
+      },
+    },
   });
-  const vals = all
-    .map((a) => incBy.get(a.id) ?? 0)
-    .filter((v) => v > 0)
-    .sort((x, y) => x - y);
-  const median = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
+
+  const links = await prisma.internalLink.findMany({
+    select: { srcContentId: true, dstContentId: true },
+  });
+  const linkCount = new Map<string, number>();
+  for (const l of links) {
+    const k = `${l.srcContentId}>${l.dstContentId}`;
+    linkCount.set(k, (linkCount.get(k) ?? 0) + 1);
+  }
 
   const out: Proposal[] = [];
-  for (const p of pillars) {
-    const inc = incBy.get(p.id) ?? 0;
-    if (inc >= median) continue; // 十分な被リンクがあるピラーは対象外
+  for (const c of clusters) {
+    const pillar = c.pillarContent;
+    if (!pillar || c.members.length === 0) continue;
+
+    // ピラーへのリンクが足りない子記事
+    const lacking = c.members
+      .map((m) => m.contentItem)
+      .filter((m) => (linkCount.get(`${m.id}>${pillar.id}`) ?? 0) < MIN_LINKS_TO_PILLAR);
+    if (lacking.length === 0) continue;
+
+    // ★ピラー自身の被リンク総数も出す。いま何本集まっているかが判断材料
+    const incoming = links.filter((l) => l.dstContentId === pillar.id).length;
+
     out.push({
-      ruleKey: "weakpillar",
-      targetKey: p.externalId,
-      contentItemId: p.id,
-      contentExternalId: p.externalId,
+      ruleKey: "cluster2pillar",
+      targetKey: `${pillar.externalId}:${lacking.length}`,
+      contentItemId: pillar.id,
+      contentExternalId: pillar.externalId,
       type: "internal_link",
-      title: `[弱いピラー] ${p.externalId} へのクラスター→ピラー リンク追加`,
+      title: `[クラスタ] ${c.name} の ${lacking.length}記事 → ピラー ${pillar.externalId} へリンク`,
       rationale:
-        `宣言ピラーだが被リンク ${inc}本（中央値 ${median}本 未満）＝権威が集約されていない（§3.5.2）。` +
-        `関連クラスター記事から本記事へのリンクを追加し、ハブとして機能させる。対象: ${decodeEntities(p.title)}`,
-      impacts: ["回遊", "lp_view"],
-      signal: { incoming: inc, median },
+        `クラスタ「${c.name}」の子記事 ${c.members.length}本のうち ${lacking.length}本が、` +
+        `ピラーへのリンク ${MIN_LINKS_TO_PILLAR}本未満（うち0本が ` +
+        `${lacking.filter((m) => (linkCount.get(`${m.id}>${pillar.id}`) ?? 0) === 0).length}本）。` +
+        `ピラーの被リンクは現在 ${incoming}本。権威がピラーに集約されていない（§3.5.2）。` +
+        `／対象記事: ${lacking.slice(0, 6).map((m) => m.externalId).join(", ")}` +
+        `${lacking.length > 6 ? ` ほか${lacking.length - 6}本` : ""}` +
+        `／ピラー: ${decodeEntities(pillar.title)}` +
+        `／★1本ごとの効果は測れない。ピラー側の表示回数・順位を月次で見て判定する`,
+      impacts: ["回遊", "position"],
+      signal: {
+        clusterName: c.name,
+        lackingCount: lacking.length,
+        memberCount: c.members.length,
+        pillarIncoming: incoming,
+      },
     });
   }
+  // 足りない本数が多い順（＝集約の余地が大きい順）
+  out.sort((a, b) => (b.signal.lackingCount as number) - (a.signal.lackingCount as number));
   return out;
 }
