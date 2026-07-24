@@ -187,7 +187,7 @@ export function HealthPanel({
           </span>
           <h2 className="text-[15px] font-semibold">止まっていないか</h2>
           <Link href="/jobs" className="ml-auto text-[12px] text-[var(--accent)] hover:underline">
-            ジョブ画面 →
+            自動処理 →
           </Link>
         </div>
 

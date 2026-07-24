@@ -11,16 +11,30 @@
 //   実測ではほぼ全部に既存記事があった（少額減価償却は6本、決算賞与は ART-080）。
 //   これを出さないと同じ話題の記事を量産してカニバリを増やす
 //   （今日「即時償却」で12記事が競合しているのを見たばかり）。
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import type { TopicGroup } from "@/lib/ideas";
 import { IDEA_SOURCE_LABEL } from "@/lib/ideas";
 import { IdeaCard } from "./idea-card";
+import { adoptIdea } from "./idea-actions";
 
 export function TopicGroups({ groups }: { groups: TopicGroup[] }) {
   const [open, setOpen] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   return (
     <div className="space-y-2.5">
+      {toast && (
+        <p
+          className={`rounded-md px-3 py-2 text-[12px] ${
+            toast.ok
+              ? "bg-[var(--accent-weak)] text-[var(--accent)]"
+              : "bg-[var(--bad)]/10 text-[var(--bad)]"
+          }`}
+        >
+          {toast.msg}
+        </p>
+      )}
       {groups.map((g) => {
         const head = g.ideas[0];
         const isOpen = open === g.key;
@@ -53,16 +67,31 @@ export function TopicGroups({ groups }: { groups: TopicGroup[] }) {
                 ★この話題は<strong>既に{g.covered.length}本の記事で扱っています</strong>。
                 新規で書くと<strong>同じKWで自社どうしが競合します</strong>。
                 既存記事に見出しを足す形を先に検討してください。
-                <ul className="mt-1">
+                {/* ★行き先を用意する。警告だけ出して受け皿が無いと、
+                    結局「新規記事」で起票されて競合が増える（U87） */}
+                <ul className="mt-1 space-y-1">
                   {g.covered.map((c) => (
-                    <li key={c.externalId}>
-                      ・
+                    <li key={c.externalId} className="flex flex-wrap items-center gap-2">
                       <Link
                         href={`/content/${c.externalId}`}
                         className="underline hover:text-[var(--accent)]"
                       >
                         {c.externalId} {c.title}
                       </Link>
+                      <button
+                        disabled={pending || head.state !== "new"}
+                        onClick={() =>
+                          start(async () => {
+                            const r = await adoptIdea(head.id, c.externalId);
+                            setToast(
+                              r.ok ? { msg: r.message, ok: true } : { msg: r.error, ok: false },
+                            );
+                          })
+                        }
+                        className="rounded-md bg-[var(--ink)] px-2 py-0.5 text-[11px] font-medium text-white disabled:opacity-40"
+                      >
+                        この記事に加筆
+                      </button>
                     </li>
                   ))}
                 </ul>

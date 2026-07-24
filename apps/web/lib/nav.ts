@@ -65,7 +65,7 @@ export const NAV: NavGroup[] = [
     items: [
       { href: "/experiments", label: "施策・PDCA", ready: true, icon: "experiments" },
       { href: "/costs", label: "コスト", ready: true, icon: "costs" },
-      { href: "/jobs", label: "ジョブ", ready: true, icon: "jobs" },
+      { href: "/jobs", label: "自動処理", ready: true, icon: "jobs" },
     ],
   },
 ];

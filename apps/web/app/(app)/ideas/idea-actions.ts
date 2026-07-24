@@ -28,10 +28,25 @@ async function requireOwner(): Promise<{ ok: true; id: string } | { ok: false; e
 }
 
 /**
- * 記事化する: Action(new_article) を起票して段5に載せる。
+ * ネタを段5に載せる。
+ *
+ * ★2つの行き先がある（2026-07-24・U87）
+ *   新規記事 … その話題を扱う記事がまだ無い
+ *   加筆     … 既に記事がある。**新規で書くと自社どうしが競合する**
+ *
+ *   実測（2026-07-24）で、未対応35件を話題に束ねると33話題あり、
+ *   そのうち **11話題は既に記事があった**（少額減価償却は6本、決算賞与は ART-080）。
+ *   それまで行き先が「新規記事」しか無く、画面で警告を出しても
+ *   **正しい方の受け皿が存在しなかった**。同じ日に「即時償却」で12記事が
+ *   競合しているのを見ており、ネタ画面がその再生産を助長する構造だった。
+ *
  * ★ここでは「書く」ことまではしない。承認は人が押す（§12.3）。
  */
-export async function adoptIdea(ideaId: string): Promise<Result> {
+export async function adoptIdea(
+  ideaId: string,
+  /** 加筆先の記事。指定すると new_article ではなく rewrite として起票する */
+  targetExternalId?: string,
+): Promise<Result> {
   const gate = await requireOwner();
   if (!gate.ok) return gate;
 
@@ -41,22 +56,40 @@ export async function adoptIdea(ideaId: string): Promise<Result> {
     return { ok: false, error: `この状態では記事化できません（${idea.state}）` };
   }
 
+  // 加筆先が指定されていれば実在を確認する（★存在しないIDで起票させない）
+  let target: { id: string; externalId: string; title: string } | null = null;
+  if (targetExternalId) {
+    target = await prisma.contentItem.findFirst({
+      where: { externalId: targetExternalId },
+      select: { id: true, externalId: true, title: true },
+    });
+    if (!target) return { ok: false, error: `記事 ${targetExternalId} が見つかりません` };
+  }
+
   const actionId = `act_idea_${idea.id}`;
   const exists = await prisma.action.findUnique({
     where: { id: actionId },
     select: { id: true },
   });
 
-  const type = "new_article";
+  // ★加筆は rewrite。新規記事とは工数も判定期間も違うので型を分ける
+  const type = target ? "rewrite" : "new_article";
   if (!exists) {
     await prisma.action.create({
       data: {
         id: actionId,
         businessId: idea.businessId,
         type,
-        title: `[ネタ採用] ${idea.title}`,
+        title: target
+          ? `[ネタ採用・加筆] ${target.externalId} に「${idea.title}」を足す`
+          : `[ネタ採用] ${idea.title}`,
         rationale:
           `${idea.body ?? ""}` +
+          (target
+            ? `／★新規記事ではなく**既存記事への加筆**として起票した。` +
+              `この話題は ${target.externalId}「${target.title}」が既に扱っており、` +
+              `新規で書くと同じKWで自社どうしが競合する。見出しを足す形で対応する。`
+            : `／この話題を扱う記事はまだ無い（新規記事）。`) +
           `／このActionは /ideas で採用したネタから起票された（供給源: ${idea.source}）。`,
         impacts: idea.impacts,
         proposedBy: `idea:${idea.source}`,
@@ -65,7 +98,8 @@ export async function adoptIdea(ideaId: string): Promise<Result> {
           ideaId: idea.id,
           source: idea.source,
           sourceRef: idea.sourceRef ?? null,
-          contentItemId: idea.contentItemId,
+          contentItemId: target?.id ?? idea.contentItemId,
+          contentExternalId: target?.externalId ?? null,
           evaluateDays: JUDGE_DAYS[type] ?? 56,
         } as Prisma.InputJsonValue,
         expiresAt: new Date(Date.now() + 14 * DAY),
@@ -91,7 +125,9 @@ export async function adoptIdea(ideaId: string): Promise<Result> {
   revalidatePath("/experiments");
   return {
     ok: true,
-    message: "施策・PDCA に「次の一手」として起票しました。承認すると判定期日が予約されます",
+    message: target
+      ? `${target.externalId} への加筆として「施策・PDCA」に起票しました`
+      : "施策・PDCA に「次の一手」として起票しました。承認すると判定期日が予約されます",
   };
 }
 
