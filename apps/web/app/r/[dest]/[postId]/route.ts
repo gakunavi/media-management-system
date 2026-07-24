@@ -211,9 +211,22 @@ async function recordSiteClick(
   //   増え、指標が無限に増える（鮮度チェックが壊れる）。
   //   記事別は ContentMetric（記事単位の入れ物）に置き、
   //   MetricSnapshot の内訳は**設置場所だけ**に保つ。
-  const m = /^(.*?)-?(ART-\d+)$/i.exec(source);
-  const articleExternalId = m ? m[2].toUpperCase() : null;
-  const placement = m ? m[1] || "unknown" : source;
+  // ★末尾の `-ART-\d+` を**全部**剥がす。記事IDは（いちばん末尾の）1つだけ使う。
+  //   2026-07-24 の検証で、二重付与 `article-cta-ART-002-ART-002` を送ったとき
+  //   1つしか剥がさず、設置場所が `article-cta-ART-002` として残った。
+  //   テーマ側は二重付与しない設計だが、**残ると設置場所の内訳が記事数ぶん増える**
+  //   （＝指標が無限に増えて鮮度チェックが壊れる）。ここで吸収する。
+  // ★桁数は可変（ART-2 も ART-189 もある）。`\d+` で受ける。
+  let placement = source;
+  let articleExternalId: string | null = null;
+  for (;;) {
+    const m = /-?(ART-\d+)$/i.exec(placement);
+    if (!m) break;
+    // 最初に取れたもの＝いちばん末尾＝テーマが最後に付けたもの
+    articleExternalId ??= m[1].toUpperCase();
+    placement = placement.slice(0, m.index);
+  }
+  if (placement === "") placement = "unknown";
 
   const business = await prisma.business.findFirst({
     where: { slug: process.env.MMS_DEFAULT_BUSINESS_SLUG ?? "tax-saving-agency" },
