@@ -461,7 +461,7 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 > - `empty` … 全部0件。**未着手か、実装したが動いていないかは人が見て区別する**
 > - `n/a` … 担当モデルが特定できない（インフラ・ドキュメント系）
 
-**2026-07-24 時点: 合計59 ／ ✅done 19 ／ 🟡partial 17 ／ ❌empty 16 ／ —n/a 7**
+**2026-07-24 時点: 合計59 ／ ✅done 20 ／ 🟡partial 17 ／ ❌empty 15 ／ —n/a 7**
 
 | Phase | 状態 | 内容 | データが無いモデル |
 |---|---|---|---|
@@ -521,11 +521,11 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 | P4.14 | ❌ empty | GenerationProvenance（スキル/モデルのバージョン記録） | GenerationProvenance |
 | P6.11 | 🟡 partial | LinkCheck（週次・tier1優先） | LinkCheck |
 | P8.3 | ❌ empty | BrandMention（レピュテーション監視） | BrandMention |
-| P1.9 | ❌ empty | PerfGate（デプロイ前後PSI計測・劣化でブロック） | PerfGate |
-| P2.11 | ❌ empty | TelemetryVolume（発火回数監視）＋閾値アラート＋ワンクリック停止 | TelemetryVolume |
+| P1.9 | ❌ empty | PerfGate（デプロイ前後PSI計測・劣化でブロック）★実装済み・PSIのAPIキー待ち | PerfGate |
+| P2.11 | ✅ done | TelemetryVolume（発火回数監視）＋閾値アラート＋ワンクリック停止 | — |
 | P3.10 | ✅ done | Incident ＋ 過去5件の登録（実際は8件） | — |
 
-合計 59  ✅done 19  🟡partial 17  ❌empty 16  —n/a 7
+合計 59  ✅done 20  🟡partial 17  ❌empty 15  —n/a 7
 ★empty は「未着手」か「実装したが動いていない」のどちらか。区別は人が見る
 
 ---

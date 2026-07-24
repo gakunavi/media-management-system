@@ -18,6 +18,7 @@ import {
   EVENTS_PER_SESSION_BAD,
 } from "@/lib/telemetry-volume";
 import { resumeTracking } from "@/app/(app)/tracking-actions";
+import type { PerfGateStatus } from "@/lib/perf-gate";
 import { type IncidentSummary, severityLabel, categoryLabel } from "@/lib/incidents";
 import { NOT_MEASURED } from "@mms/shared";
 
@@ -179,6 +180,7 @@ export function HealthPanel({
   uptime,
   incidents,
   telemetry,
+  perf,
 }: {
   health: JobHealth;
   freshness: MetricFreshness[];
@@ -186,6 +188,7 @@ export function HealthPanel({
   uptime: UptimeSummary[];
   incidents: IncidentSummary;
   telemetry: TelemetryHealth;
+  perf: PerfGateStatus;
 }) {
   const stale = freshness.filter((f) => f.alert !== "ok");
   const unused = freshness.filter((f) => !f.used);
@@ -377,6 +380,32 @@ export function HealthPanel({
             </button>
           </form>
         )}
+      </section>
+
+      {/* ── 性能ゲート（P1.9）──
+          ★過去の TTFB スパイク事故は「テーマ更新に紛れて入った」。
+            更新のたびに測れば当日中に気づける。 */}
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
+        <div className="mb-1 flex items-baseline gap-2.5">
+          <h2 className="text-[15px] font-semibold">更新して重くなっていないか</h2>
+          <span className="text-[12px] text-[var(--faint)]">
+            TTFB 20%悪化 ／ LCP 0.5秒悪化で不合格
+          </span>
+        </div>
+        <Box alert={perf.alert} title={perf.measuredAt ? `最終計測 ${jaDateTime(perf.measuredAt)}` : "未計測"}>
+          {perf.reason}
+          {perf.failures.length > 0 && (
+            <ul className="mt-1 grid gap-0.5 text-[12px]">
+              {perf.failures.map((f, i) => (
+                <li key={i}>・{f.label}: {f.reason}</li>
+              ))}
+            </ul>
+          )}
+        </Box>
+        <p className="mt-2 text-[11px] text-[var(--faint)]">
+          テーマ・計測タグ・LPを更新する前後で <code>npm run perf:gate -- before|after 名前</code> を実行します。
+          ★測れなかったときも不合格になります（合格にすると、あるのに何も守らないゲートになるため）。
+        </p>
       </section>
 
       {/* ── サイトが生きているか（P3.9）──

@@ -35,7 +35,8 @@
     "events:test": "bash scripts/events-test.sh",
     "seed:leads": "npm run seed:leads --workspace @mms/db",
     "seed:jobs": "MMS_DATABASE_URL=$(bash scripts/host-dsn.sh) npm run seed:jobs --workspace @mms/db",
-    "seed:incidents": "MMS_DATABASE_URL=$(bash scripts/host-dsn.sh) npm run seed:incidents --workspace @mms/db"
+    "seed:incidents": "MMS_DATABASE_URL=$(bash scripts/host-dsn.sh) npm run seed:incidents --workspace @mms/db",
+    "perf:gate": "MMS_DATABASE_URL=$(bash scripts/host-dsn.sh) node scripts/perf-gate.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3"

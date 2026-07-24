@@ -40,8 +40,8 @@ const INCIDENTS = [
     resolution: "自前PV計測を停止。計測は MMS の /api/ingest へ送る方式に切り替えた。",
     preventionActions: [
       { action: "計測タグの7原則（バッファ→sendBeacon 1発・throttle・冪等キー・非同期・WP側で書かない・defer・自己遮断）", done: true, ref: "docs/RULES.md §1" },
-      { action: "TelemetryVolume で発火回数そのものを監視する", done: false, ref: "P2.11（未着手）" },
-      { action: "デプロイ前後で PSI を測り、劣化したら失敗扱いにする", done: false, ref: "P1.9（未着手）" },
+      { action: "TelemetryVolume で発火回数そのものを監視する", done: true, ref: "P2.11 / lib/telemetry-volume.ts" },
+      { action: "デプロイ前後で PSI を測り、劣化したら失敗扱いにする", done: true, ref: "P1.9 / npm run perf:gate" },
       { action: "計測タグは子テーマ／専用プラグインに置く（functions.php 直書き禁止）", done: true, ref: "docs/RULES.md §1.2" },
     ],
     relatedPhase: "P2.5",
