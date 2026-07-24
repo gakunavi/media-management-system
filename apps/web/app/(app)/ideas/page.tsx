@@ -1,6 +1,6 @@
-import { getIdeas, IDEA_SOURCE_LABEL } from "@/lib/ideas";
+import { getIdeas, groupIdeas, IDEA_SOURCE_LABEL } from "@/lib/ideas";
 import { RunIdeas } from "./run-ideas";
-import { IdeaCard } from "./idea-card";
+import { TopicGroups } from "./topic-groups";
 
 // ネタ（設計書 §4.2 /ideas・§13.4-④「チャネル間でネタが循環する」）
 export const dynamic = "force-dynamic";
@@ -14,6 +14,10 @@ export default async function IdeasPage() {
     (a, b) => (order[a.state] ?? 9) - (order[b.state] ?? 9) || +b.createdAt - +a.createdAt,
   );
   const openCount = all.filter((i) => i.state === "new").length;
+  // ★話題で束ねる。35件並べても「書く記事」は十数本しかない
+  const groups = groupIdeas(ideas.filter((i) => i.state === "new"));
+  const newTopics = groups.filter((g) => g.covered.length === 0);
+  const addTo = groups.filter((g) => g.covered.length > 0);
   const bySource = new Map<string, number>();
   for (const i of all) if (i.state === "new") bySource.set(i.source, (bySource.get(i.source) ?? 0) + 1);
 
@@ -23,7 +27,8 @@ export default async function IdeasPage() {
         <div>
           <h1 className="text-xl font-bold tracking-tight">ネタ</h1>
           <p className="mt-0.5 text-[13px] text-[var(--muted)]">
-            記事ネタの自動供給・未対応 {openCount}件 / 全{all.length}件
+            未対応 {openCount}件を<strong>{groups.length}の話題</strong>にまとめました
+            （全{all.length}件）
             {bySource.size > 0 && (
               <span className="text-[var(--faint)]">
                 （
@@ -38,6 +43,28 @@ export default async function IdeasPage() {
         <RunIdeas />
       </div>
 
+      {/* ★「35件のネタがある」に見せない。実際に書けるのは新規{newTopics.length}話題だけ */}
+      {groups.length > 0 && (
+        <div className="mb-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3.5">
+            <div className="text-[12px] text-[var(--muted)]">まだ記事が無い話題</div>
+            <div className="tnum mt-1 text-2xl font-bold leading-none text-[var(--accent)]">
+              {newTopics.length}
+            </div>
+            <div className="mt-1 text-[10px] text-[var(--faint)]">新規記事の候補</div>
+          </div>
+          <div className="rounded-lg border border-[var(--warn)]/40 bg-[var(--warn)]/[0.08] p-3.5">
+            <div className="text-[12px] text-[var(--muted)]">既に記事がある話題</div>
+            <div className="tnum mt-1 text-2xl font-bold leading-none text-[#9a6a00]">
+              {addTo.length}
+            </div>
+            <div className="mt-1 text-[10px] text-[var(--faint)]">
+              ★新規で書くと自社どうしが競合する。既存記事への加筆を先に
+            </div>
+          </div>
+        </div>
+      )}
+
       {ideas.length === 0 ? (
         <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-8 text-center">
           <p className="text-[13px] text-[var(--muted)]">
@@ -46,11 +73,7 @@ export default async function IdeasPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-2.5">
-          {ideas.map((i) => (
-            <IdeaCard key={i.id} idea={i} />
-          ))}
-        </div>
+        <TopicGroups groups={groups} />
       )}
 
       <p className="mt-4 text-[12px] text-[var(--faint)]">

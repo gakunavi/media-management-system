@@ -275,7 +275,64 @@ export type IdeaRow = {
   impacts: string[];
   state: string;
   createdAt: Date;
+  /**
+   * 同じ話題として束ねるキー。
+   * ★実測（2026-07-24）で、35件のうち PAA 15件が**すべて「少額減価償却資産・
+   *   個人事業主」1トピックの質問違い**、AIO未引用10件のうち4件が
+   *   「決算賞与通知」の表記違いだった。別々に並べると「35件のネタがある」に
+   *   見えるが、実際に書く記事は十数本しかない。
+   */
+  topicKey: string;
+  /**
+   * その話題を既に扱っている記事。
+   * ★あるなら「新規記事」ではなく「既存記事への加筆」。
+   *   実測で PAA・AIO未引用のほぼ全部に既存記事があった（少額減価償却は6本、
+   *   決算賞与は ART-080）。これを出さないと**同じ話題の記事を量産**して
+   *   カニバリを増やす（今日「即時償却」で12記事が競合しているのを見たばかり）。
+   */
+  covered: { externalId: string; title: string }[];
 };
+
+/**
+ * 話題キーを作る。
+ * ★完全一致では束ねられない（「少額減価償却資産とは？」と
+ *   「個人事業主 少額減価償却資産 いくらまで？」は同じ話題）。
+ *   記号と一般語を落として、残った語の集合で判定する。
+ * ★ここは機械的な近似でよい。完全な分類は人がやる（§9.4.2）。
+ */
+const STOP_WORDS = [
+  "とは", "いくら", "まで", "ですか", "いつから", "いつまで", "できます", "使えます",
+  "の", "は", "が", "を", "に", "で", "も", "や", "な", "?", "？", "・", "｜", "、", "。",
+];
+
+/**
+ * 定型の接尾辞を落とす。
+ * ★これを落とさないと、供給源ごとの決まり文句（「上位なのにAI Overviewに
+ *   引用されていない」など）が全部の語に混ざり、**無関係な話題が束ねられる**。
+ *   実測でAIO未引用10件のうち8件が「即時償却 税額控除 比較」に誤って束ねられた。
+ */
+const BOILERPLATE = [
+  /—.*$/,                 // 「— 上位なのに…」以降
+  /を記事化\s*$/,
+  /^\[[^\]]+\]\s*/,      // 先頭の [AIO未引用] 等
+];
+
+export function topicKeyOf(title: string): string {
+  let t = title;
+  for (const re of BOILERPLATE) t = t.replace(re, " ");
+  // ★「」で囲まれた部分があれば、それが話題そのもの（AIO未引用・PAAの形式）
+  const quoted = t.match(/[「『]([^」』]+)[」』]/);
+  if (quoted) t = quoted[1];
+  t = t.replace(/[「」『』【】]/g, " ");
+  for (const w of STOP_WORDS) t = t.split(w).join(" ");
+  const tokens = t
+    .split(/[\s　]+/)
+    .map((x) => x.trim())
+    .filter((x) => x.length >= 2)
+    .sort();
+  // ★上位2語で束ねる。3語だと「決算賞与通知書」と「決算賞与通知 文例」が割れる
+  return tokens.slice(0, 2).join("|") || title.slice(0, 12);
+}
 
 export const IDEA_SOURCE_LABEL: Record<string, string> = {
   threads_hit: "Threads反響",
@@ -301,5 +358,54 @@ export async function getIdeas(): Promise<IdeaRow[]> {
     },
     take: 200,
   });
-  return rows;
+
+  // ★既存記事があるかを調べる。無いものだけが本当の「新規ネタ」
+  const articles = await prisma.contentItem.findMany({
+    where: { type: "article", status: "publish" },
+    select: { externalId: true, title: true },
+  });
+
+  return rows.map((r) => {
+    const key = topicKeyOf(r.title);
+    const words = key.split("|").filter((w) => w.length >= 3);
+    // 話題の語をすべて含む記事を「扱っている」とみなす
+    const covered =
+      words.length === 0
+        ? []
+        : articles
+            .filter((a) => words.every((w) => a.title.includes(w)))
+            .slice(0, 3)
+            .map((a) => ({ externalId: a.externalId, title: decodeIdeaTitle(a.title) }));
+    return { ...r, topicKey: key, covered };
+  });
+}
+
+function decodeIdeaTitle(s: string): string {
+  return s.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&amp;/g, "&");
+}
+
+
+export type TopicGroup = {
+  key: string;
+  ideas: IdeaRow[];
+  covered: { externalId: string; title: string }[];
+  sources: string[];
+};
+
+/**
+ * ネタを話題でまとめる。
+ * ★件数が多い＝同じ話題で何度も需要が観測されている、という順に並べる。
+ */
+export function groupIdeas(ideas: IdeaRow[]): TopicGroup[] {
+  const by = new Map<string, TopicGroup>();
+  for (const i of ideas) {
+    const g = by.get(i.topicKey) ?? { key: i.topicKey, ideas: [], covered: [], sources: [] };
+    g.ideas.push(i);
+    for (const c of i.covered) {
+      if (!g.covered.some((x) => x.externalId === c.externalId)) g.covered.push(c);
+    }
+    if (!g.sources.includes(i.source)) g.sources.push(i.source);
+    by.set(i.topicKey, g);
+  }
+  return [...by.values()].sort((a, b) => b.ideas.length - a.ideas.length);
 }
