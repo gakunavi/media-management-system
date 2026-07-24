@@ -183,6 +183,17 @@ const JOBS = [
     note: "ツール残高: API取得できるものを更新し、枯渇を段7で警告（/costs）",
   },
   {
+    name: "tag-delivery-daily",
+    // 05:50。url-health(05:20) / ledger-check(05:40) の後。
+    // ★役割が違う: url_health は §4-44 でキャッシュを迂回して「原因」を見る。
+    //   こちらは §4-95 で読者と同じ条件のまま叩いて「届いているか」を見る。
+    schedule: "50 5 * * *",
+    kind: "builtin",
+    config: { script: "tag_delivery.py", timeoutSeconds: 1800 },
+    enabled: true,
+    note: "計測タグ配信: 読者と同じ条件で叩き、届いていない記事を検出（あればCloudflareを自動パージ）",
+  },
+  {
     name: "operator-propose-weekly",
     schedule: "0 9 * * 1", // 毎週月曜 09:00 JST（§5.1 週次）
     kind: "http",

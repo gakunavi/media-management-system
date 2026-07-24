@@ -63,6 +63,7 @@ export const JOB_PURPOSE: Record<string, string> = {
   "serp-fetch-weekly": "検索結果の順位を取り込む（DataForSEO）",
   "url-health-daily": "記事URLが本当に開けるか確認する（301ループ・404）",
   "ledger-check-daily": "台帳・設定・実公開のズレを検出する",
+  "tag-delivery-daily": "計測タグが読者に届いているか確認する",
   "tool-balance-daily": "外部ツールの残高を確認する",
   "queue-refill-daily": "Threads の投稿キューを補充する",
   "intervention-evaluate-daily": "打ち手の効果を28日後に判定する",
