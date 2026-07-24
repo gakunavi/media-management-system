@@ -249,7 +249,11 @@ export async function getLineChannel(range: Range): Promise<LineChannel> {
   // ★段①は入口の合計。測れている入口が1つも無ければ未計測（0 ではない）
   const sent = measuredEntrances.reduce((s, e) => s + (e.clicks ?? 0), 0);
   const sentMeasuredAny = measuredEntrances.length > 0;
-  const followed = friends.length;
+  // ★`friends.length`（LineFriend の行数）を登録数として使わない（§4-99）。
+  //   LineFriend に入るのは **Webhook 設置後に増えた友だち**だけで、
+  //   設置前の7人は永久に遡及できない（`GET /v2/bot/followers/ids` は
+  //   このアカウント種別では 403。2026-07-24 に実測して確認済み）。
+  //   登録数は `SnsAccountHealth` のスナップショット差分（friendsChange）で出す。
   const inquired = leads.length;
   // ★計測開始より前に起票した件数。②登録0なのに④問い合わせ2、という
   //   ファネルとして成立しない並びは、これが原因（Webhook設置前の遡及入力）。

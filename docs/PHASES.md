@@ -603,6 +603,16 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 - 設定先を間違えると全滅する: `mms.asset-support.co.jp/api/ingest/line` は Cloudflare Access のログインへ **302**。`collect.asset-support.co.jp/api/ingest/line` は Access 対象外で **401**（署名検証まで到達している）
 - **follow イベントは遡及しない。** 設定が遅れた日数ぶんの友だち追加は永久に取れない（§9-D27）
 
+**★D35 の設定完了を確認（2026-07-24・石井さんが設定 → API で検証）**
+- `GET /v2/bot/channel/webhook/endpoint` → `endpoint: https://collect.asset-support.co.jp/api/ingest/line` / **`active: true`**
+- `POST /v2/bot/channel/webhook/test` → `success: true` / **`statusCode: 200`**。LINE から実際に配信され MMS が 200 を返した＝**署名検証も通っている**（LINE はテスト配信もチャネルシークレットで署名する）
+- テスト配信で `LineFriend` / `LineInbound` / `Lead` は**1行も増えていない**（userId の無いイベントを正しく捨てている）
+- ★**既存7人は永久に遡及できないことが確定した。** `GET /v2/bot/followers/ids` は
+  **403 `Access to this API is not available for your account`**（認証済みアカウント等でないと使えない）。
+  総数は `SnsAccountHealth` で7と取れているが、**誰が・いつ・どこから登録したかは復元不能**。
+  したがって `LineFriend` は「Webhook 設置後に増えた友だち」だけを表す。
+  ★**この差を画面で明示する**（総数7 と 追跡できている人数 を別に出す）。同じ数だと誤読される
+
 **★D34 の根拠になった cowork の実測（そのまま記録する）**
 - 着手理由の最多は **CTR不全＝「順位10〜14位×表示あり×クリック0」**。"順位が落ちた"ではない
 - 公開→初回リライトの実間隔は **60〜75日**。ただし定期ケイデンスではなく事後対応
