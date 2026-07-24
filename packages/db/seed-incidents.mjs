@@ -188,6 +188,35 @@ const INCIDENTS = [
     relatedPhase: "P8.2",
   },
   {
+    key: "false-uptime-alert-empty-env",
+    occurredAt: jst("2026-07-24"),
+    detectedAt: jst("2026-07-24"),
+    resolvedAt: jst("2026-07-24"),
+    severity: "medium",
+    category: "data_quality",
+    title: "偽の「サイトが落ちています」通知を出した（環境変数の空文字）",
+    symptom:
+      "17:40 に「問い合わせの受口（フォーム）が15分連続でつながらない」と通知したが、" +
+      "受口は HEAD に 405 を返して正常に動いていた。",
+    rootCause:
+      "docker-compose に `MMS_PUBLIC_COLLECT_URL: ${MMS_PUBLIC_COLLECT_URL:-}` を足したが " +
+      ".env に定義が無く、コンテナには **undefined ではなく空文字**が入った。" +
+      "読み取り側が `process.env.X ?? \"既定値\"` で、`??` は空文字を素通りするため " +
+      "既定値が効かず、監視先が `/api/ingest/form` という**相対URL**になっていた。" +
+      "★渡す側（compose）だけ直して読み取り側を確認しなかったのが直接の原因。",
+    resolution:
+      "空文字も未設定として扱う `lib/env.ts`（env / envOr / envUrl）を作り、" +
+      "URL や識別子など「値が無いと壊れる」箇所を全て通した。",
+    preventionActions: [
+      { action: "process.env.X ?? 既定値 を使わない（空文字は ?? を素通りする）", done: true, ref: "docs/RULES.md §4-108" },
+      { action: "lib/env.ts の env() / envOr() / envUrl() を通す", done: true, ref: "apps/web/lib/env.ts" },
+      { action: "compose に env を足すときは読み取り側も同時に確認する", done: true, ref: "docs/RULES.md §4-108" },
+      { action: "通知の判定ロジックは純粋関数にして単体で検証する（誤報を実地で試さない）", done: true, ref: "lib/uptime.ts decideAlert()" },
+    ],
+    relatedPhase: "P3.9",
+    note: "★誤報そのものは軽微だが、通知の信用を落とす＝本物の障害を見逃す入口になるため medium とした。",
+  },
+  {
     key: "tag-not-delivered-apo",
     occurredAt: jst("2026-07-23"),
     detectedAt: jst("2026-07-24"),

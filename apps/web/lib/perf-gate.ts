@@ -9,6 +9,7 @@
 //   PSI が叩けなかったときに passed=true にすると、ゲートは
 //   **在るのに何も守っていない**状態になる。測れなければ必ず不合格にする（§2）。
 import { prisma } from "@mms/db";
+import { env, envOr, envUrl } from "@/lib/env";
 
 /** §1.3 の閾値 */
 export const TTFB_WORSE_RATIO = 0.2; // 20%以上悪化で失敗
@@ -56,7 +57,7 @@ const num = (v: unknown): number | null =>
  *   キーは無料。未設定でも試すが、失敗は握り潰さず error に残す。
  */
 export async function measure(url: string, strategy: "mobile" | "desktop" = "mobile"): Promise<PerfMeasurement> {
-  const key = (process.env.MMS_PSI_API_KEY ?? "").trim();
+  const key = env("MMS_PSI_API_KEY") ?? "";
   const q = new URLSearchParams({ url, strategy, category: "performance" });
   if (key) q.set("key", key);
 
@@ -130,14 +131,14 @@ export async function measure(url: string, strategy: "mobile" | "desktop" = "mob
 
 /** 監視対象。★URLは台帳から引く（直書きすると増えたときに漏れる・§4-26） */
 export async function perfTargets(): Promise<{ target: PerfTargetKind; label: string; url: string }[]> {
-  const site = (process.env.MMS_WP_BASE_URL ?? "https://asset-support.co.jp").replace(/\/+$/, "");
+  const site = envUrl("MMS_WP_BASE_URL", "https://asset-support.co.jp");
   const out: { target: PerfTargetKind; label: string; url: string }[] = [
     { target: "wp_theme", label: "サイトのトップ（テーマ）", url: `${site}/` },
   ];
 
   // ★計測タグが載っているのは記事。タグの変更で重くなっていないかはここで見る
   const flagship = await prisma.contentItem.findFirst({
-    where: { externalId: process.env.MMS_UPTIME_FLAGSHIP ?? "ART-002", url: { not: null } },
+    where: { externalId: envOr("MMS_UPTIME_FLAGSHIP", "ART-002"), url: { not: null } },
     select: { url: true },
   });
   if (flagship?.url) out.push({ target: "tracker", label: "代表記事（計測タグ）", url: flagship.url });

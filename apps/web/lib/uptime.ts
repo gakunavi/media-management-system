@@ -14,6 +14,7 @@
 //   3回＝15分落ちていれば本物。逆に鳴らし続けもしない（復旧まで1通）。
 import { prisma } from "@mms/db";
 import { notify } from "@/lib/notify";
+import { envOr, envUrl } from "@/lib/env";
 
 /** 連続何回failで通知するか（§3.9.3） */
 const FAIL_STREAK_TO_ALERT = 3;
@@ -41,11 +42,13 @@ const okIs2xx = (s: number) => s >= 200 && s < 300;
  *   直書きするとLPが増えたときに監視から漏れ、漏れたことも分からない。
  */
 export async function buildTargets(): Promise<UptimeTarget[]> {
-  const site = (process.env.MMS_WP_BASE_URL ?? "https://asset-support.co.jp").replace(/\/+$/, "");
-  const collect = (process.env.MMS_PUBLIC_COLLECT_URL ?? "https://collect.asset-support.co.jp").replace(/\/+$/, "");
+  // ★envUrl は空文字も「未設定」として扱う。`??` だと compose の `${X:-}` が
+  //   空文字で入ったときに既定値が効かず、相対URLになって偽のダウン通知が出る（2026-07-24）
+  const site = envUrl("MMS_WP_BASE_URL", "https://asset-support.co.jp");
+  const collect = envUrl("MMS_PUBLIC_COLLECT_URL", "https://collect.asset-support.co.jp");
   // ★代表記事は主力商材の記事に固定する（既定 ART-002 即時償却）。
   //   「クリック最多の記事」だと対象が月ごとに変わり、履歴が比較できなくなる。
-  const flagshipExternalId = process.env.MMS_UPTIME_FLAGSHIP ?? "ART-002";
+  const flagshipExternalId = envOr("MMS_UPTIME_FLAGSHIP", "ART-002");
 
   const targets: UptimeTarget[] = [
     { key: "site_top", label: "サイトのトップ", url: `${site}/`, ok: okIs2xx },
@@ -208,7 +211,7 @@ export async function runUptimeChecks(): Promise<UptimeRunResult> {
           ? `🚨 サイトが落ちています（${down.length}件）`
           : `✅ 復旧しました（${recovered.length}件）`,
       body: lines.join("\n"),
-      url: process.env.MMS_PUBLIC_URL ?? "http://localhost:3000",
+      url: envOr("MMS_PUBLIC_URL", "http://localhost:3000"),
     });
     notified = true;
   }
