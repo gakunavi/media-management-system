@@ -212,6 +212,16 @@ const JOBS = [
     note: "死活監視: トップ・代表記事・LP・問い合わせの受口を5分ごとに確認（連続3回失敗で通知）",
   },
   {
+    name: "jsonld-health-daily",
+    // 06:10。★url_health(05:20) は「記事が開けるか」、こちらは
+    //   「構造化データの中のURLが正しいか」。対象が違うので別ジョブ。
+    schedule: "10 6 * * *",
+    kind: "builtin",
+    config: { script: "jsonld_health.py", timeoutSeconds: 1800 },
+    enabled: true,
+    note: "構造化データ検査: JSON-LD 内のURL（パンくず・sameAs等）を叩き、301の先まで辿って404を検出（U91）",
+  },
+  {
     name: "tag-delivery-daily",
     // 05:50。url-health(05:20) / ledger-check(05:40) の後。
     // ★役割が違う: url_health は §4-44 でキャッシュを迂回して「原因」を見る。

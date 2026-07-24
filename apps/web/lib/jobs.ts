@@ -64,6 +64,7 @@ export const JOB_PURPOSE: Record<string, string> = {
   "url-health-daily": "記事URLが本当に開けるか確認する（301ループ・404）",
   "ledger-check-daily": "台帳・設定・実公開のズレを検出する",
   "tag-delivery-daily": "計測タグが読者に届いているか確認する",
+  "jsonld-health-daily": "検索エンジン向けの構造化データが壊れていないか確認する",
   "uptime-check-5min": "サイトと問い合わせの受口が生きているか確認する",
   "telemetry-volume-hourly": "計測タグの発火が増えすぎていないか確認する",
   "page-experience-daily": "記事の表示速度を測る（スマホ・PC別）",
