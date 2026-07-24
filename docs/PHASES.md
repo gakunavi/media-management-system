@@ -410,7 +410,7 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 | **U69** | 記事のタグ付け（読者・記事の型・メインKW・クラスタ・鮮度） | ⏳ **大半が解決（2026-07-23）**。読者157/179・記事の型155/179（`scripts/tag-content-axes.py`）／**メインKW 165/179**・**クラスタ 101/179**（cowork台帳から取り込み・D31/D33）／**鮮度 155/179**（D34）。★買い手軸・ファネル段階は **D28 で記事から外した**（記事から読者の予算規模は決まらない）。残りは**クラスタ未定61本**（cowork も「まだ決めていない」と確認済み）と型が未分類の24本。**判定できないものは空のまま残す**（§3）。`/content` の充足パネルで可視化 |
 | ~~**U71**~~ | ~~買い手軸で判定できない記事が40件~~ **→ D28 で解消**。買い手軸（`budgetTier`）そのものを記事から外し、「読者」＋「記事の型」に置き換えた。読者157/179(88%)・型155/179(87%)まで埋まっている。残る未分類は §3 のとおり**空のまま残す**（推測で埋めると分析が嘘になる） |
 | **U70** | **リダイレクタの実測が記事別に分解できない**（**D29 で部分的に解消**） | 記事別の内訳は計測タグ（`link_click`）で出せるようになった。ただし**リダイレクタ側の合計とは一致しない**（サーバー実測 vs JSが動いた分）。完全に一致させるには `/r/line/{設置場所}-{記事ID}` が要る → **U72** |
-| ~~**U72**~~ | ~~リダイレクタURLに記事IDを入れる~~（**MMS側は 2026-07-24 完了・cowork 作業待ち**） | 記事末CTAのリンクを `/r/line/media-article-bottom` から `/r/line/media-article-bottom-ART-159` にする。`SAFE_SOURCE`（`[A-Za-z0-9_-]{1,40}`）はそのまま通る。これができると**サーバー側の実測だけで記事別の送客**が出せ、広告ブロックの影響を受けない数字になる。★**MMS 側は対応済み**（送り元末尾の `ART-\d+` を記事単位で `ContentMetric` に積む。設置場所の内訳には記事IDを混ぜない＝指標が記事数×設置場所ぶん増えるのを防ぐ）。実測確認済み。依頼文は `docs/prompts/cowork-redirect-article-id.md` |
+| **U72** | **リダイレクタURLに記事IDを入れる**（2026-07-24 deploy 済み・★`article-cta` だけ未反映） | 記事末CTAのリンクを `/r/line/media-article-bottom` から `/r/line/media-article-bottom-ART-159` にする。`SAFE_SOURCE`（`[A-Za-z0-9_-]{1,40}`）はそのまま通る。これができると**サーバー側の実測だけで記事別の送客**が出せ、広告ブロックの影響を受けない数字になる。★**MMS 側は対応済み**（送り元末尾の `ART-\d+` を記事単位で `ContentMetric` に積む。設置場所の内訳には記事IDを混ぜない＝指標が記事数×設置場所ぶん増えるのを防ぐ）。実測確認済み。依頼文は `docs/prompts/cowork-redirect-article-id.md`。★**2026-07-24 deploy 検証**: テンプレート側（`media-header`系・`media-article-bottom`/`-sidebar`・`media-footer`系）は**成功**（10記事で記事ID付き8件・二重付与0・カテゴリ/トップは未付与・JSON-LD の `sameAs` も不干渉）。★**`article-cta` だけ効いていない**（本文側・`the_content` フィルタが当たっていない）。**実測で記事内最多（表示22/17記事）なので、ここが入らないと狙いの主要部分が取れない**。最有力の原因は正規表現が**絶対URL**（`href="https://collect.asset-support.co.jp/r/line/article-cta"`）に当たっていないこと → `docs/prompts/cowork-redirect-article-id-deploy-result.md` |
 | ~~**U73**~~ | ~~ART-142（P1ピラー）が本番で301の無限ループ~~ | ✅ **2026-07-24 解決**（cowork/石井が WP Redirection を修正）。実測で確認: canonical `keieikyoka-…` が **200・0ホップ**、`chushokigyo-…` と `-pillar` はいずれも **1ホップで canonical に着地**。★MMS 側は `redirectsToId` で301元を集計から除外済み |
 | ~~**U74**~~ | ~~`/media/category/tax-reform/` が404~~ | ✅ **2026-07-24 解決**（cowork が WP Redirection を修正）。実測で確認: `tax-reform` が **200・0ホップ**で「税制改正・時事ニュース」（25本）を表示、`/blog-category/tax-reform-news/` は**1ホップで着地**。★行き止まりの正体はメニューではなく **id=25 の逆301**（正カテゴリを削除済みの空termへ転送）だった。原因は3層（重複term・逆301・旧パス転送）ですべて塞がった |
 | **U75** | **config の `BREADCRUMB_CATEGORY_SLUG` が404を指していた**（2026-07-24 是正済み） | 3種23本が404だった。`tax-reform-news`(14) → `tax-reform`／`capital-investment`(7) → `capex-tax-reduction`（breadcrumb の JSON-LD 表記「設備投資・減税」とライブのカテゴリ名が一致・GPU系 ART-086〜091）／`tax-reform`(2) は U74 待ち。★`cases-interviews`(3) は `/media/` へ301するだけで**カテゴリページが存在しない**・`partner`(1) は `/partners/` でカテゴリではない → **未対応・要判断**。★**2026-07-24 に本番のHTMLを読んで追加で判明**: ART-090 の JSON-LD が `/category/capital-investment/` を指しており、これは **301 → 404**（`/media/` が抜けている＋slug が実在の `capex-tax-reduction` と違う）。**読者もクローラも404に着いている**。`url_health.py` は登録URLしか叩いておらず **JSON-LD の中のURLを見ていない**ため検出できなかった。依頼文は `docs/prompts/cowork-breadcrumb-404.md` |
@@ -462,7 +462,7 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 > - `empty` … 全部0件。**未着手か、実装したが動いていないかは人が見て区別する**
 > - `n/a` … 担当モデルが特定できない（インフラ・ドキュメント系）
 
-**2026-07-24 時点: 合計59 ／ ✅done 21 ／ 🟡partial 17 ／ ❌empty 14 ／ —n/a 7**
+**2026-07-24 時点: 合計59 ／ ✅done 22 ／ 🟡partial 17 ／ ❌empty 13 ／ —n/a 7**
 
 | Phase | 状態 | 内容 | データが無いモデル |
 |---|---|---|---|
@@ -502,7 +502,7 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 | P4.4 | ✅ done | ContentVersion ＋ ロールバック実行 | — |
 | P4.8 | ✅ done | 判定の信頼度（対照群最小基準・バッチ判定・inconclusive のUI表現） | — |
 | P3.3 | ❌ empty | IndexStatus（GSC URL Inspection API・未インデックス検知） | IndexStatus |
-| P3.4 | ❌ empty | PageExperience（CWV / PSI・モバイル別） | PageExperience |
+| P3.4 | ✅ done | PageExperience（CWV / PSI・モバイル別） | — |
 | P4.2 | ❌ empty | LeadTouchpoint（マルチタッチ・アシスト貢献） | LeadTouchpoint |
 | P4.11 | 🟡 partial | ProductionCost（記事別ROI） | ProductionCost |
 | P5.8 | ✅ done | trafficSource / aiEngine 判別（AI検索流入） | — |
@@ -526,7 +526,7 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 | P2.11 | ✅ done | TelemetryVolume（発火回数監視）＋閾値アラート＋ワンクリック停止 | — |
 | P3.10 | ✅ done | Incident ＋ 過去5件の登録（実際は8件） | — |
 
-合計 59  ✅done 21  🟡partial 17  ❌empty 14  —n/a 7
+合計 59  ✅done 22  🟡partial 17  ❌empty 13  —n/a 7
 ★empty は「未着手」か「実装したが動いていない」のどちらか。区別は人が見る
 
 ---

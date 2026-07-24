@@ -19,6 +19,7 @@ import {
 } from "@/lib/telemetry-volume";
 import { resumeTracking } from "@/app/(app)/tracking-actions";
 import type { PerfGateStatus } from "@/lib/perf-gate";
+import type { PageExperienceSummary } from "@/lib/page-experience";
 import { type IncidentSummary, severityLabel, categoryLabel } from "@/lib/incidents";
 import { NOT_MEASURED } from "@mms/shared";
 
@@ -181,6 +182,7 @@ export function HealthPanel({
   incidents,
   telemetry,
   perf,
+  pageExp,
 }: {
   health: JobHealth;
   freshness: MetricFreshness[];
@@ -189,6 +191,7 @@ export function HealthPanel({
   incidents: IncidentSummary;
   telemetry: TelemetryHealth;
   perf: PerfGateStatus;
+  pageExp: PageExperienceSummary;
 }) {
   const stale = freshness.filter((f) => f.alert !== "ok");
   const unused = freshness.filter((f) => !f.used);
@@ -406,6 +409,65 @@ export function HealthPanel({
           テーマ・計測タグ・LPを更新する前後で <code>npm run perf:gate -- before|after 名前</code> を実行します。
           ★測れなかったときも不合格になります（合格にすると、あるのに何も守らないゲートになるため）。
         </p>
+
+        {/* ── 記事別のページ体験（P3.4）──
+            ★ラボ値（模擬条件）と実ユーザー（CrUX）を混同しない。
+              2026-07-24 にラボ値を「体感」として報告して訂正した（§4-106）。 */}
+        <div className="mt-3 border-t border-[var(--border)] pt-3">
+          <div className="mb-1 flex flex-wrap items-baseline gap-2">
+            <h3 className="text-[13px] font-semibold">記事のページ体験</h3>
+            <span className="text-[11px] text-[var(--faint)]">
+              {pageExp.measuredArticles} / {pageExp.totalArticles} 記事を計測済み
+              {pageExp.lastMeasuredAt && `（最終 ${jaDate(pageExp.lastMeasuredAt)}）`}
+            </span>
+          </div>
+
+          {pageExp.measuredArticles === 0 ? (
+            <p className="text-[12px] text-[var(--muted)]">
+              まだ計測していません（毎日 06:20 に古い順から8記事ずつ測ります）
+            </p>
+          ) : (
+            <>
+              <p className="mb-2 text-[12px] text-[var(--muted)]">
+                {pageExp.cruxArticles > 0 ? (
+                  <>実ユーザーの実測がある記事: {pageExp.cruxArticles}件</>
+                ) : (
+                  <>
+                    <strong className="text-[var(--warn)]">実ユーザーの実測（CrUX）はまだありません。</strong>
+                    訪問数が少なくGoogleが集計していないためで、
+                    <strong>実際の訪問者がどう感じているかは分かりません</strong>。
+                  </>
+                )}
+              </p>
+              <p className="mb-2 text-[11px] text-[var(--faint)]">
+                ★下はスマホの<strong>模擬条件</strong>（低速4G相当）の値です。<strong>体感ではありません</strong>。
+                実ブラウザでは1〜2秒で表示されています。重い記事を見つける用途にだけ使います。
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[12px]">
+                  <thead className="text-left text-[11px] text-[var(--faint)]">
+                    <tr>
+                      <th className="py-1 pr-2 font-medium">重い順（スマホ・模擬）</th>
+                      <th className="py-1 text-right font-medium">LCP</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageExp.worst.map((w) => (
+                      <tr key={w.externalId} className="border-t border-[var(--border)]">
+                        <td className="py-1 pr-2">
+                          <span className="text-[var(--faint)]">{w.externalId}</span> {w.title.slice(0, 30)}
+                        </td>
+                        <td className="tnum py-1 text-right">
+                          {w.lcp === null ? "—" : `${(w.lcp / 1000).toFixed(1)}秒`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
       </section>
 
       {/* ── サイトが生きているか（P3.9）──

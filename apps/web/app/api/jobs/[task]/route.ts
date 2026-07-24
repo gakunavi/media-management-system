@@ -15,6 +15,7 @@ import { safeEqual } from "@/lib/crypto";
 import { refillQueue } from "@/lib/threads-queue";
 import { runUptimeChecks } from "@/lib/uptime";
 import { aggregateTelemetryVolume, proposeStopIfSpiking } from "@/lib/telemetry-volume";
+import { collectPageExperience } from "@/lib/page-experience";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ const TASKS = [
   "queue-refill",
   "uptime",
   "telemetry",
+  "page-experience",
 ] as const;
 type Task = (typeof TASKS)[number];
 
@@ -137,6 +139,13 @@ export async function POST(
           ].join("\n"),
         });
       }
+      return NextResponse.json({ ok: true, task, ...r });
+    }
+    if (task === "page-experience") {
+      // §3.6.4 ページ体験（Core Web Vitals）。★全記事を毎回測らず、
+      //   「最後に測った日が古い順」に少しずつ回して全体を覆う。
+      //   ラボ値（psi）と実ユーザー（crux）を別々に保存する（§4-106）
+      const r = await collectPageExperience();
       return NextResponse.json({ ok: true, task, ...r });
     }
     if (task === "telemetry") {

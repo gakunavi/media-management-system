@@ -81,6 +81,14 @@ services:
       MMS_NOTIFY_WEBHOOK_URL: ${MMS_NOTIFY_WEBHOOK_URL:-}
       MMS_NOTIFY_EMAIL: ${MMS_NOTIFY_EMAIL:-}
       MMS_JOB_SECRET: ${MMS_JOB_SECRET:-}
+      # 性能ゲート（P1.9）とページ体験（P3.4）で PageSpeed Insights を叩く。
+      # ★未設定だと共有クォータで429になり測れない（キーは無料・§4-104）
+      MMS_PSI_API_KEY: ${MMS_PSI_API_KEY:-}
+      MMS_PAGE_EXPERIENCE_BATCH: ${MMS_PAGE_EXPERIENCE_BATCH:-8}
+      # 代表記事（死活監視・性能ゲートの対象）
+      MMS_UPTIME_FLAGSHIP: ${MMS_UPTIME_FLAGSHIP:-ART-002}
+      MMS_WP_BASE_URL: ${MMS_WP_BASE_URL:-}
+      MMS_PUBLIC_COLLECT_URL: ${MMS_PUBLIC_COLLECT_URL:-}
       # このMac（localhost）専用の自動ログイン。外部公開経由では作動しない
       MMS_DEV_AUTOLOGIN_EMAIL: ${MMS_DEV_AUTOLOGIN_EMAIL:-}
     ports:

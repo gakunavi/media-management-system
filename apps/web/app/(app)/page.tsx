@@ -36,6 +36,7 @@ import { getUptimeSummary } from "@/lib/uptime";
 import { getIncidents } from "@/lib/incidents";
 import { getTelemetryHealth } from "@/lib/telemetry-volume";
 import { getPerfGateStatus } from "@/lib/perf-gate";
+import { getPageExperienceSummary } from "@/lib/page-experience";
 import { RoutesPanel } from "@/components/dashboard/routes-panel";
 import { getActionStats, type ActionStats } from "@/lib/actions-repo";
 
@@ -107,6 +108,7 @@ export default async function Dashboard({
           incidents={await getIncidents()}
           telemetry={await getTelemetryHealth()}
           perf={await getPerfGateStatus()}
+          pageExp={await getPageExperienceSummary()}
         />
       )}
     </div>

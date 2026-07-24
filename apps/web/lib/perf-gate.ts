@@ -23,6 +23,14 @@ export type PerfMeasurement = {
   ttfb: number | null;
   jsBytes: number | null;
   requestCount: number | null;
+  /** Lighthouse の performance スコア（0〜1）。P3.4 で使う */
+  performanceScore: number | null;
+  /**
+   * 実ユーザーの実測（CrUX）。★**訪問数が少ないと Google が集計せず null になる**。
+   *   2026-07-24 時点、このサイトは null（データ無し）。
+   *   ラボ値（上の lcp 等）と混ぜない。あれは模擬条件で、体感ではない（§4-106）。
+   */
+  field: { lcp: number | null; inp: number | null; cls: number | null; ttfb: number | null } | null;
   /** 測れなかった理由。null なら測れている */
   error: string | null;
 };
@@ -32,6 +40,7 @@ type PsiJson = {
   error?: { message?: string; code?: number };
   lighthouseResult?: {
     audits?: Record<string, PsiAudit & { details?: { items?: unknown[] } }>;
+    categories?: { performance?: { score?: number } };
   };
   loadingExperience?: {
     metrics?: Record<string, { percentile?: number }>;
@@ -58,6 +67,8 @@ export async function measure(url: string, strategy: "mobile" | "desktop" = "mob
     ttfb: null,
     jsBytes: null,
     requestCount: null,
+    performanceScore: null,
+    field: null,
     error: null,
   };
 
@@ -81,7 +92,23 @@ export async function measure(url: string, strategy: "mobile" | "desktop" = "mob
     const audits = json.lighthouseResult?.audits ?? {};
     // ★フィールドデータ（実ユーザー）がある場合のみ INP を入れる。
     //   ラボには INP が無く、代わりに TBT を入れると別の指標を同じ列に混ぜることになる
-    const inpField = json.loadingExperience?.metrics?.INTERACTION_TO_NEXT_PAINT?.percentile;
+    const fm = json.loadingExperience?.metrics;
+    const inpField = fm?.INTERACTION_TO_NEXT_PAINT?.percentile;
+    // ★実ユーザーの値が1つでもあるときだけ field を作る。
+    //   無いのに 0 を入れると「実測で0秒」に見える（§2-1）
+    const field =
+      fm && Object.keys(fm).length > 0
+        ? {
+            lcp: num(fm.LARGEST_CONTENTFUL_PAINT_MS?.percentile),
+            inp: num(fm.INTERACTION_TO_NEXT_PAINT?.percentile),
+            // ★CLS は 100倍で返るので戻す（0.05 が 5 として来る）
+            cls: (() => {
+              const v = num(fm.CUMULATIVE_LAYOUT_SHIFT_SCORE?.percentile);
+              return v === null ? null : v / 100;
+            })(),
+            ttfb: num(fm.EXPERIMENTAL_TIME_TO_FIRST_BYTE?.percentile),
+          }
+        : null;
 
     const requests = audits["network-requests"]?.details?.items;
 
@@ -92,6 +119,8 @@ export async function measure(url: string, strategy: "mobile" | "desktop" = "mob
       ttfb: num(audits["server-response-time"]?.numericValue),
       jsBytes: num(audits["total-byte-weight"]?.numericValue),
       requestCount: Array.isArray(requests) ? requests.length : null,
+      performanceScore: num(json.lighthouseResult?.categories?.performance?.score),
+      field,
       error: null,
     };
   } catch (e) {

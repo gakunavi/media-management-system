@@ -183,6 +183,16 @@ const JOBS = [
     note: "ツール残高: API取得できるものを更新し、枯渇を段7で警告（/costs）",
   },
   {
+    name: "page-experience-daily",
+    // 毎日 06:20。★1回8記事ぶん（×モバイル/デスクトップ＝16回のPSI呼び出し）。
+    //   159記事を一度に測ると数時間かかるので、古い順に少しずつ回す
+    schedule: "20 6 * * *",
+    kind: "http",
+    config: { path: "/api/jobs/page-experience", timeoutSeconds: 1800 },
+    enabled: true,
+    note: "ページ体験: 記事のCore Web Vitalsをモバイル/デスクトップ別に取得（古い順に8記事ずつ）",
+  },
+  {
     name: "telemetry-volume-hourly",
     // 毎時5分。★1時間ぶんを確定させてから見る（進行中の時間は数字が動くため）
     schedule: "5 * * * *",

@@ -66,6 +66,7 @@ export const JOB_PURPOSE: Record<string, string> = {
   "tag-delivery-daily": "計測タグが読者に届いているか確認する",
   "uptime-check-5min": "サイトと問い合わせの受口が生きているか確認する",
   "telemetry-volume-hourly": "計測タグの発火が増えすぎていないか確認する",
+  "page-experience-daily": "記事の表示速度を測る（スマホ・PC別）",
   "tool-balance-daily": "外部ツールの残高を確認する",
   "queue-refill-daily": "Threads の投稿キューを補充する",
   "intervention-evaluate-daily": "打ち手の効果を28日後に判定する",
