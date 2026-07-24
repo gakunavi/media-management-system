@@ -10,7 +10,7 @@
 | API／MCPツール接頭辞 | `mms_*` |
 | 環境変数接頭辞 | `MMS_*` |
 | 起案 | 2026-07-20 / 石井政隆 |
-| 現在の状態 | **GSC・WP連携が稼働**。実画面7つ＋自動ジョブ4本（WP同期6:00 / GSC7:00 / 判定8:00 / 立案 月9:00） |
+| 現在の状態 | **ロードマップ59件中 done 22 / partial 17 / empty 13 / n/a 7**（2026-07-24）。実データでの判定は `bash docs/check-consistency.sh` |
 
 ---
 
@@ -145,12 +145,27 @@ launchctl load ~/Library/LaunchAgents/com.mms.stack.plist
 
 ---
 
+## まず読むもの
+
+**[docs/STATUS.md](docs/STATUS.md)** — いまの状態・止まっているもの・よく使うコマンドの1枚。
+
+| | |
+|---|---|
+| 実装ロードマップ・未解決リスト | `docs/PHASES.md`（§8.9 が進捗の正） |
+| 実装規約（★全Phase が読む・106項目） | `docs/RULES.md` |
+| 用語と取りうる値 | `docs/GLOSSARY.md` |
+| 外部サービスの接続手順 | `docs/INTEGRATIONS.md` |
+| そのまま貼れる依頼文 | `docs/prompts/` |
+
 ## 次にやること
 
-`docs/PHASES.md` に従って **P2.5**（ファネル7段）→ **P2.6**（Lead属性・直客2件の遡及入力）と進める。
+`docs/PHASES.md` の `empty` 13件のうち、**外部依存が無いもの**から着手する
+（P3.3 IndexStatus → P8.2 ContentLifecycle/UrlRedirect → P0.5 個人情報対応）。
 
-WordPress フォームの接続手順は `docs/INTEGRATIONS.md`。
-着手順は「#」ではなく**依存**に従う。**M-A（15.0日）で一度止めて実際に使う。**
+着手順は「#」ではなく**依存**に従う。
+
+★**進捗を手で書かない。** `bash docs/check-consistency.sh` の [10] が
+担当モデルの実データ有無で判定する（§4-91）。
 
 ---
 
