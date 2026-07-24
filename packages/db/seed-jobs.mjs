@@ -183,6 +183,15 @@ const JOBS = [
     note: "ツール残高: API取得できるものを更新し、枯渇を段7で警告（/costs）",
   },
   {
+    name: "telemetry-volume-hourly",
+    // 毎時5分。★1時間ぶんを確定させてから見る（進行中の時間は数字が動くため）
+    schedule: "5 * * * *",
+    kind: "http",
+    config: { path: "/api/jobs/telemetry", timeoutSeconds: 120 },
+    enabled: true,
+    note: "計測量の監視: 1人あたりの発火回数を確定し、急増なら停止提案を段5に出す（§3.10.4）",
+  },
+  {
     name: "uptime-check-5min",
     // ★5分間隔（§3.9.3）。連続3回＝15分落ちていれば通知する。
     //   1回で鳴らすと瞬断のたびに飛んで、通知そのものが無視されるようになる。

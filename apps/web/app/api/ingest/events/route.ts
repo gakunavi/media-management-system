@@ -23,6 +23,7 @@ import {
   MAX_EVENTS_PER_REQUEST,
   type FunnelStep,
 } from "@/lib/telemetry";
+import { recordIngestVolume, getTrackingDisabledAt } from "@/lib/telemetry-volume";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -88,10 +89,38 @@ function bad(status: number, reason: string) {
   return NextResponse.json({ ok: false, reason }, { status });
 }
 
+/**
+ * 緊急停止スイッチのキャッシュ（§3.10.4 / P2.11）。
+ * ★毎リクエストで DB を引くと、暴走時にその問い合わせ自体が負荷になる。
+ *   止めたい状況ほど重くなるのでは意味が無いので、60秒だけ持つ。
+ */
+let disabledCache: { at: number; value: boolean } | null = null;
+const DISABLED_TTL_MS = 60_000;
+
+async function isTrackingDisabled(): Promise<boolean> {
+  const now = Date.now();
+  if (disabledCache && now - disabledCache.at < DISABLED_TTL_MS) return disabledCache.value;
+  try {
+    const v = (await getTrackingDisabledAt()) !== null;
+    disabledCache = { at: now, value: v };
+    return v;
+  } catch {
+    // ★読めなかったら「動かす」側に倒す。計測が止まる方が損失が大きい
+    return false;
+  }
+}
+
 export async function POST(req: Request) {
   // ── 1. オリジン検証（ブラウザ計測の第一の防御）──
   if (!isAllowedOrigin(req.headers.get("origin"))) {
     return bad(403, "許可されていないオリジンです");
+  }
+
+  // ── 1.5 緊急停止（§3.10.4）──
+  //   ★200 で返す。エラーを返すとタグ側が再送を試みうるので、
+  //     止めているのに負荷が増える。受け取って捨てるのが一番軽い。
+  if (await isTrackingDisabled()) {
+    return ok({ accepted: 0, disabled: true });
   }
 
   // ── 2. 本文（text/plain を JSON として読む）──
@@ -324,6 +353,15 @@ export async function POST(req: Request) {
       data: { converted: true },
     });
   }
+
+  // ── 10. 発火回数の記録（§3.10.4 / P2.11）──
+  //   ★受信バイト数と「重複で捨てた数」は**ここでしか分からない**。
+  //     後から実データを見ても、捨てた分は残っていないので復元できない。
+  await recordIngestVolume({
+    accepted: created.count,
+    duplicated: rows.length - created.count,
+    bytes: raw.length,
+  });
 
   return ok({
     accepted: created.count,

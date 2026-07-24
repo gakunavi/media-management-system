@@ -399,6 +399,10 @@ enum ActionType {
   kw_pivot
   threads_format_shift
   stop_low_fit
+  /// §3.10.4 計測タグの発火が暴走したときの緊急停止（P2.11）。
+  /// ★他の型と違い「記事を良くする打ち手」ではなく**サイトを守る操作**。
+  ///   承認すると受口が受信を止める（媒体側の作業を待たずに止められる）
+  stop_tracking_tag
 }
 
 /// §16.5 Intervention.confidence — 判定の信頼度

@@ -6,6 +6,7 @@ import { prisma, type Prisma } from "@mms/db";
 import { currentUser, isOwner } from "@/lib/session";
 import { generateProposals, JUDGE_DAYS } from "@/lib/operator";
 import { postponeIntervention } from "@/lib/interventions";
+import { setTrackingDisabled } from "@/lib/telemetry-volume";
 
 const DAY = 86400000;
 
@@ -62,8 +63,30 @@ export async function approveAction(actionId: string): Promise<Result> {
     return { ok: false, error: `この状態では承認できません（${action.state}）` };
   }
 
-  const art = readArtifact(action.preparedArtifact);
   const now = new Date();
+
+  // ★計測タグの緊急停止は「打ち手」ではなく操作なので、Intervention を作らない。
+  //   効果を28日後に判定するものではないし、判定待ちに並ぶと本物の打ち手が埋もれる。
+  //   押した瞬間に受口が受信を止める（§3.10.4 / P2.11）。
+  if (action.type === "stop_tracking_tag") {
+    await setTrackingDisabled(true, action.title);
+    await prisma.$transaction([
+      prisma.action.update({ where: { id: actionId }, data: { state: "done" } }),
+      prisma.actionEvent.create({
+        data: { actionId, event: "approved", actorId: gate.id, at: now },
+      }),
+    ]);
+    revalidatePath("/experiments");
+    revalidatePath("/");
+    return {
+      ok: true,
+      message:
+        "計測の受信を止めました。★タグ自体は WordPress 側に残っているので、" +
+        "剥がすには媒体側の作業が要ります。再開は段7の「計測タグの発火」から。",
+    };
+  }
+
+  const art = readArtifact(action.preparedArtifact);
   const evaluateDays = art.evaluateDays ?? JUDGE_DAYS[action.type] ?? 28;
   const evaluateAt = new Date(now.getTime() + evaluateDays * DAY);
 

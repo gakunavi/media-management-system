@@ -14,11 +14,20 @@ import { evaluateDueInterventions } from "@/lib/evaluate";
 import { safeEqual } from "@/lib/crypto";
 import { refillQueue } from "@/lib/threads-queue";
 import { runUptimeChecks } from "@/lib/uptime";
+import { aggregateTelemetryVolume, proposeStopIfSpiking } from "@/lib/telemetry-volume";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TASKS = ["propose", "evaluate", "ideas", "alerts", "queue-refill", "uptime"] as const;
+const TASKS = [
+  "propose",
+  "evaluate",
+  "ideas",
+  "alerts",
+  "queue-refill",
+  "uptime",
+  "telemetry",
+] as const;
 type Task = (typeof TASKS)[number];
 
 function isTask(v: string): v is Task {
@@ -129,6 +138,26 @@ export async function POST(
         });
       }
       return NextResponse.json({ ok: true, task, ...r });
+    }
+    if (task === "telemetry") {
+      // §3.10.4 発火回数の監視。1時間ぶんを確定させ、急増していれば
+      // 「受信を止める」提案を段5に出す（★自動では止めない。押すのは人・§15）
+      const agg = await aggregateTelemetryVolume();
+      const spike = await proposeStopIfSpiking();
+      if (spike.proposed) {
+        await notify({
+          event: "telemetry.spike",
+          title: "🚨 計測タグの発火が急増しています",
+          body: [
+            spike.reason,
+            "",
+            "段5に「計測タグの受信を止める」を出しました。",
+            "★過去に自前のPV計測が暴走してサイトが重くなる事故を起こしています。",
+          ].join("\n"),
+          url: process.env.MMS_PUBLIC_URL ?? "http://localhost:3000",
+        });
+      }
+      return NextResponse.json({ ok: true, task, ...agg, ...spike });
     }
     if (task === "uptime") {
       // §3.9.3 死活監視。5分間隔で叩き、連続3回失敗で即通知する。

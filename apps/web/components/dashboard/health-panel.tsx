@@ -12,6 +12,12 @@ import Link from "next/link";
 import type { JobHealth, MetricFreshness } from "@/lib/dashboard";
 import type { CostSummary } from "@/lib/tools";
 import type { UptimeSummary } from "@/lib/uptime";
+import {
+  type TelemetryHealth,
+  EVENTS_PER_SESSION_WARN,
+  EVENTS_PER_SESSION_BAD,
+} from "@/lib/telemetry-volume";
+import { resumeTracking } from "@/app/(app)/tracking-actions";
 import { type IncidentSummary, severityLabel, categoryLabel } from "@/lib/incidents";
 import { NOT_MEASURED } from "@mms/shared";
 
@@ -172,12 +178,14 @@ export function HealthPanel({
   cost,
   uptime,
   incidents,
+  telemetry,
 }: {
   health: JobHealth;
   freshness: MetricFreshness[];
   cost: CostSummary;
   uptime: UptimeSummary[];
   incidents: IncidentSummary;
+  telemetry: TelemetryHealth;
 }) {
   const stale = freshness.filter((f) => f.alert !== "ok");
   const unused = freshness.filter((f) => !f.used);
@@ -336,6 +344,39 @@ export function HealthPanel({
             </tbody>
           </table>
         </div>
+      </section>
+
+      {/* ── 計測タグの発火（P2.11）──
+          ★過去の TTFB スパイク事故で本当に問題だったのは遅さではなく、
+            何千回発火しても誰も気づかなかったこと。ここが「気づく」側。 */}
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-5">
+        <div className="mb-1 flex items-baseline gap-2.5">
+          <h2 className="text-[15px] font-semibold">計測タグの発火</h2>
+          <span className="text-[12px] text-[var(--faint)]">
+            1人あたり {EVENTS_PER_SESSION_WARN}件で黄 ／ {EVENTS_PER_SESSION_BAD}件で赤
+          </span>
+        </div>
+        <Box alert={telemetry.alert} title="直近24時間">
+          {telemetry.reason}
+          <div className="mt-1 text-[12px] text-[var(--faint)]">
+            {telemetry.sessions24h}人 ・ {telemetry.events24h}件
+            {telemetry.dayOverDay !== null && ` ・ 前日比 ${telemetry.dayOverDay.toFixed(1)}倍`}
+            {telemetry.duplicateRatio !== null &&
+              ` ・ 重複 ${(telemetry.duplicateRatio * 100).toFixed(0)}%`}
+          </div>
+        </Box>
+        {telemetry.disabledAt && (
+          // ★止める導線だけ作って戻す導線を作らないと、止めたまま誰も戻せなくなる。
+          //   止めている間は記事の行動が一切残らない。
+          <form action={resumeTracking} className="mt-2">
+            <button
+              type="submit"
+              className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[13px] font-medium hover:bg-[var(--border)]"
+            >
+              計測の受信を再開する
+            </button>
+          </form>
+        )}
       </section>
 
       {/* ── サイトが生きているか（P3.9）──

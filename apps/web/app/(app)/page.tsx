@@ -34,6 +34,7 @@ import { ResultPanel } from "@/components/dashboard/result-panel";
 import { HealthPanel, healthAlerts } from "@/components/dashboard/health-panel";
 import { getUptimeSummary } from "@/lib/uptime";
 import { getIncidents } from "@/lib/incidents";
+import { getTelemetryHealth } from "@/lib/telemetry-volume";
 import { RoutesPanel } from "@/components/dashboard/routes-panel";
 import { getActionStats, type ActionStats } from "@/lib/actions-repo";
 
@@ -103,6 +104,7 @@ export default async function Dashboard({
           cost={await getCostSummary()}
           uptime={await getUptimeSummary()}
           incidents={await getIncidents()}
+          telemetry={await getTelemetryHealth()}
         />
       )}
     </div>
