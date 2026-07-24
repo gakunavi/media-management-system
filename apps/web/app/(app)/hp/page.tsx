@@ -36,7 +36,7 @@ export default async function HpPage({
 
       <ReceiverScreen
         stats={stats}
-        note="HP訪問 → CTA表示 → クリック → 送信 のうち、いま計測できているのは「送信」だけです（HPのGA4が未接続・記事内のCTA計測タグが本番未設置）。どこで落ちているかは、計装が入るまで分かりません。"
+        note="HP訪問 → CTA表示 → クリック → 送信 のうち、いま計測できているのは「送信」だけです（HPのGA4が未接続）。どこで落ちているかは、計装が入るまで分かりません。"
       />
     </div>
   );

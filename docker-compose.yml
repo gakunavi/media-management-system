@@ -126,6 +126,12 @@ services:
       # 登録URLの実地チェック（builtin/url_health.py）
       MMS_URL_HEALTH_TIMEOUT: ${MMS_URL_HEALTH_TIMEOUT:-20}
       MMS_URL_HEALTH_CONCURRENCY: ${MMS_URL_HEALTH_CONCURRENCY:-6}
+      # 計測タグの配信チェック（builtin/tag_delivery.py・§4-95）
+      # ★Cloudflare のトークンは未設定でも動く（検出だけして自動パージしない）
+      MMS_CLOUDFLARE_API_TOKEN: ${MMS_CLOUDFLARE_API_TOKEN:-}
+      MMS_CLOUDFLARE_ZONE_ID: ${MMS_CLOUDFLARE_ZONE_ID:-}
+      MMS_TAG_DELIVERY_TIMEOUT: ${MMS_TAG_DELIVERY_TIMEOUT:-20}
+      MMS_TAG_DELIVERY_CONCURRENCY: ${MMS_TAG_DELIVERY_CONCURRENCY:-4}
       # WordPress 同期（読み取りのみ・§3.9.1）
       MMS_WP_BASE_URL: ${MMS_WP_BASE_URL:-}
       MMS_WP_USER: ${MMS_WP_USER:-}

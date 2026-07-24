@@ -49,3 +49,32 @@ BIG="${BIG%,}]}"
 curl -s -o /dev/null -w "  → HTTP %{http_code}\n" -X POST "$URL" -H 'Content-Type: text/plain' -H "Origin: $ORIGIN" --data-binary "$BIG"
 
 echo "SID=$SID"   # DB 確認用に出力
+
+# ── 後片付け（★これが無いと本番の計測記録を汚す）────────────────────────
+#
+# ★2026-07-24 に実際に汚した。
+#   受口は「初回受信で MeasurementCoverage を作る」ので、このテストが
+#   7段すべてを送った結果、**実際には計測していない段まで「計測中」になった**。
+#   すると画面はその段を「未計測」ではなく **0** と表示する。
+#   これは §2「未計測とゼロを混同しない」を、テストが自分で破る形になる。
+#   （実例: cta_click は設計上そもそも送っていないのに「計測中」になっていた）
+#
+# テスト用セッションの行と、このテストが作った coverage を消す。
+# ★実データ由来の coverage は消さない。テスト開始時刻より後に作られ、
+#   かつ実イベントが1件も無い段だけを対象にする。
+# ★時刻の比較は UTC で行う（§9）。DB のセッションは Asia/Tokyo だが、
+#   Prisma の @default(now()) は **UTC で保存**する。素の now() と比べると
+#   9時間ズレて条件が常に偽になり、**後片付けが黙って空振りする**（実際した）。
+if command -v docker >/dev/null 2>&1; then
+  docker compose exec -T db psql -U "${MMS_POSTGRES_USER:-mms}" -d "${MMS_POSTGRES_DB:-mms}" -q <<SQL >/dev/null 2>&1
+DELETE FROM "FunnelEvent"    WHERE "sessionId" LIKE 'testsession%';
+DELETE FROM "VisitorSession" WHERE id          LIKE 'testsession%';
+DELETE FROM "MeasurementCoverage" mc
+ WHERE mc.method = 'browser_tag'
+   AND mc."createdAt" >= (now() AT TIME ZONE 'UTC') - interval '10 minutes'
+   AND NOT EXISTS (SELECT 1 FROM "FunnelEvent" fe WHERE fe.step::text = mc.metric);
+SQL
+  echo "  後片付け: テスト用セッションと、実データの無い計測記録を削除した"
+else
+  echo "  ★docker が無いため後片付けできていない。テスト用の行が残っている"
+fi

@@ -60,8 +60,14 @@ export type TypeRow = {
 export type ResultView = {
   /** 問い合わせ（LINE登録を除く）。ゴールそのもの */
   inquiries: { value: number; prev: number; target: number | null };
-  /** LINE登録。問い合わせの手前の受け皿到達 */
-  registrations: { value: number | null; prev: number | null };
+  /**
+   * LINE登録。問い合わせの手前の受け皿到達。
+   * ★`value` は**期間内の増減**（友だち数の期末 − 期首）。`total` は**期末時点の総数**。
+   *   総数には Webhook 設置前の友だちも含まれるが、その人たちは
+   *   **誰がいつどこから登録したか分からない**（遡及不可・§4-99）。
+   *   2つを同じ数字として並べないため、別々に持つ。
+   */
+  registrations: { value: number | null; prev: number | null; total: number | null };
   won: { count: number; amount: number; prevCount: number };
   receivers: ReceiverRow[];
   /** 直客 / 代理店（旧 Lead.type。月次目標がこの粒度で入っている） */
@@ -80,7 +86,7 @@ type LeadSlim = {
 const amountOf = (v: unknown) => (v ? Number(v) : 0);
 
 export async function getResult(range: Range): Promise<ResultView> {
-  const [cur, prev, targets, coverages] = await Promise.all([
+  const [cur, prev, targets, coverages, snapEnd, snapStart, snapPrevStart] = await Promise.all([
     prisma.lead.findMany({
       where: { occurredAt: { gte: range.since, lt: range.until } },
       select: { type: true, sourceType: true, status: true, closedAmount: true },
@@ -93,6 +99,28 @@ export async function getResult(range: Range): Promise<ResultView> {
       ? prisma.target.findMany({ where: { period: range.period } })
       : Promise.resolve([]),
     prisma.measurementCoverage.findMany({ select: { metric: true } }),
+    // ── LINE登録は友だち数のスナップショット差分で出す（§4-99）──
+    // ★`Lead(type=line_friend)` の件数を使わない。あれは **Webhook 設置後**の
+    //   follow イベントからしか生まれず、設置前の7人は永久に遡及できない
+    //   （`GET /v2/bot/followers/ids` は 403。2026-07-24 実測）。
+    //   件数で出すと、友だちが7人いるのに「登録 0」と表示される（実際そうなっていた）。
+    //   `/line` の段①は既にスナップショット差分で出しているので、そちらに合わせる。
+    // ★`@db.Date` 列なので `range.dateWindow` を使う（§4-15）
+    prisma.snsAccountHealth.findFirst({
+      where: { channel: { type: "line" }, date: { lt: range.dateWindow.lt } },
+      orderBy: { date: "desc" },
+      select: { followers: true },
+    }),
+    prisma.snsAccountHealth.findFirst({
+      where: { channel: { type: "line" }, date: { lt: range.dateWindow.gte } },
+      orderBy: { date: "desc" },
+      select: { followers: true },
+    }),
+    prisma.snsAccountHealth.findFirst({
+      where: { channel: { type: "line" }, date: { lt: range.prevDateWindow.gte } },
+      orderBy: { date: "desc" },
+      select: { followers: true },
+    }),
   ]);
 
   const covered = new Set(coverages.map((c) => c.metric));
@@ -132,8 +160,16 @@ export async function getResult(range: Range): Promise<ResultView> {
       label: SOURCE_LABEL[k] ?? k,
       inquiries: measured ? (c?.inquiries ?? 0) : null,
       prevInquiries: measured ? (p?.inquiries ?? 0) : null,
-      // ★登録という概念があるのは公式LINEだけ
-      registrations: k === "line" ? (measured ? (c?.registrations ?? 0) : null) : null,
+      // ★登録という概念があるのは公式LINEだけ。
+      //   値は上のカードと同じ**友だち数の増減**を使う（§4-99）。
+      //   `Lead(line_friend)` の件数だと Webhook 設置前の分が数えられず、
+      //   友だちが7人いても常に 0 と出る（2026-07-24 に実際そうなっていた）。
+      registrations:
+        k === "line"
+          ? snapEnd && snapStart
+            ? snapEnd.followers - snapStart.followers
+            : null
+          : null,
       won: c?.won ?? 0,
       wonAmount: c?.amount ?? 0,
       measured,
@@ -142,8 +178,6 @@ export async function getResult(range: Range): Promise<ResultView> {
 
   const inquiryRows = (cur as LeadSlim[]).filter((r) => r.type !== "line_friend");
   const prevInquiryRows = (prev as LeadSlim[]).filter((r) => r.type !== "line_friend");
-  const lineMeasured = covered.has("lead_line");
-
   const countType = (rows: LeadSlim[], type: string) => rows.filter((r) => r.type === type).length;
 
   return {
@@ -154,8 +188,11 @@ export async function getResult(range: Range): Promise<ResultView> {
       target: targetOf("inquiries_total"),
     },
     registrations: {
-      value: lineMeasured ? countType(cur as LeadSlim[], "line_friend") : null,
-      prev: lineMeasured ? countType(prev as LeadSlim[], "line_friend") : null,
+      // ★期間内の増減（期末 − 期首）。どちらかのスナップショットが無ければ
+      //   null＝未計測にする。0 と書くと「誰も登録しなかった」に読める（§2-1）
+      value: snapEnd && snapStart ? snapEnd.followers - snapStart.followers : null,
+      prev: snapStart && snapPrevStart ? snapStart.followers - snapPrevStart.followers : null,
+      total: snapEnd?.followers ?? null,
     },
     won: {
       count: inquiryRows.filter((r) => r.status === "won").length,
@@ -231,7 +268,6 @@ export type FunnelView = StageFlow & {
 
 export async function getFunnel(range: Range): Promise<FunnelView> {
   const measured = await measuredMetrics();
-  const funnelMeasured = measured.has("funnel");
 
   const [impr, clicks, lpView, lpCtaClick, submit] = await Promise.all([
     snapshotSum({ metric: "impressions" }, range),
@@ -243,10 +279,18 @@ export async function getFunnel(range: Range): Promise<FunnelView> {
     snapshotSum({ metric: { startsWith: "lp_form_submit_" } }, range),
   ]);
 
-  // 記事側のCTA表示/クリックは自前タグ（FunnelEvent）。本番未設置
-  const [ctaView, ctaClick] = funnelMeasured
-    ? await Promise.all([funnelStepCount("cta_view", range), funnelStepCount("cta_click", range)])
-    : [null, null];
+  // 記事側のCTA表示/クリックは自前タグ（FunnelEvent）。
+  // ★段ごとに coverage を見る（2026-07-24 修正）。
+  //   以前は `measured.has("funnel")` という**存在しない指標**を見ていたため、
+  //   計測タグが動き出して cta_view が55件入っても「未計測」のままだった。
+  //   受口は段ごとに `MeasurementCoverage` を作るので、そちらに合わせる。
+  // ★`cta_click` は**意図的に送っていない**（U89。記事内のCTAクリックは
+  //   `link_click(kind=redirect)` が正で、両方に書くと同じ行動を二重に数える）。
+  //   したがってここは常に「未計測」になるのが正しく、0 と書いてはいけない（§2-1）。
+  const [ctaView, ctaClick] = await Promise.all([
+    measured.has("cta_view") ? funnelStepCount("cta_view", range) : Promise.resolve(null),
+    measured.has("cta_click") ? funnelStepCount("cta_click", range) : Promise.resolve(null),
+  ]);
 
   const stages: Stage[] = [
     {
@@ -1072,7 +1116,7 @@ export async function getSenderVolumes(range: Range): Promise<SenderVolume[]> {
       arrived: null,
       arrivedLabel: "記事→受け皿",
       detailHref: "/content",
-      note: "GA4 実測。記事→受け皿のクリックは未計装（CTAタグが本番未設置）",
+      note: "GA4 実測。記事→受け皿のクリックは記事別に計測中（/content で内訳）",
     },
     {
       key: "threads",

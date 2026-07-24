@@ -166,8 +166,9 @@ function FunnelPanel({ funnel }: { funnel: FunnelView }) {
       />
       {funnel.unmeasured > 0 && (
         <p className="mt-2 text-[12px] text-[var(--faint)]">
-          ★{funnel.unmeasured}段が未計測。記事内のCTA計測タグ（P2.5）が本番未設置のため、
-          「記事を読んだ人のうち何人がCTAを見たか」が取れていない。
+          ★{funnel.unmeasured}段が未計測。CTAクリックは記事内リンクの計測（
+          <Link href="/content" className="text-[var(--accent)] hover:underline">記事・投稿</Link>
+          ）で数えており、二重に数えないためこの段では計測していません。
           他の経路の階段は <Link href="/line" className="text-[var(--accent)] hover:underline">公式LINE</Link>{" "}
           / <Link href="/lp" className="text-[var(--accent)] hover:underline">LP</Link> にあります。
         </p>

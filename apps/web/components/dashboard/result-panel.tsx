@@ -110,19 +110,28 @@ export function ResultPanel({ result }: { result: ResultView }) {
           sub={won.amount > 0 ? yen(won.amount) : "金額未入力"}
           delta={<Delta now={won.count} prev={won.prevCount} />}
         />
+        {/* ★総数ではなく「期間内の増減」を出す（§4-99）。
+            友だち総数には公式LINEの計測を始める前の人も含まれ、その人たちは
+            どこから登録したか分からない。同じ数字として並べると誤読される。 */}
         <Card
-          label="LINE登録（問い合わせの手前）"
+          label="LINE友だちの増減（問い合わせの手前）"
           value={
             registrations.value === null ? (
               <span className="font-medium text-[var(--warn)]">{NOT_MEASURED}</span>
             ) : (
               <>
-                <span className="tnum text-3xl font-bold leading-none">{registrations.value}</span>
-                <span className="text-[13px] text-[var(--faint)]">件</span>
+                <span className="tnum text-3xl font-bold leading-none">
+                  {registrations.value > 0 ? `+${registrations.value}` : registrations.value}
+                </span>
+                <span className="text-[13px] text-[var(--faint)]">人</span>
               </>
             )
           }
-          sub="登録は相談ではないので問い合わせに合算しない"
+          sub={
+            registrations.total === null
+              ? "登録は相談ではないので問い合わせに合算しない"
+              : `いま合計 ${registrations.total} 人 ／ 登録は相談ではないので問い合わせに合算しない`
+          }
           delta={<Delta now={registrations.value} prev={registrations.prev} />}
         />
       </div>
