@@ -305,6 +305,31 @@ fi
 echo
 
 # ───────────────────────────────────────────────────────────────────────────
+# [10] Phase の進捗（★宣言ではなく実データで判定する）
+# ───────────────────────────────────────────────────────────────────────────
+# ★2026-07-24: 「開発は完了か」と聞かれて誤って「完了」と答えた。
+#   ロードマップ59行に完了列が無く、このチェックも進捗を見ていなかったため。
+#   scripts/phase-status.py が担当モデルの実データ有無で判定する。
+echo "[10] Phase の進捗（担当モデルに実データがあるか）"
+if command -v docker >/dev/null 2>&1; then
+  # ★ホストに psycopg が無いことがあるので worker で走らせる。
+  #   実行できなければ SKIP と書く（黙って PASS にしない）
+  if docker compose cp "$ROOT/docs/PHASES.md" worker:/tmp/PHASES.md >/dev/null 2>&1 &&
+     docker compose cp "$ROOT/scripts/phase-status.py" worker:/tmp/ps.py >/dev/null 2>&1 &&
+     PHASE_OUT=$(docker compose exec -T -e MMS_PHASES_MD=/tmp/PHASES.md worker python /tmp/ps.py 2>/dev/null | tail -2) &&
+     [ -n "$(echo "$PHASE_OUT" | tr -d '[:space:]')" ]; then
+    echo "$PHASE_OUT" | sed 's/^/  /'
+    pass "Phase の進捗を出力した（★done が減っていないかを人が見る）"
+  else
+    echo "  SKIP  phase-status.py を実行できなかった（worker 停止中など）"
+  fi
+else
+  echo "  SKIP  docker が無いため Phase 進捗は判定していない"
+fi
+echo
+
+
+# ───────────────────────────────────────────────────────────────────────────
 echo "═══════════════════════════════════════════════════════════"
 if [ "$FAILED" -eq 0 ]; then
   green " 全項目 pass （$PASSED 件）"
@@ -312,7 +337,7 @@ if [ "$FAILED" -eq 0 ]; then
   exit 0
 else
   red " FAIL $FAILED 件 / PASS $PASSED 件"
-  echo "═══════════════════════════════════════════════════════════"
+echo "═══════════════════════════════════════════════════════════"
   echo
   dim " 検出された不整合は docs/PHASES.md §8（未解決リスト）を参照。"
   dim " ★設計書側の修正は石井さんの判断が要るため、自動修正はしない。"

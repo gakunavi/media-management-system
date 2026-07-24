@@ -439,6 +439,96 @@ P0（Docker Compose + Next.js + Prisma + Auth.js + launchd を一気に立ち上
 
 ---
 
+## 8.9 Phase の進捗（★実データで判定・2026-07-24 追加）
+
+> **この節は手で書き換えない。** `scripts/phase-status.py` の出力を貼る。
+> `docs/check-consistency.sh` の [10] でも件数だけ毎回出る。
+>
+> ★なぜ作ったか（2026-07-24 石井さんの指摘）
+> 「開発は完了か」と聞かれて**誤って「完了」と答えた**。私が完了と言ったのは
+> 「実装済み14画面のレビューを一巡した」ことで、**ロードマップ59行の進捗ではなかった**。
+> ロードマップに完了列が無く、整合チェックも進捗を見ていなかったため、
+> 「画面が動いている＝完成」と読み違えた。
+>
+> ★判定は宣言ではなく**実データ**で行う。「実装した」と書いてあっても、
+> 担当モデルに1行も入っていなければ動いていない。
+> チェックボックスを人が更新する方式にはしない（更新されなくなる）。
+>
+> **done / partial / empty の意味**
+> - `done` … 担当モデルすべてに実データがある
+> - `partial` … 一部にある（＝作りかけ、または一部の経路だけ動いている）
+> - `empty` … 全部0件。**未着手か、実装したが動いていないかは人が見て区別する**
+> - `n/a` … 担当モデルが特定できない（インフラ・ドキュメント系）
+
+**2026-07-24 時点: 合計59 ／ ✅done 17 ／ 🟡partial 17 ／ ❌empty 18 ／ —n/a 7**
+
+| Phase | 状態 | 内容 | データが無いモデル |
+|---|---|---|---|
+| P0-a | — n/a | 設計書 全文を読み、実装仕様を抽出（schema.prisma / PHASES.md / RULES. | — |
+| P0 | — n/a | Docker Compose（web/db/worker）＋Next.js 15＋Prisma＋Auth | — |
+| P1 | ✅ done | 既存データ移行（media.db / timeseries.db → Postgres）＋worker  | — |
+| P1.5 | ✅ done | Notion 全DB移行（記事/AIO/ネタ/リール・プロパティ全件・§7）＋並行稼働突合 | — |
+| P2 | ✅ done | CV配管（Lead ＋ /api/ingest/* ＋ WPフォームWebhook ＋ 即時通知） | — |
+| P2.5 | 🟡 partial | ファネル7段（VisitorSession / FunnelEvent ＋計測タグ）＋A/B群割当モデル | Experimentation・Variant |
+| P2.6 | ✅ done | Lead 属性・興味・比較対象・経路・初動速度 ＋ フォーム項目設計 | — |
+| P2.7 | ✅ done | 初動自動対応（起票→通知→自動返信→興味推定→返信ドラフト） | — |
+| P3 | ✅ done | ダッシュボード 段1〜段3・段7（結果／ファネル／買い手の質／ジョブ健全性） | — |
+| P3.5 | 🟡 partial | 鮮度管理（freshnessTier / nextReviewDue / ArticleReview ＋ | ArticleReview |
+| P3.7 | ❌ empty | UnitEconomics ＋ 広告シミュレーター（順算/逆算・3シナリオ） | UnitEconomics・AdSimulation |
+| P4 | 🟡 partial | operator 週次（段4変化・段5立案）＋承認/却下 Server Action ＋ Interve | ActionEvent・Experiment |
+| P4.5 | ✅ done | Keyword 群（マスタ/研究/割当/順位）＋既存YAML・CSV移行 ＋ /keywords | — |
+| P4.6 | ✅ done | Idea ＋ 5供給源の自動起票 ＋ /ideas | — |
+| P4.7 | ✅ done | 鮮度アラート・カニバリ検出・striking distance の Action 自動起票 | — |
+| P4.3 | 🟡 partial | トピッククラスタ（TopicCluster / ContentCluster / InternalLin | ClusterMetric |
+| P4.9 | ✅ done | budgetTier / funnelStage / productFit の一括タグ付け（既存157記 | — |
+| P4.10 | 🟡 partial | KeywordVolume / KeywordCluster / CtrCurve（自社実測CTR曲線） | KeywordCluster・CtrCurve |
+| P5 | ✅ done | Threads / AIO 配管（GAS→ingest、aio-batch→jobs） | — |
+| P5.6 | 🟡 partial | AgencyLead / Partner（DM triage のDB化・GAS連携） | Partner |
+| P5.7 | ❌ empty | LineFriend / LineMessage（LINE Messaging API連携） | LineFriend・LineMessage |
+| P6.7 | 🟡 partial | SerpSnapshot（DataForSEO 週次・AIO有無含む）／Competitor | Competitor・CompetitorMetric |
+| P6.8 | ❌ empty | MarketShare / Opportunity の自動算出 ＋ /market | MarketShare・Opportunity |
+| P7.5 | ❌ empty | 広告 API 連携（AdAccount〜AdMetricDaily・gclidでLead突合） | AdAccount・AdCampaign・AdGroup・AdCreative・AdMetricDaily |
+| P7.6 | 🟡 partial | CPA判定・停止/増額の自動起票 ＋ SEO vs 広告比較 | AdMetricDaily・UnitEconomics・Opportunity |
+| P7 | 🟡 partial | /content 移植（console.html の5タブ）→ console.html 退役 | Cta |
+| P8 | 🟡 partial | operator 日次・月次（異常検知→即応・施策の生死判定）＋ /experiments | Experiment |
+| P6 | — n/a | Notion 停止（notion-sync.py 削除・CLAUDE.md 修正） | — |
+| P9 | — n/a | Cloudflare Tunnel ＋ Access（スマホ閲覧） | — |
+| P0.5 | ❌ empty | 個人情報対応（ポリシー改定・ConsentRecord / DataRetentionPolicy）※専 | ConsentRecord・DataRetentionPolicy |
+| P0.7 | — n/a | バックアップ3箇所・RECOVERY.md・段7表示 | — |
+| P1.7 | — n/a | タイムゾーン正規化ルール ＋ AuditLog | — |
+| P2.4 | 🟡 partial | 計測検証基盤（合成モニタリング・突合・ボット除外・外れ値検知） | MonitorRun・DataQualityCheck |
+| P4.4 | ✅ done | ContentVersion ＋ ロールバック実行 | — |
+| P4.8 | ✅ done | 判定の信頼度（対照群最小基準・バッチ判定・inconclusive のUI表現） | — |
+| P3.3 | ❌ empty | IndexStatus（GSC URL Inspection API・未インデックス検知） | IndexStatus |
+| P3.4 | ❌ empty | PageExperience（CWV / PSI・モバイル別） | PageExperience |
+| P4.2 | ❌ empty | LeadTouchpoint（マルチタッチ・アシスト貢献） | LeadTouchpoint |
+| P4.11 | 🟡 partial | ProductionCost（記事別ROI） | ProductionCost |
+| P5.8 | ✅ done | trafficSource / aiEngine 判別（AI検索流入） | — |
+| P6.9 | ❌ empty | Backlink / DomainAuthority（DataForSEO・自社＋競合） | Backlink・DomainAuthority |
+| P8.2 | ❌ empty | ContentLifecycle / UrlRedirect ＋ プルーニング自動起票 | ContentLifecycle・UrlRedirect |
+| P2.8 | — n/a | Microsoft Clarity 導入（タグ設置＋フォームマスキング） | — |
+| P4.12 | ❌ empty | SEOスプリットテスト（層別ランダム化・判定・主判定手法） | SplitTest・SplitAssignment |
+| P7.7 | 🟡 partial | LP/CTA A/Bテスト（サンプル数計算・underpowered拒否） | Experimentation・Variant |
+| P2.9 | 🟡 partial | LandingPage / LpVersion ＋ 既存LP投入 | LpVersion |
+| P2.10 | ✅ done | 電話CTAクリック計測 ＋ /leads 手動登録UI ＋ sourceType | — |
+| P3.8 | 🟡 partial | RegulatoryEvent（税制改正カレンダー）＋60日前の自動起票 | RegulatoryEvent |
+| P4.13 | ❌ empty | SeasonalityIndex（季節調整）＋段1・段4への併記 | SeasonalityIndex |
+| P5.9 | 🟡 partial | SnsAccountHealth / PostSchedule / CrossPromotion | PostSchedule・CrossPromotion |
+| P6.10 | ✅ done | m2連携（Lead ⇄ m2 Deal・成約結果の還流）※m2 は無改修（§9-D13） | — |
+| P1.8 | ✅ done | WP書き込みのMMS一本化（wp-publish.py API化）＋日次ハッシュ突合 | — |
+| P3.9 | ❌ empty | UptimeCheck（5分間隔・フォーム含む） | UptimeCheck |
+| P4.14 | ❌ empty | GenerationProvenance（スキル/モデルのバージョン記録） | GenerationProvenance |
+| P6.11 | 🟡 partial | LinkCheck（週次・tier1優先） | LinkCheck |
+| P8.3 | ❌ empty | BrandMention（レピュテーション監視） | BrandMention |
+| P1.9 | ❌ empty | PerfGate（デプロイ前後PSI計測・劣化でブロック） | PerfGate |
+| P2.11 | ❌ empty | TelemetryVolume（発火回数監視）＋閾値アラート＋ワンクリック停止 | TelemetryVolume |
+| P3.10 | ❌ empty | Incident ＋ 過去5件の登録 | Incident |
+
+合計 59  ✅done 17  🟡partial 17  ❌empty 18  —n/a 7
+★empty は「未着手」か「実装したが動いていない」のどちらか。区別は人が見る
+
+---
+
 ## 9. 決定記録（Decision Log）
 
 > 2026-07-20 石井「あなたの判断で推進して」による委任のもと、§8.1 の6件と Prisma バージョンを決定した。
